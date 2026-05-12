@@ -1,17 +1,49 @@
 x-typebot-common: &typebot-common
   networks:
     - network_public
-  environment: &typebot-env
+  environment:
+    # =============================================================================
+    # Database (PostgreSQL)
+    # =============================================================================
+
+    # Full database connection URL.
     - DATABASE_URL=postgresql://typebot:secret@postgres:5432/typebot
 
+    # =============================================================================
+    # Core Security
+    # =============================================================================
+
+    # 256-bit key used to encrypt sensitive data.
+    # MUST remain stable across restarts/upgrades.
     - ENCRYPTION_SECRET=secret
 
-    - DEFAULT_WORKSPACE_PLAN=UNLIMITED
+    # =============================================================================
+    # Public URLs / Reverse Proxy
+    # =============================================================================
+
+    # Builder publicly accessible URL (used for OAuth callbacks).
     - NEXTAUTH_URL=https://builder.bot.website.com
+
+    # Viewer publicly accessible URL.
     - NEXT_PUBLIC_VIEWER_URL=https://bot.website.com
+
+    # Internal URL used by the builder for server-side requests.
     - NEXTAUTH_URL_INTERNAL=http://localhost:3000
 
+    # =============================================================================
+    # Workspace & Signup
+    # =============================================================================
+
+    # Default workspace plan for new users.
+    # Possible values: FREE, STARTER, PRO, LIFETIME, UNLIMITED.
+    - DEFAULT_WORKSPACE_PLAN=UNLIMITED
+
+    # Disable public signups. Invited users can still sign up.
     - DISABLE_SIGNUP=true
+
+    # =============================================================================
+    # Email (SMTP)
+    # =============================================================================
 
     # - ADMIN_EMAIL=example@example.com
     # - NEXT_PUBLIC_SMTP_FROM='Typebot' <no-reply@website.com>
@@ -22,15 +54,27 @@ x-typebot-common: &typebot-common
     # - SMTP_PASSWORD=secret
     # - SMTP_SECURE=true
 
+    # =============================================================================
+    # OAuth / Authentication
+    # =============================================================================
+
     # - NEXT_PUBLIC_GOOGLE_API_KEY=xxx
     # - GOOGLE_CLIENT_ID=xxx
     # - GOOGLE_CLIENT_SECRET=xxx
+
+    # =============================================================================
+    # S3 Storage (Media Uploads)
+    # =============================================================================
 
     # - S3_ACCESS_KEY=xxx
     # - S3_SECRET_KEY=xxx
     # - S3_BUCKET=website.com-typebot
     # - S3_REGION=us-east-1
     # - S3_ENDPOINT=s3.us-east-1.amazonaws.com
+
+    # =============================================================================
+    # Integrations
+    # =============================================================================
 
     # - NEXT_PUBLIC_GIPHY_API_KEY=xxx
   deploy: &typebot-deploy
@@ -39,10 +83,6 @@ x-typebot-common: &typebot-common
     placement:
       constraints:
         - node.role == manager
-    resources:
-      limits:
-        cpus: "0.5"
-        memory: 768M
 
 services:
   typebot_builder:
@@ -50,6 +90,10 @@ services:
     image: baptistearno/typebot-builder:latest
     deploy:
       <<: *typebot-deploy
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
       labels:
         - traefik.enable=true
         - traefik.http.routers.typebot_builder.rule=Host(`builder.bot.website.com`)
@@ -63,6 +107,11 @@ services:
   typebot_viewer:
     <<: *typebot-common
     image: baptistearno/typebot-viewer:latest
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        until wget -qO- http://typebot_builder:3000 2>/dev/null; do sleep 3; done
+        exec ./viewer-entrypoint.sh
     deploy:
       <<: *typebot-deploy
       labels:
