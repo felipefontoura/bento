@@ -4,49 +4,108 @@ x-chatwoot-common: &chatwoot-common
     - chatwoot_data:/app/storage
   networks:
     - network_public
-  environment: &chatwoot-env # Installation Configuration
+  environment:
+    # =============================================================================
+    # Core Application
+    # =============================================================================
+
+    # Human-readable installation name.
     - INSTALLATION_NAME=chatwoot
 
+    # Deployment environment identifier.
     - INSTALLATION_ENV=docker
+
+    # Node.js runtime environment.
     - NODE_ENV=production
+
+    # Rails runtime environment.
     - RAILS_ENV=production
+
+    # Redirect logs to stdout for container-friendly logging.
     - RAILS_LOG_TO_STDOUT=true
+
+    # Log verbosity: debug | info | warn | error.
     - LOG_LEVEL=debug
+
+    # Rack timeout per request (seconds).
     - RACK_TIMEOUT_SERVICE_TIMEOUT=600
 
-    # Security Configuration
+    # =============================================================================
+    # Security
+    # =============================================================================
+
+    # Rails secret key base. MUST remain stable across restarts/upgrades.
     - SECRET_KEY_BASE=secret
+
+    # Force HTTPS redirects.
     - FORCE_SSL=true
 
-    # Frontend Configuration
+    # =============================================================================
+    # Public URL / Reverse Proxy
+    # =============================================================================
+
+    # Public-facing URL used for links and callbacks.
     - FRONTEND_URL=https://chatwoot.website.com
 
+    # =============================================================================
     # Localization
+    # =============================================================================
+
+    # Default language for the UI.
     - DEFAULT_LOCALE=en
 
+    # =============================================================================
     # Account Management
+    # =============================================================================
+
+    # Disable public account signups.
+    # Invited users are still able to sign up.
     - ENABLE_ACCOUNT_SIGNUP=false
 
-    # Database Configuration
+    # =============================================================================
+    # Database (PostgreSQL)
+    # =============================================================================
+
+    # PostgreSQL host.
     - POSTGRES_HOST=postgres
+
+    # Database name.
     - POSTGRES_DATABASE=chatwoot
+
+    # Database user.
     - POSTGRES_USERNAME=postgres
+
+    # Database password.
     - POSTGRES_PASSWORD=secret
 
-    # Redis Configuration
+    # =============================================================================
+    # Cache / Queue (Redis)
+    # =============================================================================
+
+    # Redis connection URL (DB index 3).
     - REDIS_URL=redis://redis:6379/3
 
-    # Storage Configuration (AWS S3)
+    # =============================================================================
+    # Storage (AWS S3)
+    # =============================================================================
+
     # - ACTIVE_STORAGE_SERVICE=amazon
     # - AWS_REGION=us-east-1
     # - AWS_ACCESS_KEY_ID=your-access-key-id
     # - AWS_SECRET_ACCESS_KEY=your-secret-access-key
     # - S3_BUCKET_NAME=chatwoot-uploads
 
-    # Email configuration
+    # =============================================================================
+    # Email (SMTP)
+    # =============================================================================
+
+    # Sender display name and email address.
     # - MAILER_SENDER_EMAIL=Support <help@website.com>
 
+    # ---------------------------------------------------------------------------
     # AWS SES
+    # ---------------------------------------------------------------------------
+
     # - SMTP_ADDRESS=email-smtp.us-east-1.amazonaws.com
     # - SMTP_AUTHENTICATION=plain
     # - SMTP_DOMAIN=website.com
@@ -55,7 +114,10 @@ x-chatwoot-common: &chatwoot-common
     # - SMTP_USERNAME=apikey
     # - SMTP_PASSWORD=your-secret-access-key
 
-    # Sendgrid
+    # ---------------------------------------------------------------------------
+    # SendGrid
+    # ---------------------------------------------------------------------------
+
     # - SMTP_ADDRESS=smtp.sendgrid.net
     # - SMTP_AUTHENTICATION=plain
     # - SMTP_DOMAIN=website.com
@@ -64,14 +126,27 @@ x-chatwoot-common: &chatwoot-common
     # - SMTP_USERNAME=apikey
     # - SMTP_PASSWORD=your-sendgrid-api-key
 
-    # Bot Configuration
+    # =============================================================================
+    # Bot / Widget Appearance
+    # =============================================================================
+
+    # Use the inbox avatar for the bot avatar in the widget.
     - USE_INBOX_AVATAR_FOR_BOT=true
 
-    # Performance Configuration
+    # =============================================================================
+    # Performance
+    # =============================================================================
+
+    # Number of Puma worker processes.
     - WEB_CONCURRENCY=2
+
+    # Sidekiq thread concurrency.
     - SIDEKIQ_CONCURRENCY=10
 
-    # Rate Limiting (optional)
+    # =============================================================================
+    # Rate Limiting
+    # =============================================================================
+
     # - ENABLE_RACK_ATTACK=true
     # - RACK_ATTACK_LIMIT=3000
   deploy: &chatwoot-deploy
@@ -163,7 +238,11 @@ services:
   # Background Job Processor
   chatwoot_sidekiq:
     <<: *chatwoot-common
-    command: bundle exec sidekiq -C config/sidekiq.yml
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        until wget -qO- http://chatwoot_web:3000 2>/dev/null; do sleep 3; done
+        exec docker/entrypoints/rails.sh bundle exec sidekiq -C config/sidekiq.yml
     deploy:
       <<: *chatwoot-deploy
       resources:
