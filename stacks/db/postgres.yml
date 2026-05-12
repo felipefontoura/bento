@@ -1,27 +1,54 @@
+x-postgres-common: &postgres-common
+  image: postgres:15
+  entrypoint: docker-entrypoint.sh
+  networks:
+    - network_public
+  ports:
+    - 5432:5432
+  volumes:
+    - postgres-data:/var/lib/postgresql/data
+  environment:
+    - POSTGRES_PASSWORD=secret
+    - POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256"
+    - POSTGRES_INIT_DATABASES=sandbox,n8n,typebot,plunk,chatwoot,evolution
+  deploy: &postgres-deploy
+    mode: replicated
+    replicas: 1
+    placement:
+      constraints:
+        - node.role == manager
+
 services:
   postgres:
-    image: postgres:15
-    networks:
-      - network_public
-    entrypoint: docker-entrypoint.sh
+    <<: *postgres-common
     command: [postgres, --max_connections=200]
-    ports:
-      - 5432:5432
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_PASSWORD=secret
-      - POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256"
     deploy:
-      mode: replicated
-      replicas: 1
-      placement:
-        constraints:
-          - node.role == manager
+      <<: *postgres-deploy
       resources:
         limits:
           cpus: "0.5"
           memory: 256M
+  postgres-init:
+    <<: *postgres-common
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        until pg_isready -h postgres -U postgres; do
+          echo "Waiting for postgres..."
+          sleep 2
+        done
+        IFS="," read -ra DBS <<< "$${POSTGRES_INIT_DATABASES}"
+        for db in "$${DBS[@]}"; do
+          echo "Ensuring database exists: $$db"
+          psql -h postgres -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = '$$db'" | grep -q 1 || psql -h postgres -U postgres -c "CREATE DATABASE \"$$db\""
+        done
+        echo "All databases ready"
+    deploy:
+      <<: *postgres-deploy
+      restart_policy:
+        condition: on-failure
+
 networks:
   network_public:
     external: true
