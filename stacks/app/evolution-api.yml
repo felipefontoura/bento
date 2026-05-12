@@ -1,6 +1,6 @@
 services:
   evolution:
-    image: evoapicloud/evolution-api:v2.3.0
+    image: evoapicloud/evolution-api:latest
     command: ["node", "./dist/src/main.js"]
     networks:
       - network_public
@@ -8,46 +8,137 @@ services:
       - evolution_instances:/evolution/instances
       - evolution_store:/evolution/store
     environment:
+      # =============================================================================
+      # Core Application
+      # =============================================================================
+
+      # Public-facing base URL of the API.
       - SERVER_URL=https://api.evolution.website.com
+
+      # Internal HTTP server port.
       - SERVER_PORT=8080
+
+      # Signals that the app is running inside a Docker container.
       - DOCKER_ENV=true
 
+      # =============================================================================
+      # Instance Management
+      # =============================================================================
+
+      # Whether to delete the instance data when the session is closed.
       - DEL_INSTANCE=false
 
+      # =============================================================================
+      # Session / Client Config
+      # =============================================================================
+
+      # WhatsApp client identifier displayed to contacts.
       - CONFIG_SESSION_PHONE_CLIENT=EvolutionAPI
+
+      # Browser name reported during WhatsApp Web pairing.
       - CONFIG_SESSION_PHONE_NAME=Chrome
 
+      # =============================================================================
+      # Data Persistence
+      # =============================================================================
+
+      # Persist received messages to the store.
       - STORE_MESSAGES=true
+
+      # Persist message status updates (delivered, read, etc.) to the store.
       - STORE_MESSAGE_UP=true
+
+      # Persist contacts to the store.
       - STORE_CONTACTS=true
+
+      # Persist chat threads to the store.
       - STORE_CHATS=true
 
-      - CLEAN_STORE_CLEANING_INTERVAL=7200 # seconds === 2h
+      # =============================================================================
+      # Store Cleanup
+      # =============================================================================
+
+      # Interval in seconds for running the store cleanup job (7200 = 2h).
+      - CLEAN_STORE_CLEANING_INTERVAL=7200
+
+      # Enable cleanup of stored messages.
       - CLEAN_STORE_MESSAGES=true
+
+      # Enable cleanup of stored message status updates.
       - CLEAN_STORE_MESSAGE_UP=true
+
+      # Enable cleanup of stored contacts.
       - CLEAN_STORE_CONTACTS=true
+
+      # Enable cleanup of stored chats.
       - CLEAN_STORE_CHATS=true
 
+      # =============================================================================
+      # Authentication
+      # =============================================================================
+
+      # Authentication mode: apikey | jwt | none.
       - AUTHENTICATION_TYPE=apikey
+
+      # API key used when AUTHENTICATION_TYPE=apikey.
       - AUTHENTICATION_API_KEY=secret
+
+      # Expose the API key in the fetch-instances response.
       - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
 
+      # =============================================================================
+      # QR Code
+      # =============================================================================
+
+      # Maximum number of QR-code generation attempts before failing.
       - QRCODE_LIMIT=30
 
+      # =============================================================================
+      # Integrations
+      # =============================================================================
+
+      # Enable RabbitMQ event publishing.
       - RABBITMQ_ENABLED=false
 
+      # Enable Chatwoot integration for ticket creation.
       - CHATWOOT_ENABLED=true
 
+      # =============================================================================
+      # Database (PostgreSQL)
+      # =============================================================================
+
+      # Enable PostgreSQL persistence.
       - DATABASE_ENABLED=true
+
+      # Database driver: postgresql | mysql.
       - DATABASE_PROVIDER=postgresql
+
+      # Full database connection URI.
       - DATABASE_CONNECTION_URI=postgresql://evolution:secret@postgres:5432/evolution?schema=public
+
+      # Persist instance metadata to the database.
       - DATABASE_SAVE_DATA_INSTANCE=true
+
+      # Persist new messages to the database.
       - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+
+      # Persist message status updates to the database.
       - DATABASE_SAVE_MESSAGE_UPDATE=true
+
+      # Persist contacts to the database.
       - DATABASE_SAVE_DATA_CONTACTS=true
+
+      # Persist chats to the database.
       - DATABASE_SAVE_DATA_CHATS=true
 
+      # =============================================================================
+      # Cache (Redis)
+      # =============================================================================
+
+      # Enable Redis caching.
       - CACHE_REDIS_ENABLED=true
+
+      # Redis connection URL (DB index 2).
       - CACHE_REDIS_URI=redis://redis:6379/2
     deploy:
       mode: replicated

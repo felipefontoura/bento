@@ -11,9 +11,25 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq/
     environment:
+      # =============================================================================
+      # Clustering / Erlang
+      # =============================================================================
+
+      # Shared secret used for node authentication in a cluster.
+      # MUST be identical across all nodes in the same cluster.
       - RABBITMQ_ERLANG_COOKIE=secret
+
+      # =============================================================================
+      # Virtual Host / Default User
+      # =============================================================================
+
+      # Default virtual host created on first startup.
       - RABBITMQ_DEFAULT_VHOST=default
+
+      # Default admin user.
       - RABBITMQ_DEFAULT_USER=rabbitmq
+
+      # Default admin password.
       - RABBITMQ_DEFAULT_PASS=secret
     deploy:
       mode: replicated
