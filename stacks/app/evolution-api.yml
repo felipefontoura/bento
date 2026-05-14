@@ -1,7 +1,6 @@
 services:
   evolution:
     image: evoapicloud/evolution-api:latest
-    command: ["node", "./dist/src/main.js"]
     networks:
       - network_public
     volumes:
@@ -140,6 +139,16 @@ services:
 
       # Redis connection URL (DB index 2).
       - CACHE_REDIS_URI=redis://redis:6379/2
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     deploy:
       mode: replicated
       replicas: 1

@@ -129,8 +129,8 @@ x-n8n-common: &n8n-common
     # Show usage/settings page.
     - N8N_HIDE_USAGE_PAGE=false
 
-    # Disable public REST API.
-    - N8N_PUBLIC_API_DISABLED=true
+    # Enable public REST API.
+    - N8N_PUBLIC_API_DISABLED=false
 
     # =============================================================================
     # Execution Persistence / Pruning
@@ -186,9 +186,6 @@ x-n8n-common: &n8n-common
     # =============================================================================
     # Task Runners / Workers
     # =============================================================================
-
-    # Enable task runners (required for modern Code node execution).
-    - N8N_RUNNERS_ENABLED=true
 
     # Runner memory limit (MB).
     - N8N_RUNNERS_MAX_OLD_SPACE_SIZE=512
@@ -256,6 +253,16 @@ services:
     command: start
     volumes:
       - n8n-data:/home/node/.n8n
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:5678/healthz >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     deploy:
       <<: *n8n-deploy
       resources:
@@ -279,6 +286,16 @@ services:
       - |
         until wget -qO- http://n8n_editor:5678/healthz 2>/dev/null; do sleep 3; done
         exec /docker-entrypoint.sh webhook
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:5678/healthz >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     deploy:
       <<: *n8n-deploy
       resources:
@@ -302,6 +319,16 @@ services:
       - |
         until wget -qO- http://n8n_editor:5678/healthz 2>/dev/null; do sleep 3; done
         exec /docker-entrypoint.sh worker --concurrency=10
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:5678/healthz >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     deploy:
       <<: *n8n-deploy
       resources:

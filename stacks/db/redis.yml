@@ -1,13 +1,19 @@
 services:
   redis:
     image: redis:7
+    command: redis-server --appendonly yes --port 6379
     networks:
       - network_public
     ports:
       - 6379:6379
     volumes:
       - redis-data:/data
-    command: redis-server --appendonly yes --port 6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     deploy:
       mode: replicated
       replicas: 1

@@ -201,26 +201,30 @@ services:
         limits:
           cpus: "0.5"
           memory: 512M
-        reservations:
-          cpus: "0.25"
-          memory: 256M
       restart_policy:
         condition: none
 
   # Main Web Application
   chatwoot_web:
     <<: *chatwoot-common
-    command: bundle exec rails s -p 3000 -b 0.0.0.0
     entrypoint: docker/entrypoints/rails.sh
+    command: bundle exec rails s -p 3000 -b 0.0.0.0
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     deploy:
       <<: *chatwoot-deploy
       resources:
         limits:
           cpus: "0.5"
           memory: 768M
-        reservations:
-          cpus: "0.25"
-          memory: 256M
       labels:
         # Traefik Configuration
         - traefik.enable=true
@@ -243,15 +247,18 @@ services:
       - |
         until wget -qO- http://chatwoot_web:3000 2>/dev/null; do sleep 3; done
         exec docker/entrypoints/rails.sh bundle exec sidekiq -C config/sidekiq.yml
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f sidekiq >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     deploy:
       <<: *chatwoot-deploy
       resources:
         limits:
           cpus: "0.5"
           memory: 768M
-        reservations:
-          cpus: "0.25"
-          memory: 256M
 
 volumes:
   chatwoot_data:

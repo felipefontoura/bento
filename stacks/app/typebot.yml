@@ -22,10 +22,10 @@ x-typebot-common: &typebot-common
     # =============================================================================
 
     # Builder publicly accessible URL (used for OAuth callbacks).
-    - NEXTAUTH_URL=https://builder.bot.website.com
+    - NEXTAUTH_URL=https://builder.typebot.website.com
 
     # Viewer publicly accessible URL.
-    - NEXT_PUBLIC_VIEWER_URL=https://bot.website.com
+    - NEXT_PUBLIC_VIEWER_URL=https://typebot.website.com
 
     # Internal URL used by the builder for server-side requests.
     - NEXTAUTH_URL_INTERNAL=http://localhost:3000
@@ -88,6 +88,16 @@ services:
   typebot_builder:
     <<: *typebot-common
     image: baptistearno/typebot-builder:latest
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     deploy:
       <<: *typebot-deploy
       resources:
@@ -96,7 +106,7 @@ services:
           memory: 256M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.typebot_builder.rule=Host(`builder.bot.website.com`)
+        - traefik.http.routers.typebot_builder.rule=Host(`builder.typebot.website.com`)
         - traefik.http.routers.typebot_builder.entrypoints=websecure
         - traefik.http.routers.typebot_builder.tls.certresolver=letsencryptresolver
         - traefik.http.routers.typebot_builder.priority=2
@@ -112,11 +122,21 @@ services:
       - |
         until wget -qO- http://typebot_builder:3000 2>/dev/null; do sleep 3; done
         exec ./viewer-entrypoint.sh
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/api/healthz >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     deploy:
       <<: *typebot-deploy
       labels:
         - traefik.enable=true
-        - traefik.http.routers.typebot_viewer.rule=Host(`bot.website.com`)
+        - traefik.http.routers.typebot_viewer.rule=Host(`typebot.website.com`)
         - traefik.http.routers.typebot_viewer.entrypoints=websecure
         - traefik.http.routers.typebot_viewer.tls.certresolver=letsencryptresolver
         - traefik.http.routers.typebot_viewer.priority=2
