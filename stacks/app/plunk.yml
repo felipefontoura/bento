@@ -61,6 +61,16 @@ services:
 
       # Disable public signups.
       - DISABLE_SIGNUPS=true
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     deploy:
       mode: replicated
       replicas: 1
