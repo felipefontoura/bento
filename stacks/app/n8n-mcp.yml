@@ -1,0 +1,118 @@
+services:
+  n8n_mcp:
+    image: ghcr.io/czlonkowski/n8n-mcp:latest
+    networks:
+      - network_public
+    volumes:
+      - n8n-mcp-data:/app/data
+    environment:
+      # =============================================================================
+      # Core Application
+      # =============================================================================
+
+      # Runtime environment.
+      - NODE_ENV=production
+
+      # MCP transport mode.
+      # Use "http" for remote MCP clients such as opencode, Claude Code, Cursor, etc.
+      - MCP_MODE=http
+
+      # Internal HTTP server port.
+      - PORT=3000
+
+      # Logging level: error | warn | info | debug
+      - LOG_LEVEL=info
+
+      # =============================================================================
+      # n8n MCP Runtime
+      # =============================================================================
+
+      # Enables n8n workflow-management mode.
+      # This matches the official n8n-integrated compose.
+      - N8N_MODE=true
+
+      # Local node documentation/cache database path.
+      - NODE_DB_PATH=/app/data/nodes.db
+
+      # Rebuild node database on container start.
+      # Keep false for normal production usage.
+      - REBUILD_ON_START=false
+
+      # Disable anonymous telemetry from n8n-mcp.
+      - N8N_MCP_TELEMETRY_DISABLED=true
+
+      # =============================================================================
+      # n8n API Integration
+      # =============================================================================
+
+      # Internal n8n API URL.
+      # Because this MCP server runs in the same Docker network as n8n,
+      # use the internal service name instead of the public editor URL.
+      - N8N_API_URL=http://n8n_editor:5678
+
+      # n8n API key generated in:
+      # n8n UI -> Settings -> n8n API -> Create an API key
+      - N8N_API_KEY=secret
+
+      # n8n API request timeout in milliseconds.
+      - N8N_API_TIMEOUT=30000
+
+      # n8n API max retry attempts.
+      - N8N_API_MAX_RETRIES=3
+
+      # Webhook security mode for Docker/internal networking.
+      - WEBHOOK_SECURITY_MODE=permissive
+
+      # =============================================================================
+      # MCP Authentication
+      # =============================================================================
+
+      # Bearer token used by MCP clients.
+      # Generate with: openssl rand -hex 32
+      - MCP_AUTH_TOKEN=secret
+
+      # Required by the official HTTP mode compose.
+      # Keep equal to MCP_AUTH_TOKEN.
+      - AUTH_TOKEN=secret
+
+      # =============================================================================
+      # Runtime / Docker
+      # =============================================================================
+
+      # Signals that the app is running inside a Docker container.
+      - DOCKER_ENV=true
+    healthcheck:
+      test:
+        ["CMD", "sh", "-c", "curl -f http://127.0.0.1:$${PORT:-3000}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.n8n_mcp.rule=Host(`mcp.n8n.website.com`)
+        - traefik.http.routers.n8n_mcp.entrypoints=websecure
+        - traefik.http.routers.n8n_mcp.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.n8n_mcp.priority=2
+        - traefik.http.routers.n8n_mcp.service=n8n_mcp
+        - traefik.http.services.n8n_mcp.loadbalancer.server.port=3000
+        - traefik.http.services.n8n_mcp.loadbalancer.passHostHeader=true
+
+volumes:
+  n8n-mcp-data:
+    driver: local
+
+networks:
+  network_public:
+    name: network_public
+    external: true
