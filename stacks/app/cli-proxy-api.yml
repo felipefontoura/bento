@@ -1,0 +1,58 @@
+services:
+  cli_proxy_api:
+    image: eceasy/cli-proxy-api:latest
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /CLIProxyAPI/config
+        if [ ! -f /CLIProxyAPI/config/config.yaml ]; then
+          cat > /CLIProxyAPI/config/config.yaml <<'EOF'
+        # Dummy config inicial
+        server:
+          port: 8317
+        EOF
+        fi
+        exec ./CLIProxyAPI --config /CLIProxyAPI/config/config.yaml
+    networks:
+      - network_public
+    ports:
+      - 8317:8317
+    volumes:
+      - cli_proxy_api_config:/CLIProxyAPI/config
+      - cli_proxy_api_auth:/root/.cli-proxy-api
+    environment:
+      - TZ=America/Sao_Paulo
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8317/ >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+volumes:
+  cli_proxy_api_config:
+    external: true
+    name: cli_proxy_api_config
+
+  cli_proxy_api_auth:
+    external: true
+    name: cli_proxy_api_auth
+
+networks:
+  network_public:
+    external: true
+    name: network_public
