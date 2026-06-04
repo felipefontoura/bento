@@ -116,10 +116,12 @@ stacks_resolve_env() {
         return 0
     fi
 
-    # 2. from_state.
+    # 2. from_state — search any deployed stack's envs for a matching key.
     if [[ -n "$from_state" ]]; then
         local sourced
-        sourced="$(state_get ".envs[\"global\"][\"$from_state\"]")"
+        sourced=$(jq -r --arg fs "$from_state" \
+            '[.envs // {} | .[]? | .[$fs] // empty] | map(select(. != null and . != "")) | first // ""' \
+            "$BENTO_STATE_FILE" 2>/dev/null)
         if [[ -z "$sourced" ]]; then
             sourced="$(state_get ".bootstrap.$from_state")"
         fi
@@ -147,6 +149,29 @@ stacks_resolve_env() {
 
     # 5/6. prompt the user.
     if [[ -n "$prompt" ]]; then
+        # Unattended path: pick env override → default → empty (fail if required).
+        if [[ "${BENTO_UNATTENDED:-0}" == "1" ]]; then
+            local env_var env_val
+            env_var="BENTO_ENV_$(printf '%s' "$stack_key" | tr 'a-z-' 'A-Z_')_${var_name}"
+            env_val="${!env_var:-}"
+            if [[ -n "$env_val" ]]; then
+                state_set ".envs[\"$stack_key\"][\"$var_name\"]" "$env_val"
+                printf '%s' "$env_val"
+                return 0
+            fi
+            if [[ -n "$default_value" ]]; then
+                state_set ".envs[\"$stack_key\"][\"$var_name\"]" "$default_value"
+                printf '%s' "$default_value"
+                return 0
+            fi
+            if [[ "$required" == "true" ]]; then
+                ui_error "$var_name required for $stack_key (set $env_var)"
+                return 1
+            fi
+            state_set ".envs[\"$stack_key\"][\"$var_name\"]" ""
+            return 0
+        fi
+
         local answer prompt_label
         prompt_label="$var_name — $prompt"
         if [[ "$hide" == "true" ]]; then

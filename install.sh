@@ -37,6 +37,11 @@ source "${BENTO_REPO_ROOT}/lib/report.sh"
 
 state_init
 
+# Unattended mode — set BENTO_UNATTENDED=1 + BENTO_BASE_DOMAIN +
+# BENTO_ADMIN_EMAIL (+ optionally BENTO_ADVERTISE_ADDR + BENTO_APPS) to
+# drive bento end-to-end without prompts. See unattended_main below.
+BENTO_UNATTENDED="${BENTO_UNATTENDED:-0}"
+
 # -----------------------------------------------------------------------------
 # Bootstrap inicial (single prompt screen with BASE_DOMAIN + ADMIN_EMAIL + IP)
 # -----------------------------------------------------------------------------
@@ -44,10 +49,41 @@ DOMAIN_REGEX='^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$'
 EMAIL_REGEX='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
 IP_REGEX='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
 
+bootstrap_from_env() {
+    local d="${BENTO_BASE_DOMAIN:-}"
+    local e="${BENTO_ADMIN_EMAIL:-}"
+    local a="${BENTO_ADVERTISE_ADDR:-}"
+
+    if [[ -z "$d" ]]; then
+        ui_error "BENTO_UNATTENDED requires BENTO_BASE_DOMAIN"
+        exit 1
+    fi
+    if [[ -z "$e" ]]; then
+        e="admin@${d}"
+    fi
+    if [[ -z "$a" ]]; then
+        a=$(curl -fsSL --max-time 5 https://ifconfig.me 2>/dev/null || true)
+    fi
+    if [[ -z "$a" ]]; then
+        ui_error "Could not detect ADVERTISE_ADDR — set BENTO_ADVERTISE_ADDR"
+        exit 1
+    fi
+
+    state_set '.bootstrap.base_domain' "$d"
+    state_set '.bootstrap.admin_email' "$e"
+    state_set '.bootstrap.advertise_addr' "$a"
+    ui_info "Unattended bootstrap: domain=$d  email=$e  ip=$a"
+}
+
 bootstrap_prompt_once() {
     if state_has '.bootstrap.base_domain' \
        && state_has '.bootstrap.admin_email' \
        && state_has '.bootstrap.advertise_addr'; then
+        return 0
+    fi
+
+    if [[ "$BENTO_UNATTENDED" == "1" ]]; then
+        bootstrap_from_env
         return 0
     fi
 
@@ -111,7 +147,20 @@ step1_status() {
 
 step1_run() {
     ui_section "Step 1 — Harden the system"
-    ui_format_md <<EOF
+
+    # Auto-detect: hardening already ran (Docker present + reboot sentinel
+    # exists from a previous run that didn't go through bento's wrapper).
+    if command -v docker >/dev/null 2>&1 \
+       && systemctl is-active --quiet docker 2>/dev/null \
+       && [[ -f /var/lib/bento/reboot-required ]]; then
+        ui_info "Hardening artifacts detected — skipping re-run."
+        state_set '.steps.hardening' "done"
+        infra_run_step1_tail || return 1
+        return 0
+    fi
+
+    if [[ "$BENTO_UNATTENDED" != "1" ]]; then
+        ui_format_md <<EOF
 **This will:**
 - Update + upgrade all packages
 - Install Docker, UFW, fail2ban, AppArmor, AIDE, auditd, chrony
@@ -122,13 +171,15 @@ step1_run() {
 
 This takes ~5-10 minutes and will require a reboot afterward.
 EOF
-    ui_confirm "Proceed?" || return 0
+        ui_confirm "Proceed?" || return 0
+    fi
 
     local log_file
     log_file="${BENTO_LOG_DIR}/hardening-$(date +%Y%m%d-%H%M%S).log"
     ui_info "Streaming output to $log_file"
 
-    if sudo bash "${BENTO_REPO_ROOT}/lib/hardening.sh" 2>&1 | tee "$log_file"; then
+    if sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive \
+            bash "${BENTO_REPO_ROOT}/lib/hardening.sh" 2>&1 | tee "$log_file"; then
         state_set '.steps.hardening' "done"
     else
         state_set '.steps.hardening' "failed"
@@ -140,6 +191,12 @@ EOF
     infra_run_step1_tail || return 1
 
     if [[ -f /var/lib/bento/reboot-required ]]; then
+        if [[ "$BENTO_UNATTENDED" == "1" ]]; then
+            ui_info "Reboot required — installing bento-resume.service and rebooting"
+            unattended_install_resume_hook
+            sudo reboot
+            exit 0
+        fi
         ui_boxed_warn "$(cat <<EOF
 Reboot required to apply security settings.
 
@@ -328,8 +385,123 @@ main_menu() {
 }
 
 # -----------------------------------------------------------------------------
+# Unattended end-to-end flow
+# -----------------------------------------------------------------------------
+unattended_main() {
+    ui_info "Unattended mode — Step 1 → Step 2 → Step 3 in sequence"
+
+    if [[ "$(step1_status)" != "done" ]]; then
+        step1_run || { ui_error "Step 1 failed"; exit 1; }
+    fi
+
+    if ! infra_is_done; then
+        step2_run || { ui_error "Step 2 failed"; exit 1; }
+    fi
+
+    if [[ -n "${BENTO_APPS:-}" ]]; then
+        unattended_step3
+    else
+        ui_warn "BENTO_APPS not set — skipping Step 3"
+    fi
+
+    report_run "auto"
+    ui_success "Unattended install complete"
+}
+
+unattended_step3() {
+    local apps_csv="${BENTO_APPS}"
+    IFS=',' read -ra apps <<< "$apps_csv"
+
+    # depends_on resolution — for every app, deploy its declared deps first
+    # (postgres, redis) if not already deployed.
+    local seen=()
+    deploy_with_deps() {
+        local key="$1"
+        # Skip if already in seen
+        local s
+        for s in "${seen[@]}"; do
+            [[ "$s" == "$key" ]] && return 0
+        done
+        local manifest_path
+        manifest_path=$(stacks_manifest_for_key "$key")
+        if [[ -z "$manifest_path" ]]; then
+            ui_warn "Unknown stack key: $key — skipping"
+            return 0
+        fi
+        # Resolve declared deps first
+        local dep
+        while IFS= read -r dep; do
+            [[ -z "$dep" ]] && continue
+            deploy_with_deps "$dep"
+        done < <(jq -r '.depends_on[]?' "$manifest_path")
+        ui_section "Deploying $key"
+        if stacks_deploy "$manifest_path"; then
+            seen+=("$key")
+        else
+            ui_error "Deploy of $key failed; continuing"
+        fi
+    }
+
+    local app
+    for app in "${apps[@]}"; do
+        app="${app// /}"
+        [[ -z "$app" ]] && continue
+        deploy_with_deps "$app"
+    done
+    state_set '.steps.apps' "done"
+}
+
+# Installs a systemd one-shot that re-runs install.sh in unattended mode
+# after the post-hardening reboot. Picks up the same env vars from a file
+# so the resume happens identically.
+unattended_install_resume_hook() {
+    local env_file=/var/lib/bento/unattended.env
+    sudo mkdir -p /var/lib/bento
+    sudo tee "$env_file" > /dev/null <<EOF
+BENTO_UNATTENDED=1
+BENTO_BASE_DOMAIN=$(state_get '.bootstrap.base_domain')
+BENTO_ADMIN_EMAIL=$(state_get '.bootstrap.admin_email')
+BENTO_ADVERTISE_ADDR=$(state_get '.bootstrap.advertise_addr')
+BENTO_APPS=${BENTO_APPS:-}
+HOME=${HOME}
+TERM=xterm-256color
+EOF
+    sudo chmod 600 "$env_file"
+
+    sudo tee /etc/systemd/system/bento-resume.service > /dev/null <<EOF
+[Unit]
+Description=Bento — resume install after hardening reboot
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/var/lib/bento/unattended.env
+WorkingDirectory=${BENTO_REPO_ROOT}
+ExecStart=/bin/bash ${BENTO_REPO_ROOT}/install.sh
+ExecStartPost=-/bin/rm -f /var/lib/bento/reboot-required
+ExecStartPost=-/bin/systemctl disable bento-resume.service
+StandardOutput=append:/var/log/bento-resume.log
+StandardError=append:/var/log/bento-resume.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable bento-resume.service
+}
+
+# -----------------------------------------------------------------------------
 # Entry
 # -----------------------------------------------------------------------------
-banner_render
+if [[ "$BENTO_UNATTENDED" != "1" ]]; then
+    banner_render
+fi
 bootstrap_prompt_once
+
+if [[ "$BENTO_UNATTENDED" == "1" ]]; then
+    unattended_main
+    exit 0
+fi
+
 main_menu

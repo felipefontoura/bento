@@ -158,6 +158,22 @@ infra_ensure_dns() {
     base="$(state_get '.bootstrap.base_domain')"
     advertise="$(state_get '.bootstrap.advertise_addr')"
 
+    if [[ "${BENTO_UNATTENDED:-0}" == "1" ]]; then
+        ui_info "Unattended: polling portainer.${base} (expecting ${advertise})…"
+        local elapsed=0 resolved
+        while (( elapsed < 120 )); do
+            resolved=$(dig +short A "portainer.${base}" @1.1.1.1 2>/dev/null | tail -1)
+            if [[ "$resolved" == "$advertise" ]]; then
+                ui_success "DNS OK: portainer.${base} → ${advertise}"
+                return 0
+            fi
+            sleep 5
+            elapsed=$((elapsed + 5))
+        done
+        ui_warn "portainer.${base} did not resolve to ${advertise} within 120s — proceeding (Let's Encrypt may fail)"
+        return 0
+    fi
+
     ui_section "DNS check"
     ui_format_md <<EOF
 Step 2 will request HTTPS certificates from Let's Encrypt. For that to
