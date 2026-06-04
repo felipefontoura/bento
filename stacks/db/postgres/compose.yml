@@ -5,8 +5,10 @@ services:
     command: [postgres, --max_connections=200]
     networks:
       - network_public
-    ports:
-      - 5432:5432
+    # No `ports:` publish. Apps reach postgres via the overlay network
+    # as host `postgres`. To connect from your laptop in dev, run
+    # `ssh -L 5432:postgres:5432 user@vps` instead of opening 5432 to
+    # the world (UFW alone won't save you here).
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:

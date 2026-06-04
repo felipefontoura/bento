@@ -5,8 +5,8 @@ services:
     command: rabbitmq-server
     networks:
       - network_public
-    ports:
-      - 5672:5672
+    # AMQP port (5672) is overlay-only — apps connect as host `rabbitmq`.
+    # The management UI (15672) is reached over HTTPS via Traefik.
     hostname: rabbitmq
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq/

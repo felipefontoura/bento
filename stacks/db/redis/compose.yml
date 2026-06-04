@@ -4,8 +4,8 @@ services:
     command: redis-server --appendonly yes --port 6379
     networks:
       - network_public
-    ports:
-      - 6379:6379
+    # Internal-only: apps reach redis via the overlay as host `redis`.
+    # SSH-tunnel from your laptop for ad-hoc redis-cli access in dev.
     volumes:
       - redis-data:/data
     healthcheck:
