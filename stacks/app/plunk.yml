@@ -5,22 +5,72 @@ services:
     networks:
       - network_public
     environment:
+      # =============================================================================
+      # Public URLs / API
+      # =============================================================================
+
+      # Base application URI.
       - APP_URI=https://plunk.website.com
+
+      # API endpoint URI.
       - API_URI=https://plunk.website.com/api
+
+      # Public-facing API URI exposed to the frontend.
       - NEXT_PUBLIC_API_URI=https://plunk.website.com/api
 
+      # =============================================================================
+      # Database (PostgreSQL)
+      # =============================================================================
+
+      # Full database connection URL.
       - DATABASE_URL=postgresql://plunk:secret@postgres:5432/plunk
+
+      # =============================================================================
+      # Cache / Queue (Redis)
+      # =============================================================================
+
+      # Redis connection URL (DB index 2).
       - REDIS_URL=redis://redis:6379/2
 
+      # =============================================================================
+      # Security
+      # =============================================================================
+
+      # JWT signing secret. MUST remain stable across restarts/upgrades.
       - JWT_SECRET=secret
 
-      # AWS SES
+      # =============================================================================
+      # Email (AWS SES)
+      # =============================================================================
+
+      # AWS region where SES is configured.
       - AWS_REGION=us-east-1
+
+      # AWS access key for SES.
       - AWS_ACCESS_KEY_ID=access-key
+
+      # AWS secret key for SES.
       - AWS_SECRET_ACCESS_KEY=secret-key
+
+      # AWS SES configuration set name.
       - AWS_SES_CONFIGURATION_SET=config-set
 
+      # =============================================================================
+      # Account Management
+      # =============================================================================
+
+      # Disable public signups.
       - DISABLE_SIGNUPS=true
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     deploy:
       mode: replicated
       replicas: 1
