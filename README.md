@@ -104,36 +104,15 @@ LTS**, add your SSH key, and continue with the next section.
 **Not an affiliate.** Cloudflare doesn't run a public referral program
 for individuals, so this is a pure technical recommendation.
 
-### Option A — Let bento manage your DNS (recommended)
+### Records you need to create
 
-Bento uses a **Cloudflare token template link** so you never have to hunt
-through dashboards or pick permissions yourself. The flow:
+Anywhere you host DNS — Cloudflare's dashboard, your registrar, Route 53,
+whatever — create these two records pointing at your VPS IP:
 
-1. Move your domain's nameservers to Cloudflare once (their UI walks you through it).
-2. When bento asks during bootstrap, open this link in your browser:
-   [**Create the Bento DNS token →**](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&zoneId=all&name=Bento%20DNS)
-3. You land on Cloudflare's token review page with **DNS → Edit** already
-   selected. Optionally narrow the zone to your domain. Click **Continue
-   to summary** → **Create Token** → copy.
-4. Paste the token back into bento. It verifies the token and creates
-   the wildcard + root A records itself.
-
-The token is stored in `~/.config/bento/state.json` (chmod 600). You can
-revoke or rotate it any time in the Cloudflare dashboard.
-
-> **Why a token instead of OAuth?** Cloudflare doesn't expose an OAuth
-> consent flow for third-party tools today. The template URL is the
-> closest equivalent: it eliminates permission guesswork, but the user
-> still has to click "Create" and copy the value once.
-
-### Option B — Configure DNS manually
-
-Anywhere you host DNS, create these two records pointing at your VPS IP:
-
-| Type | Name             | Content        | TTL  |
-| ---- | ---------------- | -------------- | ---- |
-| A    | `*.mydomain.com` | `<your VPS IP>`| Auto |
-| A    | `mydomain.com`   | `<your VPS IP>`| Auto |
+| Type | Name             | Content         | TTL  |
+| ---- | ---------------- | --------------- | ---- |
+| A    | `*.mydomain.com` | `<your VPS IP>` | Auto |
+| A    | `mydomain.com`   | `<your VPS IP>` | Auto |
 
 Verify before running Step 2:
 
@@ -141,6 +120,11 @@ Verify before running Step 2:
 dig +short A portainer.mydomain.com
 # should print your VPS IP
 ```
+
+Bento will print these same records during Step 2 and wait for you to
+confirm they resolve — there is no API integration to set up, no token
+to manage. Pick whatever DNS host you prefer; we just recommend
+Cloudflare for the speed and zero-cost free tier.
 
 ---
 

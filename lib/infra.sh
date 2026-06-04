@@ -146,38 +146,27 @@ infra_run_step2() {
     ui_success "Step 2 complete — infra is up."
 }
 
-# Ensures wildcard + root A records exist before Traefik tries to obtain
-# Let's Encrypt certs. If Cloudflare is configured we sync via API;
-# otherwise we print manual instructions and require explicit confirmation.
+# Prints the DNS records Traefik needs and waits for the user to confirm
+# they exist. Bento does not write to any DNS provider — that step is
+# entirely manual (Cloudflare, Route 53, registrar dashboard, whatever).
 infra_ensure_dns() {
     local base advertise
     base="$(state_get '.bootstrap.base_domain')"
     advertise="$(state_get '.bootstrap.advertise_addr')"
 
-    if state_has '.bootstrap.cloudflare_api_token'; then
-        ui_section "Cloudflare — syncing DNS records"
-        if ui_spin "Creating *.${base} and ${base} → ${advertise}…" bash -c \
-            'source "$1" && source "$2" && cloudflare_sync_required_records' _ \
-            "${BENTO_REPO_ROOT}/lib/state.sh" \
-            "${BENTO_REPO_ROOT}/lib/cloudflare.sh"; then
-            ui_success "Cloudflare DNS in sync."
-            return 0
-        fi
-        ui_error "Cloudflare sync failed. Falling back to manual check."
-    fi
-
     ui_section "DNS check"
     ui_format_md <<EOF
 Step 2 will request HTTPS certificates from Let's Encrypt. For that to
-work, these records must already resolve to **${advertise}**:
+work, these records must already resolve to **${advertise}** in your DNS
+provider (Cloudflare, Route 53, your registrar, etc.):
 
-- \`*.${base}\` (wildcard A record)
-- \`${base}\` (root A record)
+| Type | Name              | Value          |
+| ---- | ----------------- | -------------- |
+| A    | \`*.${base}\`     | \`${advertise}\` |
+| A    | \`${base}\`       | \`${advertise}\` |
 
-If you're using Cloudflare, you can re-run bootstrap from **Settings** to
-provide an API token and let bento manage these automatically.
+Verify with:
 
-Otherwise create both records manually now and verify with:
 \`\`\`
 dig +short A portainer.${base}
 \`\`\`
