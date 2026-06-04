@@ -1,0 +1,40 @@
+#!/bin/bash
+# bento — themed banner
+#
+# Renders a Bento-box ASCII tray next to block letters spelling BENTO.
+# Routes through gum for color + border consistency.
+
+# shellcheck source=lib/ui.sh
+source "$(dirname "${BASH_SOURCE[0]}")/ui.sh"
+
+banner_render() {
+    local body
+    body=$(cat <<'EOF'
+        ┌──────┬──────┬──────┐
+        │ ░░░░ │ ▒▒▒▒ │ ████ │
+        │ ░░░░ │ ▒▒▒▒ │ ████ │       ██████╗ ███████╗███╗   ██╗████████╗ ██████╗
+        ├──────┼──────┼──────┤       ██╔══██╗██╔════╝████╗  ██║╚══██╔══╝██╔═══██╗
+        │ ▓▓▓▓ │ ░░░░ │ ▒▒▒▒ │       ██████╔╝█████╗  ██╔██╗ ██║   ██║   ██║   ██║
+        │ ▓▓▓▓ │ ░░░░ │ ▒▒▒▒ │       ██╔══██╗██╔══╝  ██║╚██╗██║   ██║   ██║   ██║
+        └──────┴──────┴──────┘       ██████╔╝███████╗██║ ╚████║   ██║   ╚██████╔╝
+                                     ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝
+EOF
+)
+
+    clear
+    gum style \
+        --border="rounded" \
+        --border-foreground="$BENTO_COLOR_SALMON" \
+        --padding="1 2" \
+        --margin="1 0 0 0" \
+        --foreground="$BENTO_COLOR_RICE" \
+        "$body"
+
+    gum style \
+        --foreground="$BENTO_COLOR_MUTED" \
+        --italic \
+        --margin="0 0 1 0" \
+        --align="center" \
+        --width=80 \
+        "Your VPS, served on a tray."
+}
