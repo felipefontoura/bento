@@ -231,7 +231,7 @@ bash install.sh
 ### Requirements
 
 - Latest Ubuntu LTS, Debian, or any apt-based distro
-- Non-root user with `sudo`
+- `root` or a non-root user with `sudo` — running directly as `root` on a fresh VPS is fine
 - 1+ GB RAM, 20+ GB free disk
 - Public IPv4
 - Wildcard DNS pointing to that IPv4

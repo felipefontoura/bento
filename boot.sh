@@ -26,8 +26,13 @@ die()  { printf '%b\n' "${RED}✗${NC} $*" >&2; exit 1; }
 # -----------------------------------------------------------------------------
 # Pre-flight (mínimo viável)
 # -----------------------------------------------------------------------------
-if (( EUID == 0 )); then
-    die "bento espera ser executado como um usuário regular com sudo. Não rode como root."
+# Bento needs to run as root for hardening (kernel sysctl, package install,
+# systemd unit creation, docker daemon, swarm init). Two ways to satisfy that:
+#   - SSH straight as root (simplest on a fresh Hetzner/Ubuntu VPS)
+#   - SSH as a non-root user who has sudo available
+# Either is fine; we just need privilege escalation to exist.
+if (( EUID != 0 )) && ! command -v sudo >/dev/null 2>&1; then
+    die "bento needs root or a non-root user with sudo installed. You have neither."
 fi
 
 if ! command -v apt-get >/dev/null 2>&1; then
