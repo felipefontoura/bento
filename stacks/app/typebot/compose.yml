@@ -103,7 +103,7 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 256M
+          memory: 512M
       labels:
         - traefik.enable=true
         - traefik.http.routers.typebot_builder.rule=Host(`${TYPEBOT_BUILDER_HOST}`)
@@ -134,6 +134,10 @@ services:
       start_period: 40s
     deploy:
       <<: *typebot-deploy
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
       labels:
         - traefik.enable=true
         - traefik.http.routers.typebot_viewer.rule=Host(`${TYPEBOT_VIEWER_HOST}`)
