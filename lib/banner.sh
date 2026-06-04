@@ -4,6 +4,9 @@
 # Renders a Bento-box ASCII tray next to block letters spelling BENTO.
 # Routes through gum for color + border consistency.
 
+[[ -n "${_BENTO_BANNER_LOADED:-}" ]] && return 0
+_BENTO_BANNER_LOADED=1
+
 # shellcheck source=lib/ui.sh
 source "$(dirname "${BASH_SOURCE[0]}")/ui.sh"
 

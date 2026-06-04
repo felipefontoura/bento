@@ -4,6 +4,12 @@
 # All terminal styling routes through here so the look stays consistent.
 # Requires gum (installed by lib/deps.sh).
 
+# Idempotent source guard — this file is sourced multiple times in the same
+# shell (install.sh + lib/banner.sh + lib/infra.sh all source it). Without
+# the guard, the `readonly` declarations below abort on the second source.
+[[ -n "${_BENTO_UI_LOADED:-}" ]] && return 0
+_BENTO_UI_LOADED=1
+
 # -----------------------------------------------------------------------------
 # Palette — bento bento bento. Light on salmon, accents on wasabi.
 # -----------------------------------------------------------------------------

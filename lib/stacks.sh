@@ -6,6 +6,9 @@
 # deploys via Portainer's "create stack from Git repository" endpoint, then
 # runs the optional per-stack install.sh post-deploy hook.
 
+[[ -n "${_BENTO_STACKS_LOADED:-}" ]] && return 0
+_BENTO_STACKS_LOADED=1
+
 # shellcheck source=lib/ui.sh
 source "$(dirname "${BASH_SOURCE[0]}")/ui.sh"
 # shellcheck source=lib/state.sh

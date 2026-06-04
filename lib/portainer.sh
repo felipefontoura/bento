@@ -4,6 +4,9 @@
 # Every call here is logged when BENTO_VERBOSE=1.
 # Auth state (credentials + JWT) lives in ~/.config/bento/portainer.json.
 
+[[ -n "${_BENTO_PORTAINER_LOADED:-}" ]] && return 0
+_BENTO_PORTAINER_LOADED=1
+
 # shellcheck source=lib/state.sh
 source "$(dirname "${BASH_SOURCE[0]}")/state.sh"
 

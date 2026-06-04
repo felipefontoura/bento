@@ -4,6 +4,9 @@
 # Step 1 tail: swarm + network (right after Docker is installed).
 # Step 2: Deploy Traefik + Portainer, init Portainer admin.
 
+[[ -n "${_BENTO_INFRA_LOADED:-}" ]] && return 0
+_BENTO_INFRA_LOADED=1
+
 # shellcheck source=lib/ui.sh
 source "$(dirname "${BASH_SOURCE[0]}")/ui.sh"
 # shellcheck source=lib/state.sh

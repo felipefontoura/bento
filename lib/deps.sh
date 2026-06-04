@@ -6,6 +6,9 @@
 # only shows step lines, one per operation, so the user sees progress
 # without scroll-spam.
 
+[[ -n "${_BENTO_DEPS_LOADED:-}" ]] && return 0
+_BENTO_DEPS_LOADED=1
+
 readonly BENTO_CHARM_KEY_URL="https://repo.charm.sh/apt/gpg.key"
 readonly BENTO_CHARM_REPO="deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *"
 BENTO_DEPS_LOG="${BENTO_DEPS_LOG:-/tmp/bento-deps.log}"

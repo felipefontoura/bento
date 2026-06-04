@@ -13,6 +13,9 @@
 #
 # Convention: jq paths use jq syntax, e.g. ".bootstrap.base_domain"
 
+[[ -n "${_BENTO_STATE_LOADED:-}" ]] && return 0
+_BENTO_STATE_LOADED=1
+
 readonly BENTO_STATE_DIR="${HOME}/.config/bento"
 readonly BENTO_STATE_FILE="${BENTO_STATE_DIR}/state.json"
 readonly BENTO_STATE_HISTORY_DIR="${BENTO_STATE_DIR}/history"

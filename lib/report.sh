@@ -10,6 +10,9 @@
 # The file is meant to be shared with the customer the install was done for.
 # It is intentionally print-friendly and works offline (no external CSS/JS).
 
+[[ -n "${_BENTO_REPORT_LOADED:-}" ]] && return 0
+_BENTO_REPORT_LOADED=1
+
 # shellcheck source=lib/state.sh
 source "$(dirname "${BASH_SOURCE[0]}")/state.sh"
 
