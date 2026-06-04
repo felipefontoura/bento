@@ -38,6 +38,8 @@ applications deployed and ready to log into.
 ## Table of Contents
 
 - [Get a VPS (recommended: Hetzner)](#get-a-vps-recommended-hetzner)
+- [DNS (recommended: Cloudflare)](#dns-recommended-cloudflare)
+- [Network firewall (Hetzner Cloud Firewall)](#network-firewall-hetzner-cloud-firewall)
 - [Quickstart](#quickstart)
 - [What bento does](#what-bento-does)
   - [Step 1 — Harden the system](#step-1--harden-the-system)
@@ -83,7 +85,110 @@ hardware…). If you'd rather pay no referral, just sign up directly at
 [hetzner.com](https://hetzner.com) and the installer works the same way.
 
 After signing up: create a **CX22** (or larger) with the **latest Ubuntu
-LTS**, add your SSH key, and continue with the Quickstart below.
+LTS**, add your SSH key, and continue with the next section.
+
+---
+
+## DNS (recommended: Cloudflare)
+
+> **Bento expects a wildcard A record.** Every stack gets its own
+> subdomain (`portainer.mydomain.com`, `n8n.mydomain.com`, etc.), and
+> Traefik asks Let's Encrypt for certs on each one. Without DNS in place
+> Step 2 will fail.
+>
+> **[Cloudflare](https://www.cloudflare.com/)** is our recommended DNS
+> provider for two reasons: the free tier is genuinely free (no credit
+> card), and it ships a clean API that lets bento configure the records
+> for you in one click.
+
+**Not an affiliate.** Cloudflare doesn't run a public referral program
+for individuals, so this is a pure technical recommendation.
+
+### Option A — Let bento manage your DNS (recommended)
+
+Bento uses a **Cloudflare token template link** so you never have to hunt
+through dashboards or pick permissions yourself. The flow:
+
+1. Move your domain's nameservers to Cloudflare once (their UI walks you through it).
+2. When bento asks during bootstrap, open this link in your browser:
+   [**Create the Bento DNS token →**](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&zoneId=all&name=Bento%20DNS)
+3. You land on Cloudflare's token review page with **DNS → Edit** already
+   selected. Optionally narrow the zone to your domain. Click **Continue
+   to summary** → **Create Token** → copy.
+4. Paste the token back into bento. It verifies the token and creates
+   the wildcard + root A records itself.
+
+The token is stored in `~/.config/bento/state.json` (chmod 600). You can
+revoke or rotate it any time in the Cloudflare dashboard.
+
+> **Why a token instead of OAuth?** Cloudflare doesn't expose an OAuth
+> consent flow for third-party tools today. The template URL is the
+> closest equivalent: it eliminates permission guesswork, but the user
+> still has to click "Create" and copy the value once.
+
+### Option B — Configure DNS manually
+
+Anywhere you host DNS, create these two records pointing at your VPS IP:
+
+| Type | Name             | Content        | TTL  |
+| ---- | ---------------- | -------------- | ---- |
+| A    | `*.mydomain.com` | `<your VPS IP>`| Auto |
+| A    | `mydomain.com`   | `<your VPS IP>`| Auto |
+
+Verify before running Step 2:
+
+```bash
+dig +short A portainer.mydomain.com
+# should print your VPS IP
+```
+
+---
+
+## Network firewall (Hetzner Cloud Firewall)
+
+You get **two layers of firewall** when you run bento on Hetzner:
+
+1. **Hetzner Cloud Firewall** — runs at Hetzner's network edge, *before*
+   packets reach your VPS. Configured in the Hetzner panel.
+2. **OS-level UFW** — runs on the VPS itself. Configured automatically by
+   `lib/hardening.sh` during Step 1.
+
+You don't need both, but layered defense is cheap and Hetzner's edge firewall
+is free.
+
+### What bento's UFW already does
+
+`lib/hardening.sh` resets and re-enables UFW with this policy:
+
+- `default deny incoming`, `default allow outgoing`
+- `limit ssh` — drops brute-force attempts at 6 connections/30s
+- `allow http`, `allow https` — ports 80/443 for Traefik
+- `allow proto icmp` — keeps `ping` working for debugging
+
+Combined with `fail2ban` (also installed during hardening), SSH brute-force
+is shut down within seconds.
+
+### Recommended Hetzner Cloud Firewall ruleset
+
+In the Hetzner Cloud console: **Firewalls → Create Firewall → Apply to your server**.
+
+| Direction | Source         | Port    | Protocol | Why                              |
+| --------- | -------------- | ------- | -------- | -------------------------------- |
+| Inbound   | Your home IPv4 | 22      | TCP      | SSH (lock down further later)    |
+| Inbound   | `0.0.0.0/0`    | 80      | TCP      | Let's Encrypt HTTP-01 + redirect |
+| Inbound   | `0.0.0.0/0`    | 443     | TCP      | HTTPS                            |
+| Inbound   | `0.0.0.0/0`    | (any)   | ICMP     | `ping` debugging (optional)      |
+| Outbound  | `0.0.0.0/0`    | all     | all      | Default — keep open              |
+
+**Important:** if you set the SSH rule to your home IP only and that IP
+changes (mobile, ISP renewal, etc.), you'll lose access and have to use
+Hetzner's web console to fix it. For a starter setup, leaving SSH open to
+the world but enforcing `ufw limit` + `fail2ban` (both already on) is a
+reasonable trade-off.
+
+> **Future**: bento may add a Hetzner Cloud Firewall sync via the
+> `hcloud` API token, similar to the Cloudflare flow. For now it's a
+> one-time manual configuration in the panel.
 
 ---
 

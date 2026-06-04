@@ -50,6 +50,7 @@ install.sh
     ├── lib/hardening.sh  copied from felipefontoura/ubinkaze
     ├── lib/infra.sh   swarm init, network, deploy Traefik + Portainer, init admin
     ├── lib/portainer.sh  REST API client (auth, stacks CRUD)
+    ├── lib/cloudflare.sh optional DNS sync via Cloudflare API token
     ├── lib/stacks.sh  manifest discovery + env resolution + deploy via API
     └── lib/install-helpers.sh  helpers used by per-stack install.sh scripts
     │
@@ -97,6 +98,7 @@ bento/
 │           └── SKILL.md
 ├── lib/
 │   ├── banner.sh
+│   ├── cloudflare.sh             # optional DNS sync via Cloudflare API
 │   ├── deps.sh
 │   ├── hardening.sh              # copied from ubinkaze
 │   ├── infra.sh
