@@ -137,8 +137,9 @@ services:
       # Enable Redis caching.
       - CACHE_REDIS_ENABLED=true
 
-      # Redis connection URL (DB index 2).
-      - CACHE_REDIS_URI=redis://redis:6379/2
+      # Redis DB index. Per-stack allocation:
+      #   /0 free  /1 n8n  /2 plunk  /3 chatwoot  /4 evolution-api  /5+ free
+      - CACHE_REDIS_URI=redis://redis:6379/4
     healthcheck:
       test:
         [
