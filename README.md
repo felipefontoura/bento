@@ -1,367 +1,219 @@
 <a name="readme-top"></a>
 
-<!-- PROJECT LOGO -->
+<!-- LOGO -->
 <br />
 <div align="center">
   <a href="https://github.com/felipefontoura/bento">
     <img src=".assets/bento-banner.png" alt="bento" width="720">
   </a>
 
-  <p align="center">
-    Your VPS, served on a tray.
-    <br />
-    <br />
-    <a href="#quickstart"><strong>Quickstart »</strong></a>
-    ·
-    <a href="CLAUDE.md">For maintainers</a>
-    ·
-    <a href="https://github.com/felipefontoura/bento/issues">Report a bug</a>
+  <p><em>Your VPS, served on a tray.</em></p>
+
+  <p>
+    <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
+    <img alt="Made with Bash" src="https://img.shields.io/badge/made%20with-bash-1f425f.svg">
+    <img alt="Docker Swarm" src="https://img.shields.io/badge/docker-swarm-2496ED.svg?logo=docker&logoColor=white">
+    <a href="https://github.com/felipefontoura/bento/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/felipefontoura/bento?style=flat"></a>
+    <a href="https://github.com/felipefontoura/bento/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/felipefontoura/bento"></a>
   </p>
 
-  <p align="center">
-    <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg">
-    <img alt="Made with Bash" src="https://img.shields.io/badge/Made%20with-Bash-1f425f.svg">
-    <img alt="Docker Swarm" src="https://img.shields.io/badge/Docker-Swarm-2496ED.svg?logo=docker&logoColor=white">
-    <img alt="Apt-based" src="https://img.shields.io/badge/distro-Ubuntu%20%7C%20Debian-orange">
+  <p>
+    <a href="#quickstart"><strong>Quickstart</strong></a> ·
+    <a href="CLAUDE.md">Maintainers</a> ·
+    <a href="https://github.com/felipefontoura/bento/issues">Issues</a>
   </p>
 </div>
 
-<br />
+---
 
-Bento takes a freshly-installed Ubuntu (or any Debian-family) VPS and walks
-you through a guided terminal menu until you have a hardened host, Docker
-Swarm bootstrapped, Traefik + Portainer running with TLS, and your chosen
-applications deployed and ready to log into.
+## What is bento
+
+**A guided installer that turns a fresh VPS into a hardened, TLS-fronted Docker Swarm with the apps you want — in under 15 minutes, with one terminal command.**
+
+You answer three questions (domain, admin email, public IP), walk through three guided steps (harden, infra, apps), and finish with a single HTML report you can hand off to a client. Every secret is generated for you; nothing is hardcoded.
+
+## Quickstart
+
+```bash
+bash <(curl -sSL https://raw.githubusercontent.com/felipefontoura/bento/stable/boot.sh)
+```
+
+That's it. The rest of this document is reference.
+
+## Table of contents
+
+- [How it works](#how-it-works)
+- [Stacks](#stacks)
+- [Prerequisites](#prerequisites)
+- [After install](#after-install)
+- [Operations](#operations)
+- [For maintainers and contributors](#for-maintainers-and-contributors)
 
 ---
 
-## Table of Contents
+## How it works
 
-- [Get a VPS (recommended: Hetzner)](#get-a-vps-recommended-hetzner)
-- [DNS (recommended: Cloudflare)](#dns-recommended-cloudflare)
-- [Network firewall (Hetzner Cloud Firewall)](#network-firewall-hetzner-cloud-firewall)
-- [Quickstart](#quickstart)
-- [What bento does](#what-bento-does)
-  - [Step 1 — Harden the system](#step-1--harden-the-system)
-  - [Step 2 — Install infrastructure](#step-2--install-infrastructure)
-  - [Step 3 — Install applications](#step-3--install-applications)
-- [Handoff report (HTML)](#handoff-report-html)
-- [Ownership: bento vs Portainer](#ownership-bento-vs-portainer)
-- [Updating later](#updating-later)
-- [Stacks available](#stacks-available)
-- [Manual install](#manual-install-if-curlbash-is-not-your-thing)
-- [Requirements](#requirements)
-- [State and configuration](#state-and-configuration)
-- [For maintainers](#for-maintainers)
-- [Contributing](#contributing)
-- [License](#license)
+A one-time bootstrap captures **`BASE_DOMAIN`**, **`ADMIN_EMAIL`**, and your **VPS public IP** (auto-detected). Then three idempotent, re-runnable steps:
+
+### Step 1 — Harden the system
+
+An embedded copy of the [ubinkaze](https://github.com/felipefontoura/ubinkaze) hardening script:
+installs Docker, applies kernel sysctl + UFW (with `limit ssh`) + fail2ban + AppArmor + AIDE + auditd + chrony,
+creates a `docker` user with your SSH keys, then initializes Docker Swarm and the `network_public` overlay. Requires one reboot.
+
+### Step 2 — Install infrastructure
+
+No prompts. Deploys Traefik (Let's Encrypt + HTTPS redirect) and Portainer at `portainer.<your-domain>`, generates a strong Portainer admin password, displays it once.
+
+### Step 3 — Install applications
+
+Pick from a checklist. For each stack, bento:
+
+1. **Prompts only for env vars without sensible defaults.** Hostnames default to `<key>.<your-domain>`; secrets are auto-generated; DB passwords are reused from the postgres stack.
+2. **Deploys via Portainer's API as a Git-backed stack** so Portainer becomes the canonical source of truth for the running spec.
+3. **Runs an optional `install.sh`** for post-deploy bootstrap (DB creation, migrations).
+4. **Prints the URL** — you open and log in.
 
 ---
+
+## Stacks
+
+Each stack is a directory at `stacks/<category>/<key>/` with `compose.yml`, `manifest.json`, and optionally `install.sh`. Adding a new stack is documented in [CLAUDE.md](CLAUDE.md).
+
+| Category | Stack | What it is |
+|---|---|---|
+| infra | [Traefik](stacks/infra/traefik) | Reverse proxy + Let's Encrypt |
+| infra | [Portainer](stacks/infra/portainer) | Stack manager UI |
+| db | [PostgreSQL](stacks/db/postgres) | Each app creates its own database in `install.sh` |
+| db | [Redis](stacks/db/redis) | In-memory cache |
+| app | [Chatwoot](stacks/app/chatwoot) | Customer support platform |
+| app | [CLI Proxy API](stacks/app/cli-proxy-api) | OpenAI-compatible proxy in front of CLI providers |
+| app | [Evolution API](stacks/app/evolution-api) | WhatsApp gateway |
+| app | [n8n](stacks/app/n8n) | Workflow automation |
+| app | [n8n MCP](stacks/app/n8n-mcp) | MCP server for n8n |
+| app | [Paperclip](stacks/app/paperclip) | AI agent orchestration (custom image with Hermes, Gemini, Pi, Grok) |
+| app | [Plunk](stacks/app/plunk) | Open-source email platform |
+| app | [RabbitMQ](stacks/app/rabbitmq) | Message broker |
+| app | [Typebot](stacks/app/typebot) | Chatbot builder |
+
+---
+
+## Prerequisites
+
+### VPS
 
 <!-- TODO: replace YOUR_REF with the real Hetzner affiliate code before pushing. -->
 
-## Get a VPS (recommended: Hetzner)
+| Partner | When | Plan | Link |
+|---|---|---|---|
+| **Hetzner** (primary) | EU/US users — bento is smoke-tested against it every release | CX22, latest Ubuntu LTS | [hetzner.cloud](https://hetzner.cloud/?ref=YOUR_REF) |
+| Hostinger (secondary) | Brazil-based users — BRL billing, low BR latency | KVM 2+, latest Ubuntu LTS | [hostinger.com/br/smartdev](https://hostinger.com/br/smartdev) |
 
-> **Don't have a server yet?** Bento is built and tested on **[Hetzner Cloud](https://hetzner.cloud/?ref=YOUR_REF)** — affordable, fast, and Ubuntu-default. A **CX22** (~€4/month) comfortably runs hardening + Traefik + Portainer + a couple of apps.
->
-> **[Sign up here](https://hetzner.cloud/?ref=YOUR_REF)** — gets you free
-> Hetzner credit on signup to test bento for free.
+<details>
+<summary>Affiliate disclosure (read once, applies to both)</summary>
 
-**Why we recommend Hetzner specifically**
+Both links above are affiliate referrals. Signing up through them gives bento a small commission that funds new stacks and bug fixes — there is **no premium price** for you and **no functional difference** from a direct signup. If you'd rather not contribute, just visit [hetzner.com](https://hetzner.com) or [hostinger.com](https://hostinger.com) directly and the installer works identically. Same goes for any apt-based VPS (DigitalOcean, OVH, Vultr, your own metal).
 
-- We've run every release of bento on it; it is the only provider we
-  actively validate against.
-- The current Ubuntu LTS is the default image at Hetzner — exactly what
-  `boot.sh` expects.
-- The CX22 SKU has enough RAM/disk for the full stack list.
+</details>
 
-**Full disclosure — this is an affiliate link**
+### DNS
 
-The link above is an affiliate referral. If you sign up through it and
-use paid resources, Hetzner pays us a small commission. That revenue is
-**the main thing that funds new stacks, bug fixes, and keeping bento free
-and open source**. There is zero pressure to use it — bento works
-identically on any Ubuntu/Debian VPS (DigitalOcean, OVH, Vultr, your own
-hardware…). If you'd rather pay no referral, just sign up directly at
-[hetzner.com](https://hetzner.com) and the installer works the same way.
+You need a wildcard A record before Step 2, or Let's Encrypt fails on first boot:
 
-After signing up: create a **CX22** (or larger) with the **latest Ubuntu
-LTS**, add your SSH key, and continue with the next section.
+| Type | Name             | Value           |
+|------|------------------|-----------------|
+| A    | `*.mydomain.com` | `<your VPS IP>` |
+| A    | `mydomain.com`   | `<your VPS IP>` |
 
-### Brazilian alternative — Hostinger (secondary)
+[**Open the DNS records page on Cloudflare →**](https://dash.cloudflare.com/?to=/:account/:zone/dns) — Cloudflare prompts you to pick the account + zone, then drops you straight onto the records page. Cloudflare is the recommended DNS host (free tier, fast); any provider works.
 
-If you're based in Brazil (or your end users are), **[Hostinger](https://hostinger.com/br/smartdev)**
-is our secondary recommendation. Why a secondary tier:
-
-- **BRL billing** removes the USD/EUR FX volatility that Hetzner charges
-  in.
-- **Lower latency** to Brazilian users than Hetzner's European data
-  centers.
-- bento is tested less often there than on Hetzner — the platform is
-  generic apt-based Ubuntu, so everything in this README still applies,
-  but Hetzner gets the per-release smoke test.
-
-Pick a KVM plan with at least **2 vCPU and 4 GB RAM** (KVM 2 or larger)
-and the latest Ubuntu LTS image. Add your SSH key in the Hostinger panel.
-
-**Full disclosure — this is also an affiliate link.** Same model as the
-Hetzner one: a small commission helps fund new stacks. If you'd rather
-pay no referral, sign up directly at
-[hostinger.com](https://hostinger.com) — the installer works the same
-way.
-
----
-
-## DNS (recommended: Cloudflare)
-
-> **Bento expects a wildcard A record.** Every stack gets its own
-> subdomain (`portainer.mydomain.com`, `n8n.mydomain.com`, etc.), and
-> Traefik asks Let's Encrypt for certs on each one. Without DNS in place
-> Step 2 will fail.
->
-> **[Cloudflare](https://www.cloudflare.com/)** is our recommended DNS
-> provider for two reasons: the free tier is genuinely free (no credit
-> card), and it ships a clean API that lets bento configure the records
-> for you in one click.
-
-**Not an affiliate.** Cloudflare doesn't run a public referral program
-for individuals, so this is a pure technical recommendation.
-
-### Records you need to create
-
-Anywhere you host DNS — Cloudflare's dashboard, your registrar, Route 53,
-whatever — create these two records pointing at your VPS IP:
-
-| Type | Name             | Content         | TTL  |
-| ---- | ---------------- | --------------- | ---- |
-| A    | `*.mydomain.com` | `<your VPS IP>` | Auto |
-| A    | `mydomain.com`   | `<your VPS IP>` | Auto |
-
-**Using Cloudflare?** This deep link skips the navigation and lands you
-directly on your zone's DNS records page — Cloudflare will prompt you to
-pick the account and zone first:
-
-[**Open the Cloudflare DNS records page →**](https://dash.cloudflare.com/?to=/:account/:zone/dns)
-
-Cloudflare does not expose a public "click and create the record" flow
-for third parties, so the values still come from the table above. The
-deep link just saves a few clicks of navigation.
-
-Verify before running Step 2:
+Verify before Step 2:
 
 ```bash
 dig +short A portainer.mydomain.com
 # should print your VPS IP
 ```
 
-Bento will print these same records (and the deep link) during Step 2
-and wait for you to confirm they resolve — there is no API integration
-to set up, no token to manage. Pick whatever DNS host you prefer; we
-just recommend Cloudflare for the speed and zero-cost free tier.
+### Firewall
+
+| Layer | What it does | Setup |
+|---|---|---|
+| **Hetzner Cloud Firewall** | Edge filter; optional | Manual, in Hetzner panel |
+| **UFW + fail2ban** | Default-deny inbound, `limit ssh`, allow 80/443/ICMP | Automatic during Step 1 |
+
+<details>
+<summary>Recommended Hetzner Cloud Firewall ruleset</summary>
+
+In **Firewalls → Create Firewall → Apply to your server**:
+
+| Direction | Source | Port | Protocol | Why |
+|---|---|---|---|---|
+| Inbound | Your home IP | 22 | TCP | SSH — or leave open and let `ufw limit` + fail2ban handle brute-force |
+| Inbound | `0.0.0.0/0` | 80 | TCP | Let's Encrypt HTTP-01 + HTTPS redirect |
+| Inbound | `0.0.0.0/0` | 443 | TCP | HTTPS |
+| Inbound | `0.0.0.0/0` | any | ICMP | `ping` debugging |
+| Outbound | `0.0.0.0/0` | all | all | Default |
+
+If you lock SSH to your home IP and your IP changes (mobile, ISP renewal), use Hetzner's web console to recover. For starter setups, leaving SSH open with `ufw limit` + fail2ban is a reasonable trade-off.
+
+</details>
 
 ---
 
-## Network firewall (Hetzner Cloud Firewall)
+## After install
 
-You get **two layers of firewall** when you run bento on Hetzner:
+### Handoff HTML
 
-1. **Hetzner Cloud Firewall** — runs at Hetzner's network edge, *before*
-   packets reach your VPS. Configured in the Hetzner panel.
-2. **OS-level UFW** — runs on the VPS itself. Configured automatically by
-   `lib/hardening.sh` during Step 1.
+When Step 3 finishes — or any time, from the **Report** menu — bento writes a self-contained HTML file with the VPS overview, Traefik + Portainer access, and every deployed stack's URL and resolved env vars. Secrets are masked by default with click-to-reveal; print to PDF auto-reveals everything for offline handoff.
 
-You don't need both, but layered defense is cheap and Hetzner's edge firewall
-is free.
-
-### What bento's UFW already does
-
-`lib/hardening.sh` resets and re-enables UFW with this policy:
-
-- `default deny incoming`, `default allow outgoing`
-- `limit ssh` — drops brute-force attempts at 6 connections/30s
-- `allow http`, `allow https` — ports 80/443 for Traefik
-- `allow proto icmp` — keeps `ping` working for debugging
-
-Combined with `fail2ban` (also installed during hardening), SSH brute-force
-is shut down within seconds.
-
-### Recommended Hetzner Cloud Firewall ruleset
-
-In the Hetzner Cloud console: **Firewalls → Create Firewall → Apply to your server**.
-
-| Direction | Source         | Port    | Protocol | Why                              |
-| --------- | -------------- | ------- | -------- | -------------------------------- |
-| Inbound   | Your home IPv4 | 22      | TCP      | SSH (lock down further later)    |
-| Inbound   | `0.0.0.0/0`    | 80      | TCP      | Let's Encrypt HTTP-01 + redirect |
-| Inbound   | `0.0.0.0/0`    | 443     | TCP      | HTTPS                            |
-| Inbound   | `0.0.0.0/0`    | (any)   | ICMP     | `ping` debugging (optional)      |
-| Outbound  | `0.0.0.0/0`    | all     | all      | Default — keep open              |
-
-**Important:** if you set the SSH rule to your home IP only and that IP
-changes (mobile, ISP renewal, etc.), you'll lose access and have to use
-Hetzner's web console to fix it. For a starter setup, leaving SSH open to
-the world but enforcing `ufw limit` + `fail2ban` (both already on) is a
-reasonable trade-off.
-
-> **Future**: bento may add a Hetzner Cloud Firewall sync via the
-> `hcloud` API token, similar to the Cloudflare flow. For now it's a
-> one-time manual configuration in the panel.
-
----
-
-## Quickstart
-
-One command, anywhere on a fresh Ubuntu/Debian VPS:
-
-```bash
-bash <(curl -sSL https://raw.githubusercontent.com/felipefontoura/bento/stable/boot.sh)
+```
+~/.local/share/bento/reports/handoff-<timestamp>.html       # chmod 600
 ```
 
-You will be asked once for:
-
-- **Base domain** (e.g. `mydomain.com`) — every subsequent service gets a
-  subdomain (`portainer.mydomain.com`, `n8n.mydomain.com`, etc.).
-- **Admin email** — for Let's Encrypt + service-level admin contact.
-- **VPS public IP** — auto-detected, confirm or override.
-
-Then bento drops you into an interactive menu with three steps to follow in
-order. Each step is idempotent and can be re-run safely.
-
----
-
-## What bento does
-
-### Step 1 — Harden the system
-
-Runs the [ubinkaze](https://github.com/felipefontoura/ubinkaze) hardening
-script (copied in as `lib/hardening.sh`):
-
-- Installs Docker via the official installer
-- Applies kernel sysctl hardening (BPF, IP forwarding, source-route protections)
-- Enables UFW (ssh/http/https only), fail2ban, AppArmor, AIDE, auditd, chrony
-- Creates a `docker` user with your SSH keys
-- Configures unattended security upgrades, log rotation, daily cleanup cron
-
-When hardening finishes, Step 1 immediately initializes the Docker Swarm
-using the IP you confirmed and creates the shared overlay network
-`network_public`. A reboot is required before continuing.
-
-### Step 2 — Install infrastructure
-
-No prompts. Bento takes the values from the bootstrap and:
-
-- Deploys **Traefik** with HTTPS redirects + Let's Encrypt via your email
-- Deploys **Portainer** at `portainer.<your-domain>`
-- Generates a strong admin password and initializes Portainer's admin via API
-- Shows the URL, username, and password once on screen
-
-After Step 2 you have a working production-grade router and a UI to inspect
-everything bento later deploys.
-
-### Step 3 — Install applications
-
-Pick from the menu what you want. For each selected stack bento:
-
-1. Prompts for missing required env vars (defaults derived from your base domain).
-2. Generates strong secrets where the manifest declares `generate`.
-3. Calls Portainer's API to create the stack from this Git repo (so Portainer
-   becomes the source of truth for the running spec).
-4. Runs the optional per-stack `install.sh` to bootstrap the app (e.g. create
-   its Postgres database, run Rails migrations, etc.).
-5. Prints the URL — you open it and log in.
-
----
-
-## Handoff report (HTML)
-
-After Step 3 finishes — or any time, from the **Report** menu item —
-bento writes a single self-contained HTML file with everything a client
-needs to take over the system:
-
-- VPS overview (public IP, domain, admin email, SSH hint)
-- Traefik + Portainer (URL, admin user, masked password)
-- Every bento-deployed application stack with its URL and the env vars
-  generated for it (secrets are masked by default with click-to-reveal)
-
-The file lives at `~/.local/share/bento/reports/handoff-<timestamp>.html`
-(`chmod 600`). No external CSS or JavaScript — it works offline and prints
-cleanly to PDF for hand-delivery. Print mode auto-reveals secrets so the
-PDF is a complete record.
-
-Move it off the VPS with `scp`:
+Move it off the VPS:
 
 ```bash
 scp user@vps:~/.local/share/bento/reports/handoff-*.html .
 ```
 
-> The report contains live credentials. Treat it like a password vault:
-> store encrypted, deliver over a secure channel (1Password, Bitwarden
-> send, encrypted email), and rotate secrets if the file ever leaks.
+> The report carries live credentials. Treat it like a password vault: deliver over an encrypted channel (1Password, Bitwarden Send, encrypted email), rotate if it ever leaks.
+
+### Ownership: bento vs Portainer
+
+Same split as Helm + kubectl. bento owns the declarative state; Portainer owns day-to-day operations.
+
+| Concern | bento | Portainer |
+|---|---|---|
+| Declarative state (what should run, with which envs) | owner | viewer |
+| First deploy + git-backed updates | owner (via API) | executor |
+| Logs, restart, scale, exec | redirect | owner |
+| Stacks created outside bento (no `BENTO_MANAGED` label) | ignored | full owner |
+
+Every bento-deployed stack carries `BENTO_MANAGED=true` + its source commit, so bento can spot drift and offer to reconcile during **Update**.
 
 ---
 
-## Ownership: bento vs Portainer
+## Operations
 
-Bento and Portainer split responsibilities cleanly. This is the same model as
-Helm + kubectl or Terraform + the cloud console.
+### Update bento and stacks
 
-| Concern                                              | bento    | Portainer  |
-| ---------------------------------------------------- | -------- | ---------- |
-| Declarative state (what should run)                  | owner    | viewer     |
-| First deploy + bulk updates                          | owner    | executor   |
-| Day-to-day ops (logs, restart, scale, exec)          | redirect | owner      |
-| Stacks created directly in Portainer (outside bento) | ignored  | full owner |
+Re-running the curl|bash command always re-clones the latest `boot.sh`. Or, from the menu, pick **Update** to:
 
-Every bento-deployed stack carries the env var `BENTO_MANAGED=true` plus the
-deployed Git commit, so bento can spot drift and offer to reconcile during
-**Update**.
+- Pull the latest bento code locally (`git fetch + reset --hard`).
+- Re-deploy any stack whose `compose.yml` or `manifest.json` changed since the last deploy (`POST /api/stacks/<id>/git/redeploy`).
 
----
+### State and configuration
 
-## Updating later
+| Path | Mode | Purpose |
+|---|---|---|
+| `~/.config/bento/state.json` | 600 | Domain, email, IP, generated secrets, deployed-ref per stack |
+| `~/.config/bento/portainer.json` | 600 | Portainer admin credentials |
+| `~/.local/state/bento/logs/` | 700 | Hardening + install logs |
+| `~/.local/share/bento/reports/` | 700 | Handoff HTML reports |
 
-Just re-run the same one-liner — `boot.sh` re-clones the repo. Or, from the
-menu, pick **Update** to:
+The state schema is versioned and migrated automatically across bento updates.
 
-- Pull the latest bento code (`git fetch + reset --hard`).
-- Re-deploy any stacks where the YAML or manifest changed since the deployed
-  Git commit (via `POST /api/stacks/<id>/git/redeploy`).
-
----
-
-## Stacks available
-
-Layout: each stack is a directory with `compose.yml`, `manifest.json`, and
-optionally `install.sh`.
-
-### Infrastructure (deployed by Step 2)
-
-- **[Traefik](stacks/infra/traefik):** reverse proxy with Let's Encrypt.
-- **[Portainer](stacks/infra/portainer):** stack manager UI.
-
-### Databases (deployed on demand by Step 3 when an app depends on them)
-
-- **[PostgreSQL](stacks/db/postgres):** every app creates its own database
-  via its `install.sh`.
-- **[Redis](stacks/db/redis):** in-memory cache.
-
-### Applications (Step 3)
-
-- **[Chatwoot](stacks/app/chatwoot):** customer support platform.
-- **[CLI Proxy API](stacks/app/cli-proxy-api):** OpenAI-compatible proxy.
-- **[Evolution API](stacks/app/evolution-api):** WhatsApp gateway.
-- **[N8n](stacks/app/n8n):** workflow automation.
-- **[N8n MCP](stacks/app/n8n-mcp):** MCP server for n8n.
-- **[Paperclip](stacks/app/paperclip):** AI agent orchestration (custom
-  image bundling Hermes, Gemini, Pi, Grok alongside Claude Code, Codex,
-  OpenCode).
-- **[Plunk](stacks/app/plunk):** open-source email platform.
-- **[RabbitMQ](stacks/app/rabbitmq):** message broker.
-- **[Typebot](stacks/app/typebot):** chatbot builder.
-
----
-
-## Manual install (if curl|bash is not your thing)
+### Manual install (no curl|bash)
 
 ```bash
 git clone --branch stable https://github.com/felipefontoura/bento ~/.local/share/bento
@@ -369,55 +221,23 @@ cd ~/.local/share/bento
 bash install.sh
 ```
 
-Same menu, no curl required.
+### Requirements
 
----
-
-## Requirements
-
-- Latest Ubuntu LTS (or any apt-based distro: Debian, Mint, Pop!_OS, etc.)
-- Non-root user with `sudo` access
-- 1+ GB RAM
-- 20+ GB free disk
+- Latest Ubuntu LTS, Debian, or any apt-based distro
+- Non-root user with `sudo`
+- 1+ GB RAM, 20+ GB free disk
 - Public IPv4
-- Domain with A records pointing to the VPS (`*.mydomain.com` → VPS IP)
+- Wildcard DNS pointing to that IPv4
 
 ---
 
-## State and configuration
+## For maintainers and contributors
 
-- Bento state: `~/.config/bento/state.json` (chmod 600)
-- Portainer admin credentials: `~/.config/bento/portainer.json` (chmod 600)
-- Hardening logs: `~/.local/state/bento/logs/`
+Adding a stack, changing conventions, or extending the installer? Read **[CLAUDE.md](CLAUDE.md)** — the canonical maintainer guide. It covers the Bento ↔ Portainer ownership model, the manifest schema, env resolution order, code style for shell + YAML + JSON, and a step-by-step recipe for adding new application stacks (with n8n called out as the gold-standard quality bar).
 
-These survive `bento update`. Schema is versioned and migrated automatically.
+`.claude/skills/add-app-stack/` is a Claude Code skill that automates the new-stack scaffold for AI-assisted contributions.
 
----
-
-## For maintainers
-
-Adding a new stack, debugging the installer, or changing conventions?
-Read **[CLAUDE.md](CLAUDE.md)** first. It is the canonical guide to:
-
-- The Bento ↔ Portainer ownership model.
-- Stack directory layout and manifest schema.
-- The env resolution order.
-- Step-by-step recipe for adding a new application stack.
-- Code style for shell, YAML, and JSON.
-- Helpers available to per-stack `install.sh` scripts.
-
-CLAUDE.md is loaded automatically by Claude Code (or other coding agents
-like OpenCode) when working in this repo; it is also a complete
-human-readable maintainer guide.
-
-There is also a `add-app-stack` skill in `.claude/skills/` that automates
-the new-stack scaffold for AI-assisted contributions.
-
----
-
-## Contributing
-
-Pull requests welcome. Open an issue first for anything beyond a small fix.
+PRs welcome. Open an issue first for anything beyond a small fix.
 
 ---
 
