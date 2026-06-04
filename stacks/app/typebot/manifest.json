@@ -18,7 +18,7 @@
     },
     {
       "name": "TYPEBOT_ENCRYPTION_SECRET",
-      "generate": "openssl rand -base64 24 | tr -d '\\n=/+' | head -c 32",
+      "generate": "openssl rand -hex 16",
       "hide": true
     },
     {
