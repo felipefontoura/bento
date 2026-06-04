@@ -88,6 +88,28 @@ hardware…). If you'd rather pay no referral, just sign up directly at
 After signing up: create a **CX22** (or larger) with the **latest Ubuntu
 LTS**, add your SSH key, and continue with the next section.
 
+### Brazilian alternative — Hostinger (secondary)
+
+If you're based in Brazil (or your end users are), **[Hostinger](https://hostinger.com/br/smartdev)**
+is our secondary recommendation. Why a secondary tier:
+
+- **BRL billing** removes the USD/EUR FX volatility that Hetzner charges
+  in.
+- **Lower latency** to Brazilian users than Hetzner's European data
+  centers.
+- bento is tested less often there than on Hetzner — the platform is
+  generic apt-based Ubuntu, so everything in this README still applies,
+  but Hetzner gets the per-release smoke test.
+
+Pick a KVM plan with at least **2 vCPU and 4 GB RAM** (KVM 2 or larger)
+and the latest Ubuntu LTS image. Add your SSH key in the Hostinger panel.
+
+**Full disclosure — this is also an affiliate link.** Same model as the
+Hetzner one: a small commission helps fund new stacks. If you'd rather
+pay no referral, sign up directly at
+[hostinger.com](https://hostinger.com) — the installer works the same
+way.
+
 ---
 
 ## DNS (recommended: Cloudflare)
