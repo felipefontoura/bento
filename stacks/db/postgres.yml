@@ -1,16 +1,11 @@
 x-postgres-common: &postgres-common
   image: postgres:15
-  entrypoint: docker-entrypoint.sh
   networks:
     - network_public
-  ports:
-    - 5432:5432
-  volumes:
-    - postgres-data:/var/lib/postgresql/data
   environment:
     - POSTGRES_PASSWORD=secret
     - POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256"
-    - POSTGRES_INIT_DATABASES=sandbox,n8n,typebot,plunk,chatwoot,evolution
+    - POSTGRES_INIT_DATABASES=sandbox,n8n,typebot,plunk,chatwoot,evolution,paperclip
   deploy: &postgres-deploy
     mode: replicated
     replicas: 1
@@ -21,7 +16,19 @@ x-postgres-common: &postgres-common
 services:
   postgres:
     <<: *postgres-common
+    entrypoint: docker-entrypoint.sh
     command: [postgres, --max_connections=200]
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1 -p 5432 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     deploy:
       <<: *postgres-deploy
       resources:
@@ -30,10 +37,10 @@ services:
           memory: 256M
   postgres-init:
     <<: *postgres-common
-    entrypoint:
-      - /bin/bash
-      - -c
+    entrypoint: ["sh", "-c"]
+    command:
       - |
+        export PGPASSWORD="$${POSTGRES_PASSWORD}"
         until pg_isready -h postgres -U postgres; do
           echo "Waiting for postgres..."
           sleep 2
