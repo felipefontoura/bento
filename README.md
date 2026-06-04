@@ -1,4 +1,4 @@
-# Docker Swarm Stacks
+# QuickStack
 
 Docker Swarm Stacks is a collection of pre-configured stack files designed to simplify the deployment of various services in a Docker Swarm cluster.
 
@@ -19,8 +19,8 @@ Docker Swarm Stacks is a collection of pre-configured stack files designed to si
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/felipefontoura/docker-swarm-stacks.git
-   cd docker-swarm-stacks
+   git clone https://github.com/felipefontoura/quickstack.git
+   cd quickstack
    ```
 
 2. Ensure Docker Swarm is initialized:
@@ -36,7 +36,7 @@ Docker Swarm Stacks is a collection of pre-configured stack files designed to si
 1. Navigate to project path:
 
    ```bash
-   cd docker-swarm-stacks
+   cd quickstack
    ```
 
 2. Adjust stack file:

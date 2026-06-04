@@ -1,60 +1,115 @@
 x-typebot-common: &typebot-common
   networks:
     - network_public
-  environment: &typebot-env
+  environment:
+    # =============================================================================
+    # Database (PostgreSQL)
+    # =============================================================================
+
+    # Full database connection URL.
     - DATABASE_URL=postgresql://typebot:secret@postgres:5432/typebot
 
+    # =============================================================================
+    # Core Security
+    # =============================================================================
+
+    # 256-bit key used to encrypt sensitive data.
+    # MUST remain stable across restarts/upgrades.
     - ENCRYPTION_SECRET=secret
 
-    - DEFAULT_WORKSPACE_PLAN=UNLIMITED
-    - NEXTAUTH_URL=https://builder.bot.website.com
-    - NEXT_PUBLIC_VIEWER_URL=https://bot.website.com
+    # =============================================================================
+    # Public URLs / Reverse Proxy
+    # =============================================================================
+
+    # Builder publicly accessible URL (used for OAuth callbacks).
+    - NEXTAUTH_URL=https://builder.typebot.website.com
+
+    # Viewer publicly accessible URL.
+    - NEXT_PUBLIC_VIEWER_URL=https://typebot.website.com
+
+    # Internal URL used by the builder for server-side requests.
     - NEXTAUTH_URL_INTERNAL=http://localhost:3000
- 
+
+    # =============================================================================
+    # Workspace & Signup
+    # =============================================================================
+
+    # Default workspace plan for new users.
+    # Possible values: FREE, STARTER, PRO, LIFETIME, UNLIMITED.
+    - DEFAULT_WORKSPACE_PLAN=UNLIMITED
+
+    # Disable public signups. Invited users can still sign up.
     - DISABLE_SIGNUP=true
- 
-    - ADMIN_EMAIL=example@example.com
-    - NEXT_PUBLIC_SMTP_FROM='Typebot' <no-reply@website.com>
-    - SMTP_AUTH_DISABLED=false
-    - SMTP_HOST=smtp.sendgrid.net
-    - SMTP_PORT=587
-    - SMTP_USERNAME=user
-    - SMTP_PASSWORD=secret
-    - SMTP_SECURE=true
- 
-    - NEXT_PUBLIC_GOOGLE_API_KEY=xxx
-    - GOOGLE_CLIENT_ID=xxx
-    - GOOGLE_CLIENT_SECRET=xxx
- 
-    - S3_ACCESS_KEY=xxx
-    - S3_SECRET_KEY=xxx
-    - S3_BUCKET=website.com-typebot
-    - S3_REGION=us-east-1
-    - S3_ENDPOINT=s3.us-east-1.amazonaws.com
- 
-    - NEXT_PUBLIC_GIPHY_API_KEY=xxx
+
+    # =============================================================================
+    # Email (SMTP)
+    # =============================================================================
+
+    # - ADMIN_EMAIL=example@example.com
+    # - NEXT_PUBLIC_SMTP_FROM='Typebot' <no-reply@website.com>
+    # - SMTP_AUTH_DISABLED=false
+    # - SMTP_HOST=smtp.sendgrid.net
+    # - SMTP_PORT=587
+    # - SMTP_USERNAME=user
+    # - SMTP_PASSWORD=secret
+    # - SMTP_SECURE=true
+
+    # =============================================================================
+    # OAuth / Authentication
+    # =============================================================================
+
+    # - NEXT_PUBLIC_GOOGLE_API_KEY=xxx
+    # - GOOGLE_CLIENT_ID=xxx
+    # - GOOGLE_CLIENT_SECRET=xxx
+
+    # =============================================================================
+    # S3 Storage (Media Uploads)
+    # =============================================================================
+
+    # - S3_ACCESS_KEY=xxx
+    # - S3_SECRET_KEY=xxx
+    # - S3_BUCKET=website.com-typebot
+    # - S3_REGION=us-east-1
+    # - S3_ENDPOINT=s3.us-east-1.amazonaws.com
+
+    # =============================================================================
+    # Integrations
+    # =============================================================================
+
+    # - NEXT_PUBLIC_GIPHY_API_KEY=xxx
   deploy: &typebot-deploy
     mode: replicated
     replicas: 1
     placement:
       constraints:
         - node.role == manager
-    resources:
-      limits:
-        cpus: "0.5"
-        memory: 768M
 
 services:
   typebot_builder:
     <<: *typebot-common
     image: baptistearno/typebot-builder:latest
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     deploy:
       <<: *typebot-deploy
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.typebot_builder.rule=Host(`builder.bot.website.com`)
+        - traefik.http.routers.typebot_builder.rule=Host(`builder.typebot.website.com`)
         - traefik.http.routers.typebot_builder.entrypoints=websecure
         - traefik.http.routers.typebot_builder.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.typebot_builder.priority=2
         - traefik.http.services.typebot_builder.loadbalancer.server.port=3000
         - traefik.http.services.typebot_builder.loadbalancer.passHostHeader=true
         - traefik.http.routers.typebot_builder.service=typebot_builder
@@ -62,13 +117,29 @@ services:
   typebot_viewer:
     <<: *typebot-common
     image: baptistearno/typebot-viewer:latest
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        until wget -qO- http://typebot_builder:3000 2>/dev/null; do sleep 3; done
+        exec ./viewer-entrypoint.sh
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/api/healthz >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     deploy:
       <<: *typebot-deploy
       labels:
         - traefik.enable=true
-        - traefik.http.routers.typebot_viewer.rule=Host(`bot.website.com`)
+        - traefik.http.routers.typebot_viewer.rule=Host(`typebot.website.com`)
         - traefik.http.routers.typebot_viewer.entrypoints=websecure
         - traefik.http.routers.typebot_viewer.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.typebot_viewer.priority=2
         - traefik.http.services.typebot_viewer.loadbalancer.server.port=3000
         - traefik.http.services.typebot_viewer.loadbalancer.passHostHeader=true
         - traefik.http.routers.typebot_viewer.service=typebot_viewer
@@ -77,4 +148,3 @@ networks:
   network_public:
     external: true
     name: network_public
-
