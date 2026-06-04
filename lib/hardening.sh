@@ -6,7 +6,7 @@
 #
 # Differences from upstream ubinkaze:
 #   - Distro check relaxed: any apt-get-capable system passes (Ubuntu, Debian,
-#     Mint, Pop!_OS, etc.) instead of strict Ubuntu 26.04.
+#     Mint, Pop!_OS, etc.) instead of the strict upstream Ubuntu LTS check.
 #   - Drops a reboot sentinel at /var/lib/bento/reboot-required so the
 #     parent install.sh can detect and prompt cleanly.
 
