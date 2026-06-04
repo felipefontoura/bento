@@ -14,8 +14,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/state.sh"
 # shellcheck source=lib/portainer.sh
 source "$(dirname "${BASH_SOURCE[0]}")/portainer.sh"
 
-readonly BENTO_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly BENTO_INFRA_STACK_NAME="infra"
+# BENTO_REPO_ROOT is exported by install.sh; fall back when sourced standalone.
+: "${BENTO_REPO_ROOT:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+: "${BENTO_INFRA_STACK_NAME:=infra}"
 
 # -----------------------------------------------------------------------------
 # Docker foundation (called as tail of Step 1).

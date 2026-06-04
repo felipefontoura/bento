@@ -16,9 +16,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/state.sh"
 # shellcheck source=lib/portainer.sh
 source "$(dirname "${BASH_SOURCE[0]}")/portainer.sh"
 
-readonly BENTO_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly BENTO_REPO_URL="https://github.com/felipefontoura/bento"
-readonly BENTO_REPO_REF="refs/heads/main"
+# BENTO_REPO_ROOT is exported by install.sh. Fall back to deriving it
+# from this file's own location when sourced standalone (smoke tests).
+: "${BENTO_REPO_ROOT:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+: "${BENTO_REPO_URL:=https://github.com/felipefontoura/bento}"
+: "${BENTO_REPO_REF:=refs/heads/main}"
 
 # -----------------------------------------------------------------------------
 # Manifest discovery
