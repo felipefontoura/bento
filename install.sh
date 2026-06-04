@@ -32,6 +32,8 @@ source "${BENTO_REPO_ROOT}/lib/portainer.sh"
 source "${BENTO_REPO_ROOT}/lib/infra.sh"
 # shellcheck source=lib/stacks.sh
 source "${BENTO_REPO_ROOT}/lib/stacks.sh"
+# shellcheck source=lib/report.sh
+source "${BENTO_REPO_ROOT}/lib/report.sh"
 
 state_init
 
@@ -187,6 +189,9 @@ step3_run() {
         return 0
     fi
     stacks_step3_menu
+    if stacks_is_apps_done; then
+        report_run "auto"
+    fi
 }
 
 # -----------------------------------------------------------------------------
@@ -232,6 +237,30 @@ status_run() {
         ui_warn "Portainer not reachable."
     fi
     ui_pause
+}
+
+report_run() {
+    local trigger="${1:-manual}"
+    ui_section "Handoff report"
+    if [[ "$trigger" == "auto" ]]; then
+        ui_info "Generating a handoff HTML for $(state_get '.bootstrap.base_domain')…"
+    fi
+    local path
+    path=$(report_generate) || {
+        ui_error "Failed to generate the report."
+        return 1
+    }
+    ui_boxed_success "$(cat <<EOF
+Report saved to:
+  $path
+
+Copy it to your machine with, for example:
+  scp $(whoami)@$(state_get '.bootstrap.advertise_addr'):$path .
+
+Open it in any browser. Sensitive values are masked by default; click
+"show" to reveal individual entries. Print to PDF for offline delivery.
+EOF
+    )"
 }
 
 update_run() {
@@ -281,6 +310,7 @@ main_menu() {
             "Step 3 — Install applications" \
             "Settings" \
             "Status" \
+            "Report — handoff HTML" \
             "Update" \
             "Exit")"
 
@@ -290,6 +320,7 @@ main_menu() {
             "Step 3"*) step3_run ;;
             "Settings") settings_run ;;
             "Status")   status_run ;;
+            "Report"*)  report_run "manual" ;;
             "Update")   update_run ;;
             "Exit")     exit 0 ;;
         esac
