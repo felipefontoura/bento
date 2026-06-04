@@ -139,10 +139,53 @@ infra_run_step1_tail() {
 }
 
 infra_run_step2() {
+    infra_ensure_dns || return 1
     infra_deploy_traefik_and_portainer || return 1
     infra_init_portainer_admin || return 1
     state_set '.steps.infra' "done"
     ui_success "Step 2 complete — infra is up."
+}
+
+# Ensures wildcard + root A records exist before Traefik tries to obtain
+# Let's Encrypt certs. If Cloudflare is configured we sync via API;
+# otherwise we print manual instructions and require explicit confirmation.
+infra_ensure_dns() {
+    local base advertise
+    base="$(state_get '.bootstrap.base_domain')"
+    advertise="$(state_get '.bootstrap.advertise_addr')"
+
+    if state_has '.bootstrap.cloudflare_api_token'; then
+        ui_section "Cloudflare — syncing DNS records"
+        if ui_spin "Creating *.${base} and ${base} → ${advertise}…" bash -c \
+            'source "$1" && source "$2" && cloudflare_sync_required_records' _ \
+            "${BENTO_REPO_ROOT}/lib/state.sh" \
+            "${BENTO_REPO_ROOT}/lib/cloudflare.sh"; then
+            ui_success "Cloudflare DNS in sync."
+            return 0
+        fi
+        ui_error "Cloudflare sync failed. Falling back to manual check."
+    fi
+
+    ui_section "DNS check"
+    ui_format_md <<EOF
+Step 2 will request HTTPS certificates from Let's Encrypt. For that to
+work, these records must already resolve to **${advertise}**:
+
+- \`*.${base}\` (wildcard A record)
+- \`${base}\` (root A record)
+
+If you're using Cloudflare, you can re-run bootstrap from **Settings** to
+provide an API token and let bento manage these automatically.
+
+Otherwise create both records manually now and verify with:
+\`\`\`
+dig +short A portainer.${base}
+\`\`\`
+EOF
+    if ! ui_confirm "DNS records are in place and resolving?"; then
+        ui_warn "Aborting Step 2. Re-run after DNS is ready."
+        return 1
+    fi
 }
 
 infra_is_done() {

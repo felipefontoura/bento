@@ -28,6 +28,8 @@ source "${BENTO_REPO_ROOT}/lib/banner.sh"
 source "${BENTO_REPO_ROOT}/lib/state.sh"
 # shellcheck source=lib/portainer.sh
 source "${BENTO_REPO_ROOT}/lib/portainer.sh"
+# shellcheck source=lib/cloudflare.sh
+source "${BENTO_REPO_ROOT}/lib/cloudflare.sh"
 # shellcheck source=lib/infra.sh
 source "${BENTO_REPO_ROOT}/lib/infra.sh"
 # shellcheck source=lib/stacks.sh
@@ -95,6 +97,67 @@ EOF
     state_set '.bootstrap.base_domain' "$base_domain"
     state_set '.bootstrap.admin_email' "$admin_email"
     state_set '.bootstrap.advertise_addr' "$advertise_addr"
+
+    bootstrap_prompt_cloudflare
+}
+
+# Optional Cloudflare DNS integration. Skippable. If the user provides a
+# token with Zone:DNS:Edit on $BASE_DOMAIN, bento will keep the wildcard +
+# root A records in sync automatically. Otherwise we print manual steps in
+# Step 2.
+bootstrap_prompt_cloudflare() {
+    if state_has '.bootstrap.cloudflare_api_token' \
+       || state_has '.bootstrap.cloudflare_skipped'; then
+        return 0
+    fi
+
+    ui_section "Cloudflare DNS (optional)"
+    ui_format_md <<EOF
+If your domain is on Cloudflare, bento can auto-create the wildcard + root
+**A** records that Traefik needs for Let's Encrypt — no DNS clicking
+required.
+
+**One-click token creation** (open on the machine where you're logged into
+Cloudflare):
+
+<${BENTO_CF_TOKEN_TEMPLATE_URL}>
+
+That link drops you directly on Cloudflare's token review screen with
+**DNS → Edit** permission already selected. Just:
+
+1. (Optional) narrow **Zone Resources** to your domain only.
+2. Click **Continue to summary**, then **Create Token**.
+3. Copy the token Cloudflare displays once and paste it below.
+
+Otherwise you'll create the DNS records by hand before Step 2.
+EOF
+
+    if ! ui_confirm "Configure Cloudflare DNS automatically?"; then
+        state_set '.bootstrap.cloudflare_skipped' "true"
+        return 0
+    fi
+
+    local token
+    token="$(ui_password "Cloudflare API token (Zone:DNS:Edit)")"
+    if [[ -z "$token" ]]; then
+        ui_warn "Empty token — skipping Cloudflare integration."
+        state_set '.bootstrap.cloudflare_skipped' "true"
+        return 0
+    fi
+
+    state_set '.bootstrap.cloudflare_api_token' "$token"
+    chmod 600 "$(state_path)"
+
+    if ui_spin "Verifying Cloudflare token…" bash -c \
+        'source "$1" && source "$2" && cloudflare_verify_token' _ \
+        "${BENTO_REPO_ROOT}/lib/state.sh" \
+        "${BENTO_REPO_ROOT}/lib/cloudflare.sh"; then
+        ui_success "Cloudflare token verified."
+    else
+        ui_error "Token verification failed. Token cleared; you can re-run bootstrap via Settings."
+        state_set '.bootstrap.cloudflare_api_token' ""
+        state_set '.bootstrap.cloudflare_skipped' "true"
+    fi
 }
 
 # -----------------------------------------------------------------------------
