@@ -163,7 +163,10 @@ provider (Cloudflare, Route 53, your registrar, etc.):
 | Type | Name              | Value          |
 | ---- | ----------------- | -------------- |
 | A    | \`*.${base}\`     | \`${advertise}\` |
-| A    | \`${base}\`       | \`${advertise}\` |
+
+(bento only uses subdomains. If you already have a website at the bare
+\`${base}\`, leave its existing A/CNAME alone — this wildcard won't
+shadow it.)
 
 **Using Cloudflare?** Open this link on the browser where you're signed in
 — it jumps straight to your zone's DNS records page:

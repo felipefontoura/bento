@@ -129,7 +129,8 @@ You need a wildcard A record before Step 2, or Let's Encrypt fails on first boot
 | Type | Name             | Value           |
 |------|------------------|-----------------|
 | A    | `*.mydomain.com` | `<your VPS IP>` |
-| A    | `mydomain.com`   | `<your VPS IP>` |
+
+(bento only uses subdomains. If you already have a website at the bare `mydomain.com`, leave its existing A/CNAME alone — the wildcard above won't touch it.)
 
 [**Open the DNS records page on Cloudflare →**](https://dash.cloudflare.com/?to=/:account/:zone/dns) — Cloudflare prompts you to pick the account + zone, then drops you straight onto the records page. Cloudflare is the recommended DNS host (free tier, fast); any provider works.
 
