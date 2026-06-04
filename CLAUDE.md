@@ -30,6 +30,21 @@ Beginners with a brand-new VPS shouldn't need to:
 `bento` collapses all of that into a guided flow that is also idempotent and
 restartable.
 
+## Repo meta
+
+The governance is tiny on purpose. Two lines and four templates.
+
+- License: @LICENSE — MIT.
+- Contribution rule: @CONTRIBUTING.md — one sentence, taken at face value.
+- Issue templates live under `.github/ISSUE_TEMPLATE/`:
+  - `bug.yml` — broken installs, stacks that won't deploy, etc.
+  - `feature.yml` — changes to bento behavior.
+  - `stack-request.yml` — asks for a new application stack.
+  - `config.yml` — disables blank issues, routes questions to Discussions.
+- PR template: `.github/PULL_REQUEST_TEMPLATE.md` — description, type, test plan, conventions checklist.
+
+When you change one of those files, this section stays in sync because the `@` references load them into context whenever Claude Code reads this file.
+
 ---
 
 ## Architecture in 60 seconds

@@ -1,0 +1,53 @@
+name: Stack request
+description: Ask for a new application stack to be added to bento.
+title: "Stack request: "
+labels: ["stack-request"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Project name
+      placeholder: "e.g. Vaultwarden"
+    validations:
+      required: true
+
+  - type: input
+    id: repo
+    attributes:
+      label: Upstream GitHub repo
+      placeholder: "e.g. dani-garcia/vaultwarden"
+    validations:
+      required: true
+
+  - type: textarea
+    id: pitch
+    attributes:
+      label: What it does and why it fits bento
+      description: One paragraph. Bento is opinionated — anything we add raises the maintenance bar. Convince us.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: deps
+    attributes:
+      label: Likely dependencies
+      options:
+        - label: PostgreSQL
+        - label: Redis
+        - label: SMTP relay
+        - label: S3-compatible object storage
+        - label: None / self-contained
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Custom Dockerfile? Bootstrap quirks (DB seed, admin init)? Known gotchas?
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Before submitting
+      options:
+        - label: I read [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md).
+          required: true

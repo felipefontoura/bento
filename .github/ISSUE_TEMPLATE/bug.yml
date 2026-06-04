@@ -1,0 +1,67 @@
+name: Bug report
+description: Something is broken in bento — hardening crashed, Step 2 fails, a stack won't deploy, etc.
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What were you trying to do and what broke? Be specific.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: step
+    attributes:
+      label: Which step broke?
+      options:
+        - Bootstrap (domain / email / IP prompts)
+        - Step 1 — Harden
+        - Step 2 — Infra
+        - Step 3 — Apps
+        - Update
+        - Other / unsure
+    validations:
+      required: true
+
+  - type: input
+    id: distro
+    attributes:
+      label: Distro and version
+      placeholder: "e.g. Ubuntu 24.04 LTS, Debian 12"
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: bento commit
+      description: "Run: cd ~/.local/share/bento && git rev-parse --short HEAD"
+      placeholder: "e.g. ff7320d"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Hardening: ~/.local/state/bento/logs/hardening-*.log
+        Stack logs: `docker service logs --tail 200 <stack-name>`
+      render: shell
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Before submitting
+      options:
+        - label: I read [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md).
+          required: true
