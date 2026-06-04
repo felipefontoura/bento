@@ -16,6 +16,14 @@ portainer_base_url() {
     state_get '.bootstrap.portainer_url' "http://127.0.0.1:9000"
 }
 
+# Internal-loopback URL the bento process uses to drive Portainer. Even
+# when bootstrap.portainer_url tracks the public HTTPS URL (for the
+# report), the install pipeline should hit Portainer via the localhost
+# port published in stacks/infra/portainer/compose.yml.
+portainer_local_url() {
+    printf 'http://127.0.0.1:9000'
+}
+
 # Curl wrapper — adds verbose logging when BENTO_VERBOSE=1.
 portainer_curl() {
     if [[ "${BENTO_VERBOSE:-0}" == "1" ]]; then
@@ -24,9 +32,11 @@ portainer_curl() {
     curl --silent --show-error "$@"
 }
 
-# Poll /api/system/status until Portainer responds (or timeout).
+# Poll /api/system/status until Portainer responds (or timeout). Always
+# probes the host-loopback URL — the public HTTPS URL might not be
+# certificate-ready yet, and bento talks to Portainer locally anyway.
 portainer_wait_ready() {
-    local base="${1:-$(portainer_base_url)}"
+    local base="${1:-$(portainer_local_url)}"
     local max_seconds="${2:-180}"
     local elapsed=0
 
@@ -46,7 +56,7 @@ portainer_init_admin() {
     local username="$1"
     local password="$2"
     local base
-    base="$(portainer_base_url)"
+    base="$(portainer_local_url)"
 
     local body http_code
     body=$(jq -n --arg u "$username" --arg p "$password" \
@@ -83,7 +93,7 @@ portainer_persist_creds() {
 # POST /api/auth — returns a fresh JWT.
 portainer_login() {
     local base body http_code username password
-    base="$(portainer_base_url)"
+    base="$(portainer_local_url)"
     username=$(jq -r '.username' "$BENTO_PORTAINER_CREDS")
     password=$(jq -r '.password' "$BENTO_PORTAINER_CREDS")
 
@@ -115,7 +125,7 @@ portainer_auth_header() {
 # Get the default endpoint ID (usually 1 in a single-node Swarm).
 portainer_endpoint_id() {
     local base auth
-    base="$(portainer_base_url)"
+    base="$(portainer_local_url)"
     auth="$(portainer_auth_header)"
 
     portainer_curl -fsS "${base}/api/endpoints" \
@@ -126,7 +136,7 @@ portainer_endpoint_id() {
 # Get the Swarm ID for the default endpoint.
 portainer_swarm_id() {
     local base auth endpoint_id
-    base="$(portainer_base_url)"
+    base="$(portainer_local_url)"
     auth="$(portainer_auth_header)"
     endpoint_id="$(portainer_endpoint_id)"
 
@@ -150,7 +160,7 @@ portainer_create_stack_from_git() {
     local ref="${5:-refs/heads/main}"
 
     local base auth endpoint_id swarm_id body http_code
-    base="$(portainer_base_url)"
+    base="$(portainer_local_url)"
     auth="$(portainer_auth_header)"
     endpoint_id="$(portainer_endpoint_id)"
     swarm_id="$(portainer_swarm_id)"
@@ -189,7 +199,7 @@ portainer_create_stack_from_git() {
 # List all stacks.
 portainer_list_stacks() {
     local base auth
-    base="$(portainer_base_url)"
+    base="$(portainer_local_url)"
     auth="$(portainer_auth_header)"
     portainer_curl -fsS "${base}/api/stacks" -H "$auth"
 }
@@ -198,7 +208,7 @@ portainer_list_stacks() {
 portainer_get_stack() {
     local stack_id="$1"
     local base auth
-    base="$(portainer_base_url)"
+    base="$(portainer_local_url)"
     auth="$(portainer_auth_header)"
     portainer_curl -fsS "${base}/api/stacks/${stack_id}" -H "$auth"
 }
@@ -208,7 +218,7 @@ portainer_redeploy_stack() {
     local stack_id="$1"
     local env_json="${2:-[]}"
     local base auth endpoint_id body http_code
-    base="$(portainer_base_url)"
+    base="$(portainer_local_url)"
     auth="$(portainer_auth_header)"
     endpoint_id="$(portainer_endpoint_id)"
 
