@@ -267,8 +267,8 @@ services:
       <<: *n8n-deploy
       resources:
         limits:
-          cpus: "0.5"
-          memory: 256M
+          cpus: "1"
+          memory: 768M
       labels:
         - traefik.enable=true
         - traefik.http.routers.n8n_editor.rule=Host(`${N8N_HOST}`)
@@ -301,7 +301,7 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 256M
+          memory: 512M
       labels:
         - traefik.enable=true
         - traefik.http.routers.n8n_webhook.rule=Host(`${N8N_WEBHOOK_HOST}`)
