@@ -51,6 +51,7 @@ install.sh
     ├── lib/infra.sh   swarm init, network, deploy Traefik + Portainer, init admin
     ├── lib/portainer.sh  REST API client (auth, stacks CRUD)
     ├── lib/stacks.sh  manifest discovery + env resolution + deploy via API
+    ├── lib/report.sh  generates handoff HTML at end of Step 3 / on demand
     └── lib/install-helpers.sh  helpers used by per-stack install.sh scripts
     │
     ▼
@@ -102,6 +103,7 @@ bento/
 │   ├── infra.sh
 │   ├── install-helpers.sh        # helpers for per-stack install.sh scripts
 │   ├── portainer.sh
+│   ├── report.sh                 # handoff HTML generator
 │   ├── stacks.sh
 │   ├── state.sh
 │   └── ui.sh

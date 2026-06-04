@@ -45,6 +45,7 @@ applications deployed and ready to log into.
   - [Step 1 — Harden the system](#step-1--harden-the-system)
   - [Step 2 — Install infrastructure](#step-2--install-infrastructure)
   - [Step 3 — Install applications](#step-3--install-applications)
+- [Handoff report (HTML)](#handoff-report-html)
 - [Ownership: bento vs Portainer](#ownership-bento-vs-portainer)
 - [Updating later](#updating-later)
 - [Stacks available](#stacks-available)
@@ -246,6 +247,34 @@ Pick from the menu what you want. For each selected stack bento:
 4. Runs the optional per-stack `install.sh` to bootstrap the app (e.g. create
    its Postgres database, run Rails migrations, etc.).
 5. Prints the URL — you open it and log in.
+
+---
+
+## Handoff report (HTML)
+
+After Step 3 finishes — or any time, from the **Report** menu item —
+bento writes a single self-contained HTML file with everything a client
+needs to take over the system:
+
+- VPS overview (public IP, domain, admin email, SSH hint)
+- Traefik + Portainer (URL, admin user, masked password)
+- Every bento-deployed application stack with its URL and the env vars
+  generated for it (secrets are masked by default with click-to-reveal)
+
+The file lives at `~/.local/share/bento/reports/handoff-<timestamp>.html`
+(`chmod 600`). No external CSS or JavaScript — it works offline and prints
+cleanly to PDF for hand-delivery. Print mode auto-reveals secrets so the
+PDF is a complete record.
+
+Move it off the VPS with `scp`:
+
+```bash
+scp user@vps:~/.local/share/bento/reports/handoff-*.html .
+```
+
+> The report contains live credentials. Treat it like a password vault:
+> store encrypted, deliver over a secure channel (1Password, Bitwarden
+> send, encrypted email), and rotate secrets if the file ever leaks.
 
 ---
 
