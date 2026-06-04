@@ -10,6 +10,11 @@
 
 set -euo pipefail
 
+# Some apt postinst hooks (and `clear`/tput later) explode when TERM is
+# unset, which happens whenever boot.sh runs via `ssh host 'bash …'`
+# without a PTY. Export a safe default so the chain stays alive.
+export TERM="${TERM:-xterm-256color}"
+
 BENTO_REF="${BENTO_REF:-stable}"
 BENTO_HOME="${BENTO_HOME:-$HOME/.local/share/bento}"
 BENTO_REPO_URL="${BENTO_REPO_URL:-https://github.com/felipefontoura/bento.git}"
