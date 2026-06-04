@@ -114,6 +114,16 @@ whatever — create these two records pointing at your VPS IP:
 | A    | `*.mydomain.com` | `<your VPS IP>` | Auto |
 | A    | `mydomain.com`   | `<your VPS IP>` | Auto |
 
+**Using Cloudflare?** This deep link skips the navigation and lands you
+directly on your zone's DNS records page — Cloudflare will prompt you to
+pick the account and zone first:
+
+[**Open the Cloudflare DNS records page →**](https://dash.cloudflare.com/?to=/:account/:zone/dns)
+
+Cloudflare does not expose a public "click and create the record" flow
+for third parties, so the values still come from the table above. The
+deep link just saves a few clicks of navigation.
+
 Verify before running Step 2:
 
 ```bash
@@ -121,10 +131,10 @@ dig +short A portainer.mydomain.com
 # should print your VPS IP
 ```
 
-Bento will print these same records during Step 2 and wait for you to
-confirm they resolve — there is no API integration to set up, no token
-to manage. Pick whatever DNS host you prefer; we just recommend
-Cloudflare for the speed and zero-cost free tier.
+Bento will print these same records (and the deep link) during Step 2
+and wait for you to confirm they resolve — there is no API integration
+to set up, no token to manage. Pick whatever DNS host you prefer; we
+just recommend Cloudflare for the speed and zero-cost free tier.
 
 ---
 

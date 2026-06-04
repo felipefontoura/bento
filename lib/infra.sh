@@ -165,7 +165,12 @@ provider (Cloudflare, Route 53, your registrar, etc.):
 | A    | \`*.${base}\`     | \`${advertise}\` |
 | A    | \`${base}\`       | \`${advertise}\` |
 
-Verify with:
+**Using Cloudflare?** Open this link on the browser where you're signed in
+— it jumps straight to your zone's DNS records page:
+
+<https://dash.cloudflare.com/?to=/:account/:zone/dns>
+
+Verify after creating them with:
 
 \`\`\`
 dig +short A portainer.${base}
