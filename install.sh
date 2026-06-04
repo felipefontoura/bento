@@ -412,9 +412,14 @@ unattended_step3() {
     local apps_csv="${BENTO_APPS}"
     IFS=',' read -ra apps <<< "$apps_csv"
 
-    # depends_on resolution — for every app, deploy its declared deps first
-    # (postgres, redis) if not already deployed.
+    # Pre-populate "seen" with stacks bento has already successfully
+    # deployed (state.stacks.<key>.stack_id present), so re-running with
+    # a wider BENTO_APPS list only deploys the new ones.
     local seen=()
+    while IFS= read -r _existing; do
+        [[ -n "$_existing" ]] && seen+=("$_existing")
+    done < <(jq -r '.stacks // {} | to_entries[] | select(.value.stack_id) | .key' \
+        "$BENTO_STATE_FILE" 2>/dev/null)
     deploy_with_deps() {
         local key="$1"
         # Skip if already in seen
