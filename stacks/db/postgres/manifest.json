@@ -6,7 +6,7 @@
   "env": [
     {
       "name": "POSTGRES_PASSWORD",
-      "generate": "openssl rand -base64 24 | tr -d '\\n=/+' | head -c 32",
+      "generate": "openssl rand -hex 16",
       "hide": true
     }
   ]

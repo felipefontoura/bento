@@ -16,7 +16,7 @@
     },
     {
       "name": "RABBITMQ_DEFAULT_PASS",
-      "generate": "openssl rand -base64 18 | tr -d '\\n=/+' | head -c 24",
+      "generate": "openssl rand -hex 12",
       "hide": true
     },
     {
