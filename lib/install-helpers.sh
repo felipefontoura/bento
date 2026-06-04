@@ -28,14 +28,37 @@ _find_container() {
 }
 
 postgres_container() {
-    _find_container 'db_postgres'
+    # Swarm names containers <stack>_<service>.<task-id>. The postgres stack
+    # has both stack-key and service-name = "postgres", so the prefix is
+    # "postgres_postgres".
+    _find_container 'postgres_postgres'
 }
 
 # -----------------------------------------------------------------------------
 # Postgres helpers
 # -----------------------------------------------------------------------------
+
+# Block until postgres is reachable on the docker network. Used internally
+# so each helper doesn't have to retry separately.
+_wait_for_postgres() {
+    local elapsed=0 cid
+    while (( elapsed < 120 )); do
+        cid=$(postgres_container 2>/dev/null) || cid=""
+        if [[ -n "$cid" ]] \
+           && sudo docker exec "$cid" pg_isready -U postgres -h 127.0.0.1 -p 5432 \
+                >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 3
+        elapsed=$((elapsed + 3))
+    done
+    echo "Postgres did not become ready within 120s." >&2
+    return 1
+}
+
 psql_exec() {
     local sql="$1"
+    _wait_for_postgres || return 1
     local cid
     cid=$(postgres_container) || return 1
     sudo docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$cid" \
