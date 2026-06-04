@@ -113,13 +113,22 @@ portainer_login() {
     jq -r '.jwt' /tmp/bento-portainer-auth.json
 }
 
-# Auth header builder — caches the JWT in BENTO_PORTAINER_JWT for the session.
+# Auth header builder — caches the JWT in BENTO_PORTAINER_JWT for the
+# session. Stale tokens (after a Portainer restart, after server-side
+# session timeout, after rate-limit recovery) are cleared by callers via
+# `unset BENTO_PORTAINER_JWT` so the next request re-logs in.
 portainer_auth_header() {
     if [[ -z "${BENTO_PORTAINER_JWT:-}" ]]; then
         BENTO_PORTAINER_JWT=$(portainer_login)
         export BENTO_PORTAINER_JWT
     fi
     printf 'Authorization: Bearer %s' "$BENTO_PORTAINER_JWT"
+}
+
+# Helper used by api wrappers that get a 401 mid-operation: drop the
+# cached token and try again from the beginning.
+portainer_invalidate_token() {
+    unset BENTO_PORTAINER_JWT
 }
 
 # Get the default endpoint ID (usually 1 in a single-node Swarm).
