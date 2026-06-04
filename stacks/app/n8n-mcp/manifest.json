@@ -6,7 +6,7 @@
   "env": [
     {
       "name": "N8N_MCP_HOST",
-      "default": "mcp.n8n.${BASE_DOMAIN}",
+      "default": "n8n-mcp.${BASE_DOMAIN}",
       "prompt": "n8n MCP hostname"
     },
     {

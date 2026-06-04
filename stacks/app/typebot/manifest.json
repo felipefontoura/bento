@@ -8,7 +8,7 @@
   "env": [
     {
       "name": "TYPEBOT_BUILDER_HOST",
-      "default": "builder.typebot.${BASE_DOMAIN}",
+      "default": "typebot-builder.${BASE_DOMAIN}",
       "prompt": "Typebot builder hostname"
     },
     {
