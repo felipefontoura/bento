@@ -1,23 +1,20 @@
 services:
   cli_proxy_api:
     image: eceasy/cli-proxy-api:latest
+    # printf avoids the YAML-indent landmine that bit us when seeding
+    # config.yaml via a heredoc: the leading spaces of the heredoc body
+    # leaked into the file, making `server.port` un-parseable and the
+    # API server fell back to a random port (logged as `:0`).
     command:
       - sh
       - -c
       - |
         mkdir -p /CLIProxyAPI/config
-        if [ ! -f /CLIProxyAPI/config/config.yaml ]; then
-          cat > /CLIProxyAPI/config/config.yaml <<'EOF'
-        # Dummy config inicial
-        server:
-          port: 8317
-        EOF
-        fi
+        [ -f /CLIProxyAPI/config/config.yaml ] \
+          || printf 'server:\n  port: 8317\n' > /CLIProxyAPI/config/config.yaml
         exec ./CLIProxyAPI --config /CLIProxyAPI/config/config.yaml
     networks:
       - network_public
-    ports:
-      - 8317:8317
     volumes:
       - cli_proxy_api_config:/CLIProxyAPI/config
       - cli_proxy_api_auth:/root/.cli-proxy-api
@@ -45,12 +42,9 @@ services:
           memory: 256M
 volumes:
   cli_proxy_api_config:
-    external: true
-    name: cli_proxy_api_config
-
+    driver: local
   cli_proxy_api_auth:
-    external: true
-    name: cli_proxy_api_auth
+    driver: local
 
 networks:
   network_public:
