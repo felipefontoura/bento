@@ -23,10 +23,16 @@ Docker Swarm Stacks is a collection of pre-configured stack files designed to si
    cd quickstack
    ```
 
-2. Ensure Docker Swarm is initialized:
+2. Initialize Docker Swarm (use the node's reachable address):
 
    ```bash
-   docker swarm init
+   docker swarm init --advertise-addr="<public ip>"
+   ```
+
+3. Create the shared overlay network used by every stack:
+
+   ```bash
+   docker network create --driver=overlay network_public
    ```
 
 ---
