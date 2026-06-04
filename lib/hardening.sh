@@ -377,9 +377,14 @@ print_message "${YELLOW}" "Configuring firewall..."
 ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow ssh
+# Rate-limit SSH at the OS level (fail2ban handles repeated offenders
+# at a longer window; ufw limit drops brute-force attempts at 6 conns/30s).
+ufw limit ssh
 ufw allow http
 ufw allow https
+# ICMP echo helps with debugging from `ping`. The kernel sysctl
+# net.ipv4.icmp_echo_ignore_broadcasts=1 still drops broadcast pings.
+ufw allow proto icmp
 ufw --force enable
 
 # --- fail2ban Configuration ---
