@@ -26,28 +26,34 @@
 
 ---
 
-## What is bento
-
-**A guided installer that turns a fresh VPS into a hardened, TLS-fronted Docker Swarm with the apps you want — in under 15 minutes, with one terminal command.**
-
-You answer three questions (domain, admin email, public IP), walk through three guided steps (harden, infra, apps), and finish with a single HTML report you can hand off to a client. Every secret is generated for you; nothing is hardcoded.
-
-## Quickstart
+## TL;DR
 
 ```bash
 bash <(curl -sSL https://raw.githubusercontent.com/felipefontoura/bento/stable/boot.sh)
 ```
 
-That's it. The rest of this document is reference.
+Paste that on a fresh Ubuntu/Debian VPS, answer three questions (domain, admin email, public IP), and ~15 minutes later you have a hardened host, Traefik + Portainer with TLS, the apps you picked, and an HTML handoff report. Already know bento? Copy and go. Want context? Keep reading.
 
-## Table of contents
+<details>
+<summary><strong>Table of contents</strong></summary>
 
+- [What is bento](#what-is-bento)
 - [How it works](#how-it-works)
 - [Stacks](#stacks)
 - [Prerequisites](#prerequisites)
 - [After install](#after-install)
 - [Operations](#operations)
 - [For maintainers and contributors](#for-maintainers-and-contributors)
+
+</details>
+
+---
+
+## What is bento
+
+**A guided installer that turns a fresh VPS into a hardened, TLS-fronted Docker Swarm with the apps you want — in under 15 minutes, with one terminal command.**
+
+You answer three questions (domain, admin email, public IP), walk through three guided steps (harden, infra, apps), and finish with a single HTML report you can hand off to a client. Every secret is generated for you; nothing is hardcoded.
 
 ---
 
