@@ -23,10 +23,16 @@ Docker Swarm Stacks is a collection of pre-configured stack files designed to si
    cd quickstack
    ```
 
-2. Ensure Docker Swarm is initialized:
+2. Initialize Docker Swarm (use the node's reachable address):
 
    ```bash
-   docker swarm init
+   docker swarm init --advertise-addr="<public ip>"
+   ```
+
+3. Create the shared overlay network used by every stack:
+
+   ```bash
+   docker network create --driver=overlay network_public
    ```
 
 ---
@@ -74,8 +80,11 @@ Docker Swarm Stacks is a collection of pre-configured stack files designed to si
 ### Applications
 
 - **[Chatwoot](stacks/app/chatwoot.yml):** The modern customer support tool for your business.
+- **[CLI Proxy API](stacks/app/cli-proxy-api.yml):** OpenAI-compatible proxy in front of CLI-based AI providers (Gemini, Codex, etc.).
 - **[Evolution API](stacks/app/evolution-api.yml):** API framework for evolutionary development.
 - **[N8n](stacks/app/n8n.yml):** Workflow automation tool.
+- **[N8n MCP](stacks/app/n8n-mcp.yml):** Model Context Protocol server exposing n8n nodes and workflows to AI coding agents (Claude Code, Cursor, opencode).
+- **[Paperclip](stacks/app/paperclip.yml):** AI agent orchestration platform; custom image bundles Hermes Agent, Gemini CLI, Pi, and Grok Build alongside the official Claude Code, Codex, and OpenCode CLIs.
 - **[Plunk](stacks/app/plunk.yml):** The Open-Source email platform.
 - **[RabbitMQ](stacks/app/rabbitmq.yml):** Message broker for distributed systems, ideal for asynchronous communication and message queuing.
 - **[Typebot](stacks/app/typebot.yml):** Chatbot builder for interactive conversations.
