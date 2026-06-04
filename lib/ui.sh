@@ -7,7 +7,7 @@
 # -----------------------------------------------------------------------------
 # Palette — bento bento bento. Light on salmon, accents on wasabi.
 # -----------------------------------------------------------------------------
-readonly BENTO_COLOR_SALMON="#FF6B6B"     # primary accent (salmão do sushi)
+readonly BENTO_COLOR_SALMON="#FF6B6B"     # primary accent (sushi salmon)
 readonly BENTO_COLOR_WASABI="#06D6A0"     # info / progress
 readonly BENTO_COLOR_RICE="#FAF3DD"       # neutral foreground on dark bg
 readonly BENTO_COLOR_NORI="#293241"       # background for boxes

@@ -6,6 +6,11 @@ repo and is meant to be equally useful for any human contributor.
 
 ---
 
+> **English only.** Every user-facing message (prompts, log lines, error
+> output, README, CLAUDE.md, code comments) must be in English. We have
+> users outside Brazil; mixed-language strings break documentation tools
+> and look unprofessional. If you catch a `pt-BR` leak, fix it on sight.
+
 ## What this repo is
 
 `bento` is an all-in-one installer that takes a fresh Ubuntu/Debian VPS to

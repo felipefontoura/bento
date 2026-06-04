@@ -9,6 +9,10 @@ Use this skill when the user asks to add a new application stack to the
 bento repo. Always start by reading `CLAUDE.md` for current conventions —
 prefer its rules over anything stated here if they ever drift.
 
+**Every comment, message, and doc you produce must be in English.** Even
+when the user prompts you in Portuguese, the artifacts going into the
+repo stay English-only.
+
 ## When to invoke
 
 Trigger phrases include:
