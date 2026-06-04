@@ -174,12 +174,12 @@ check_resources
 
 # --- System Updates ---
 print_message "${YELLOW}" "Updating system packages..."
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+NEEDRESTART_MODE=a apt-get update
+NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
 
 # --- Essential Packages ---
 print_message "${YELLOW}" "Installing essential packages..."
-DEBIAN_FRONTEND=noninteractive apt-get install -y \
+NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get install -y \
   ufw \
   fail2ban \
   curl \
@@ -206,8 +206,8 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
 print_message "${YELLOW}" "Configuring time synchronization..."
 systemctl stop systemd-timesyncd || true
 systemctl disable systemd-timesyncd || true
-apt-get remove -y systemd-timesyncd || true
-DEBIAN_FRONTEND=noninteractive apt-get install -y chrony
+NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get remove -y systemd-timesyncd || true
+NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get install -y chrony
 if systemctl -q is-enabled systemd-timesyncd 2>/dev/null; then
   systemctl disable systemd-timesyncd
   systemctl stop systemd-timesyncd
@@ -484,7 +484,7 @@ Unattended-Upgrade::Automatic-Reboot "false";
 EOF
 
 # --- Final Cleanup ---
-apt-get autoremove -y
+NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get autoremove -y
 apt-get clean
 
 # Drop reboot sentinel so the parent install.sh can detect.
