@@ -1,0 +1,13 @@
+{
+  "name": "paperclip",
+  "category": "app",
+  "description": "AI agent orchestration; custom image bundles Hermes/Gemini/Pi/Grok with Claude Code/Codex/OpenCode",
+  "depends_on": [],
+  "env": [
+    { "name": "PAPERCLIP_HOST",        "default": "paperclip.${BASE_DOMAIN}", "prompt": "Paperclip hostname" },
+    { "name": "BETTER_AUTH_SECRET",    "generate": "openssl rand -hex 32",     "hide": true },
+    { "name": "PAPERCLIP_CUSTOM_IMAGE","default": "paperclip-custom:latest" },
+    { "name": "OPENAI_API_KEY",        "prompt": "OpenAI API key (optional)", "hide": true }
+  ],
+  "post_deploy_url": "https://${PAPERCLIP_HOST}"
+}

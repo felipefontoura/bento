@@ -7,7 +7,7 @@ x-typebot-common: &typebot-common
     # =============================================================================
 
     # Full database connection URL.
-    - DATABASE_URL=postgresql://typebot:secret@postgres:5432/typebot
+    - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/typebot
 
     # =============================================================================
     # Core Security
@@ -15,17 +15,17 @@ x-typebot-common: &typebot-common
 
     # 256-bit key used to encrypt sensitive data.
     # MUST remain stable across restarts/upgrades.
-    - ENCRYPTION_SECRET=secret
+    - ENCRYPTION_SECRET=${TYPEBOT_ENCRYPTION_SECRET}
 
     # =============================================================================
     # Public URLs / Reverse Proxy
     # =============================================================================
 
     # Builder publicly accessible URL (used for OAuth callbacks).
-    - NEXTAUTH_URL=https://builder.typebot.website.com
+    - NEXTAUTH_URL=https://${TYPEBOT_BUILDER_HOST}
 
     # Viewer publicly accessible URL.
-    - NEXT_PUBLIC_VIEWER_URL=https://typebot.website.com
+    - NEXT_PUBLIC_VIEWER_URL=https://${TYPEBOT_VIEWER_HOST}
 
     # Internal URL used by the builder for server-side requests.
     - NEXTAUTH_URL_INTERNAL=http://localhost:3000
@@ -106,7 +106,7 @@ services:
           memory: 256M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.typebot_builder.rule=Host(`builder.typebot.website.com`)
+        - traefik.http.routers.typebot_builder.rule=Host(`${TYPEBOT_BUILDER_HOST}`)
         - traefik.http.routers.typebot_builder.entrypoints=websecure
         - traefik.http.routers.typebot_builder.tls.certresolver=letsencryptresolver
         - traefik.http.routers.typebot_builder.priority=2
@@ -136,7 +136,7 @@ services:
       <<: *typebot-deploy
       labels:
         - traefik.enable=true
-        - traefik.http.routers.typebot_viewer.rule=Host(`typebot.website.com`)
+        - traefik.http.routers.typebot_viewer.rule=Host(`${TYPEBOT_VIEWER_HOST}`)
         - traefik.http.routers.typebot_viewer.entrypoints=websecure
         - traefik.http.routers.typebot_viewer.tls.certresolver=letsencryptresolver
         - traefik.http.routers.typebot_viewer.priority=2

@@ -10,20 +10,20 @@ services:
       # =============================================================================
 
       # Base application URI.
-      - APP_URI=https://plunk.website.com
+      - APP_URI=https://${PLUNK_HOST}
 
       # API endpoint URI.
-      - API_URI=https://plunk.website.com/api
+      - API_URI=https://${PLUNK_HOST}/api
 
       # Public-facing API URI exposed to the frontend.
-      - NEXT_PUBLIC_API_URI=https://plunk.website.com/api
+      - NEXT_PUBLIC_API_URI=https://${PLUNK_HOST}/api
 
       # =============================================================================
       # Database (PostgreSQL)
       # =============================================================================
 
       # Full database connection URL.
-      - DATABASE_URL=postgresql://plunk:secret@postgres:5432/plunk
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/plunk
 
       # =============================================================================
       # Cache / Queue (Redis)
@@ -37,23 +37,23 @@ services:
       # =============================================================================
 
       # JWT signing secret. MUST remain stable across restarts/upgrades.
-      - JWT_SECRET=secret
+      - JWT_SECRET=${PLUNK_JWT_SECRET}
 
       # =============================================================================
       # Email (AWS SES)
       # =============================================================================
 
       # AWS region where SES is configured.
-      - AWS_REGION=us-east-1
+      - AWS_REGION=${AWS_REGION:-us-east-1}
 
       # AWS access key for SES.
-      - AWS_ACCESS_KEY_ID=access-key
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
 
       # AWS secret key for SES.
-      - AWS_SECRET_ACCESS_KEY=secret-key
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
 
       # AWS SES configuration set name.
-      - AWS_SES_CONFIGURATION_SET=config-set
+      - AWS_SES_CONFIGURATION_SET=${AWS_SES_CONFIGURATION_SET}
 
       # =============================================================================
       # Account Management
@@ -83,7 +83,7 @@ services:
           memory: 512M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.plunk.rule=Host(`plunk.website.com`)
+        - traefik.http.routers.plunk.rule=Host(`${PLUNK_HOST}`)
         - traefik.http.routers.plunk.entrypoints=websecure
         - traefik.http.routers.plunk.tls.certresolver=letsencryptresolver
         - traefik.http.routers.plunk.priority=2

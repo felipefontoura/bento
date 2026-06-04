@@ -17,20 +17,20 @@ services:
 
       # Shared secret used for node authentication in a cluster.
       # MUST be identical across all nodes in the same cluster.
-      - RABBITMQ_ERLANG_COOKIE=secret
+      - RABBITMQ_ERLANG_COOKIE=${RABBITMQ_ERLANG_COOKIE}
 
       # =============================================================================
       # Virtual Host / Default User
       # =============================================================================
 
       # Default virtual host created on first startup.
-      - RABBITMQ_DEFAULT_VHOST=default
+      - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_DEFAULT_VHOST:-default}
 
       # Default admin user.
-      - RABBITMQ_DEFAULT_USER=rabbitmq
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-rabbitmq}
 
       # Default admin password.
-      - RABBITMQ_DEFAULT_PASS=secret
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 15s
@@ -49,7 +49,7 @@ services:
           memory: 256M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.website.com`)
+        - traefik.http.routers.rabbitmq.rule=Host(`${RABBITMQ_HOST}`)
         - traefik.http.routers.rabbitmq.entrypoints=websecure
         - traefik.http.routers.rabbitmq.tls.certresolver=letsencryptresolver
         - traefik.http.routers.rabbitmq.priority=2

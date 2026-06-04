@@ -14,7 +14,7 @@ services:
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.letsencryptresolver.acme.email=example@example.com"
+      - "--certificatesresolvers.letsencryptresolver.acme.email=${TRAEFIK_ACME_EMAIL}"
       - "--certificatesresolvers.letsencryptresolver.acme.storage=/etc/traefik/letsencrypt/acme.json"
       - "--log.level=DEBUG"
       - "--log.format=common"
@@ -57,12 +57,8 @@ services:
         published: 443
         mode: host
 volumes:
-  vol_shared:
-    external: true
-    name: volume_swarm_shared
   vol_certificates:
-    external: true
-    name: volume_swarm_certificates
+    driver: local
 networks:
   network_public:
     external: true

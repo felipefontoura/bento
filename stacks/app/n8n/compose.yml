@@ -9,7 +9,7 @@ x-n8n-common: &n8n-common
 
     # Encryption key used to secure credentials in the database.
     # MUST remain stable across restarts/upgrades.
-    - N8N_ENCRYPTION_KEY=secret
+    - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
 
     # Runtime environment.
     - NODE_ENV=production
@@ -52,7 +52,7 @@ x-n8n-common: &n8n-common
     - DB_POSTGRESDB_PORT=5432
     - DB_POSTGRESDB_DATABASE=n8n
     - DB_POSTGRESDB_USER=postgres
-    - DB_POSTGRESDB_PASSWORD=secret
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
 
     # =============================================================================
     # Public URLs / Reverse Proxy / Webhooks
@@ -62,18 +62,18 @@ x-n8n-common: &n8n-common
     - N8N_PORT=5678
 
     # Public editor hostname.
-    - N8N_HOST=editor.n8n.website.com
+    - N8N_HOST=${N8N_HOST}
 
     # Public editor URL used for OAuth callbacks and links.
     # Avoid trailing slash.
-    - N8N_EDITOR_BASE_URL=https://editor.n8n.website.com
+    - N8N_EDITOR_BASE_URL=https://${N8N_HOST}
 
     # Public protocol.
     - N8N_PROTOCOL=https
 
     # Public webhook base URL.
     # Avoid trailing slash.
-    - WEBHOOK_URL=https://webhooks.n8n.website.com
+    - WEBHOOK_URL=https://${N8N_WEBHOOK_HOST}
 
     # Webhook endpoint path.
     - N8N_ENDPOINT_WEBHOOK=webhook
@@ -271,7 +271,7 @@ services:
           memory: 256M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.n8n_editor.rule=Host(`editor.n8n.website.com`)
+        - traefik.http.routers.n8n_editor.rule=Host(`${N8N_HOST}`)
         - traefik.http.routers.n8n_editor.entrypoints=websecure
         - traefik.http.routers.n8n_editor.tls.certresolver=letsencryptresolver
         - traefik.http.routers.n8n_editor.priority=2
@@ -304,7 +304,7 @@ services:
           memory: 256M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.n8n_webhook.rule=Host(`webhooks.n8n.website.com`)
+        - traefik.http.routers.n8n_webhook.rule=Host(`${N8N_WEBHOOK_HOST}`)
         - traefik.http.routers.n8n_webhook.entrypoints=websecure
         - traefik.http.routers.n8n_webhook.tls.certresolver=letsencryptresolver
         - traefik.http.routers.n8n_webhook.priority=2

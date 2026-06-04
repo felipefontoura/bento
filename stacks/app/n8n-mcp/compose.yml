@@ -52,7 +52,7 @@ services:
 
       # n8n API key generated in:
       # n8n UI -> Settings -> n8n API -> Create an API key
-      - N8N_API_KEY=secret
+      - N8N_API_KEY=${N8N_MCP_N8N_API_KEY}
 
       # n8n API request timeout in milliseconds.
       - N8N_API_TIMEOUT=30000
@@ -69,11 +69,11 @@ services:
 
       # Bearer token used by MCP clients.
       # Generate with: openssl rand -hex 32
-      - MCP_AUTH_TOKEN=secret
+      - MCP_AUTH_TOKEN=${N8N_MCP_AUTH_TOKEN}
 
       # Required by the official HTTP mode compose.
       # Keep equal to MCP_AUTH_TOKEN.
-      - AUTH_TOKEN=secret
+      - AUTH_TOKEN=${N8N_MCP_AUTH_TOKEN}
 
       # =============================================================================
       # Runtime / Docker
@@ -100,7 +100,7 @@ services:
           memory: 512M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.n8n_mcp.rule=Host(`mcp.n8n.website.com`)
+        - traefik.http.routers.n8n_mcp.rule=Host(`${N8N_MCP_HOST}`)
         - traefik.http.routers.n8n_mcp.entrypoints=websecure
         - traefik.http.routers.n8n_mcp.tls.certresolver=letsencryptresolver
         - traefik.http.routers.n8n_mcp.priority=2

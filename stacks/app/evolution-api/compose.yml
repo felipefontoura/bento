@@ -12,7 +12,7 @@ services:
       # =============================================================================
 
       # Public-facing base URL of the API.
-      - SERVER_URL=https://api.evolution.website.com
+      - SERVER_URL=https://${EVOLUTION_HOST}
 
       # Internal HTTP server port.
       - SERVER_PORT=8080
@@ -80,7 +80,7 @@ services:
       - AUTHENTICATION_TYPE=apikey
 
       # API key used when AUTHENTICATION_TYPE=apikey.
-      - AUTHENTICATION_API_KEY=secret
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
 
       # Expose the API key in the fetch-instances response.
       - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
@@ -113,7 +113,7 @@ services:
       - DATABASE_PROVIDER=postgresql
 
       # Full database connection URI.
-      - DATABASE_CONNECTION_URI=postgresql://evolution:secret@postgres:5432/evolution?schema=public
+      - DATABASE_CONNECTION_URI=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/evolution?schema=public
 
       # Persist instance metadata to the database.
       - DATABASE_SAVE_DATA_INSTANCE=true
@@ -161,7 +161,7 @@ services:
           memory: 256M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.evolution.rule=Host(`api.evolution.website.com`)
+        - traefik.http.routers.evolution.rule=Host(`${EVOLUTION_HOST}`)
         - traefik.http.routers.evolution.entrypoints=websecure
         - traefik.http.routers.evolution.tls.certresolver=letsencryptresolver
         - traefik.http.routers.evolution.priority=2
@@ -170,11 +170,9 @@ services:
         - traefik.http.services.evolution.loadbalancer.passHostHeader=true
 volumes:
   evolution_instances:
-    external: true
-    name: evolution_instances
+    driver: local
   evolution_store:
-    external: true
-    name: evolution_store
+    driver: local
 networks:
   network_public:
     name: network_public

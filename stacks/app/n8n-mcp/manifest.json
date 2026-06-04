@@ -1,0 +1,24 @@
+{
+  "name": "n8n-mcp",
+  "category": "app",
+  "description": "Model Context Protocol server for n8n",
+  "depends_on": [],
+  "env": [
+    {
+      "name": "N8N_MCP_HOST",
+      "default": "mcp.n8n.${BASE_DOMAIN}",
+      "prompt": "n8n MCP hostname"
+    },
+    {
+      "name": "N8N_MCP_AUTH_TOKEN",
+      "generate": "openssl rand -hex 32",
+      "hide": true
+    },
+    {
+      "name": "N8N_MCP_N8N_API_KEY",
+      "prompt": "n8n API key (create in n8n → Settings → n8n API)",
+      "hide": true
+    }
+  ],
+  "post_deploy_url": "https://${N8N_MCP_HOST}"
+}

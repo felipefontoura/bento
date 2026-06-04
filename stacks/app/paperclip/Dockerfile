@@ -36,14 +36,14 @@ ARG GEMINI_CLI_VERSION
 ARG PI_CLI_VERSION
 ARG GROK_INSTALL_URL
 
-LABEL org.opencontainers.image.source="https://github.com/felipefontoura/quickstack" \
+LABEL org.opencontainers.image.source="https://github.com/felipefontoura/bento" \
       org.opencontainers.image.title="paperclip-custom" \
       org.opencontainers.image.description="Paperclip + Hermes + Gemini + Pi + Grok bundled agent runtime" \
       org.opencontainers.image.licenses="MIT" \
-      org.quickstack.paperclip-version="${PAPERCLIP_VERSION}" \
-      org.quickstack.hermes-version="${HERMES_VERSION}" \
-      org.quickstack.gemini-cli-version="${GEMINI_CLI_VERSION}" \
-      org.quickstack.pi-cli-version="${PI_CLI_VERSION}"
+      org.bento.paperclip-version="${PAPERCLIP_VERSION}" \
+      org.bento.hermes-version="${HERMES_VERSION}" \
+      org.bento.gemini-cli-version="${GEMINI_CLI_VERSION}" \
+      org.bento.pi-cli-version="${PI_CLI_VERSION}"
 
 USER root
 

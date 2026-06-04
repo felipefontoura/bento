@@ -1,0 +1,7 @@
+{
+  "name": "cli-proxy-api",
+  "category": "app",
+  "description": "OpenAI-compatible proxy in front of CLI-based AI providers",
+  "depends_on": [],
+  "env": []
+}

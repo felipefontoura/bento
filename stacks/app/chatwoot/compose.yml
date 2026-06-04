@@ -35,7 +35,7 @@ x-chatwoot-common: &chatwoot-common
     # =============================================================================
 
     # Rails secret key base. MUST remain stable across restarts/upgrades.
-    - SECRET_KEY_BASE=secret
+    - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
 
     # Force HTTPS redirects.
     - FORCE_SSL=true
@@ -45,7 +45,7 @@ x-chatwoot-common: &chatwoot-common
     # =============================================================================
 
     # Public-facing URL used for links and callbacks.
-    - FRONTEND_URL=https://chatwoot.website.com
+    - FRONTEND_URL=https://${CHATWOOT_HOST}
 
     # =============================================================================
     # Localization
@@ -76,7 +76,7 @@ x-chatwoot-common: &chatwoot-common
     - POSTGRES_USERNAME=postgres
 
     # Database password.
-    - POSTGRES_PASSWORD=secret
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
     # =============================================================================
     # Cache / Queue (Redis)
@@ -187,24 +187,7 @@ x-chatwoot-common: &chatwoot-common
 #############
 
 services:
-  # Database Initialization Service (run once)
-  chatwoot_init:
-    <<: *chatwoot-common
-    command: bundle exec rails db:chatwoot_prepare
-    deploy:
-      mode: replicated
-      replicas: 1 # Set to 1 to run initialization, then scale back to 0
-      placement:
-        constraints:
-          - node.role == manager
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 512M
-      restart_policy:
-        condition: none
-
-  # Main Web Application
+  # Database preparation is handled by stacks/app/chatwoot/install.sh after deploy.
   chatwoot_web:
     <<: *chatwoot-common
     entrypoint: docker/entrypoints/rails.sh
@@ -228,7 +211,7 @@ services:
       labels:
         # Traefik Configuration
         - traefik.enable=true
-        - traefik.http.routers.chatwoot_web.rule=Host(`chatwoot.website.com`)
+        - traefik.http.routers.chatwoot_web.rule=Host(`${CHATWOOT_HOST}`)
         - traefik.http.routers.chatwoot_web.entrypoints=websecure
         - traefik.http.routers.chatwoot_web.tls.certresolver=letsencryptresolver
         - traefik.http.routers.chatwoot_web.priority=2
@@ -262,8 +245,7 @@ services:
 
 volumes:
   chatwoot_data:
-    external: true
-    name: chatwoot_data
+    driver: local
 
 networks:
   network_public:

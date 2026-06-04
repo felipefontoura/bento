@@ -1,0 +1,33 @@
+{
+  "name": "rabbitmq",
+  "category": "app",
+  "description": "RabbitMQ message broker with management UI",
+  "depends_on": [],
+  "env": [
+    {
+      "name": "RABBITMQ_HOST",
+      "default": "rabbitmq.${BASE_DOMAIN}",
+      "prompt": "RabbitMQ management hostname"
+    },
+    {
+      "name": "RABBITMQ_DEFAULT_USER",
+      "default": "rabbitmq",
+      "prompt": "Default admin username"
+    },
+    {
+      "name": "RABBITMQ_DEFAULT_PASS",
+      "generate": "openssl rand -base64 18 | tr -d '\\n=/+' | head -c 24",
+      "hide": true
+    },
+    {
+      "name": "RABBITMQ_DEFAULT_VHOST",
+      "default": "default"
+    },
+    {
+      "name": "RABBITMQ_ERLANG_COOKIE",
+      "generate": "openssl rand -hex 24",
+      "hide": true
+    }
+  ],
+  "post_deploy_url": "https://${RABBITMQ_HOST}"
+}

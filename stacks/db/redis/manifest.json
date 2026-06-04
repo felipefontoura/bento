@@ -1,0 +1,7 @@
+{
+  "name": "redis",
+  "category": "db",
+  "description": "Redis 7 with appendonly persistence",
+  "depends_on": [],
+  "env": []
+}

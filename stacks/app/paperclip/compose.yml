@@ -1,17 +1,17 @@
 x-paperclip-common: &paperclip-common
-  # Custom Paperclip image built from paperclip.Dockerfile.
-  # Adds hermes/gemini/pi/grok to the official base. See paperclip.Dockerfile.
+  # Custom Paperclip image built from this directory's Dockerfile.
+  # Adds hermes/gemini/pi/grok to the official base.
   #
   # Build first:
-  #   docker compose -f stacks/app/paperclip.yml build
+  #   docker compose -f stacks/app/paperclip/compose.yml build
   # Then deploy (Swarm ignores `build:` and uses the local image):
-  #   docker stack deploy -c stacks/app/paperclip.yml app
+  #   docker stack deploy -c stacks/app/paperclip/compose.yml app
   # Override the image to pull from a registry:
   #   PAPERCLIP_CUSTOM_IMAGE=felipefontoura/paperclip-custom:1.2.3 docker stack deploy ...
   image: ${PAPERCLIP_CUSTOM_IMAGE:-paperclip-custom:latest}
   build:
     context: .
-    dockerfile: paperclip.Dockerfile
+    dockerfile: Dockerfile
     args:
       PAPERCLIP_VERSION: latest
       HERMES_VERSION: latest
@@ -33,7 +33,7 @@ x-paperclip-common: &paperclip-common
     # Public URL / Reverse Proxy
     # =============================================================================
 
-    - PAPERCLIP_PUBLIC_URL=https://paperclip.website.com
+    - PAPERCLIP_PUBLIC_URL=https://${PAPERCLIP_HOST}
     - PAPERCLIP_DEPLOYMENT_MODE=authenticated
     - PAPERCLIP_DEPLOYMENT_EXPOSURE=private
 
@@ -43,7 +43,7 @@ x-paperclip-common: &paperclip-common
 
     # Generate with:
     #   openssl rand -hex 32
-    - BETTER_AUTH_SECRET=secret
+    - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
 
     # After first setup, keep signups disabled.
     # If onboarding fails, temporarily set this to false.
@@ -168,7 +168,7 @@ services:
           memory: 256M
       labels:
         - traefik.enable=true
-        - traefik.http.routers.paperclip.rule=Host(`paperclip.website.com`)
+        - traefik.http.routers.paperclip.rule=Host(`${PAPERCLIP_HOST}`)
         - traefik.http.routers.paperclip.entrypoints=websecure
         - traefik.http.routers.paperclip.tls.certresolver=letsencryptresolver
         - traefik.http.routers.paperclip.priority=2
