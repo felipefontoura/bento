@@ -5,13 +5,17 @@ services:
     # config.yaml via a heredoc: the leading spaces of the heredoc body
     # leaked into the file, making `server.port` un-parseable and the
     # API server fell back to a random port (logged as `:0`).
+    # Upstream's config.yaml uses a flat `port: 8317` at the root, not a
+    # nested `server.port` — using the wrong shape silently fell back to
+    # an ephemeral port ("API server started successfully on: :0") and
+    # the wget healthcheck on 8317 had nothing to talk to.
     command:
       - sh
       - -c
       - |
         mkdir -p /CLIProxyAPI/config
         [ -f /CLIProxyAPI/config/config.yaml ] \
-          || printf 'server:\n  port: 8317\n' > /CLIProxyAPI/config/config.yaml
+          || printf 'port: 8317\n' > /CLIProxyAPI/config/config.yaml
         exec ./CLIProxyAPI --config /CLIProxyAPI/config/config.yaml
     networks:
       - network_public
