@@ -344,10 +344,69 @@ update_run() {
             exit 0
             ;;
         "Re-deploy stacks from latest git ref")
-            ui_warn "Stack redeploy via API arrives in Phase 2 — for now, redeploy via the Portainer UI."
-            ui_pause
+            update_redeploy_stacks
             ;;
     esac
+}
+
+# Lets the user pick bento-managed stacks to redeploy from the latest
+# commit on the branch Portainer is tracking. Each call is a single
+# Portainer API request — Portainer pulls the new commit, re-renders
+# the compose, and applies a rolling update honouring the stack's
+# update_config.
+update_redeploy_stacks() {
+    local stacks_json
+    if ! stacks_json="$(portainer_list_stacks 2>/dev/null)"; then
+        ui_error "Portainer not reachable — cannot list stacks."
+        ui_pause
+        return 1
+    fi
+
+    # Bento-managed only — we never touch stacks the user created
+    # directly in Portainer.
+    local managed
+    managed=$(jq -r '
+        [ .[] | select(any(.Env[]?; .name == "BENTO_MANAGED" and .value == "true")) | "\(.Id)\t\(.Name)" ]
+        | .[]
+    ' <<< "$stacks_json")
+
+    if [[ -z "$managed" ]]; then
+        ui_subtle "No bento-managed stacks deployed yet."
+        ui_pause
+        return 0
+    fi
+
+    local labels=()
+    while IFS=$'\t' read -r _id name; do
+        labels+=("$name")
+    done <<< "$managed"
+
+    local picks
+    picks="$(printf '%s\n' "${labels[@]}" | ui_choose_multi)"
+    [[ -z "$picks" ]] && return 0
+
+    local failures=()
+    while IFS= read -r pick; do
+        local stack_id
+        stack_id=$(jq -r --arg n "$pick" '.[] | select(.Name == $n) | .Id' <<< "$stacks_json" | head -1)
+        if [[ -z "$stack_id" ]]; then
+            ui_warn "Could not resolve stack id for '$pick' — skipping."
+            failures+=("$pick")
+            continue
+        fi
+        ui_info "Redeploying $pick (Portainer stack #$stack_id)…"
+        if portainer_redeploy_stack "$stack_id"; then
+            ui_success "$pick redeployed."
+        else
+            ui_error "Redeploy of $pick failed."
+            failures+=("$pick")
+        fi
+    done <<< "$picks"
+
+    if (( ${#failures[@]} > 0 )); then
+        ui_warn "Some redeploys failed: ${failures[*]}"
+        return 1
+    fi
 }
 
 # -----------------------------------------------------------------------------
