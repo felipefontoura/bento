@@ -18,7 +18,10 @@ services:
       - postgres-data:/var/lib/postgresql/data
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256"
+      # NOTE: do NOT quote this value. The postgres entrypoint passes
+      # POSTGRES_INITDB_ARGS verbatim to initdb, so quoting it makes the
+      # whole string a single (invalid) arg and initdb silently ignores it.
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
     healthcheck:
       test:
         ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1 -p 5432 || exit 1"]
