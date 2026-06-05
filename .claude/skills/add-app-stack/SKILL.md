@@ -86,7 +86,7 @@ From the upstream artifacts, extract:
 
 - **Image and tag** — pin the latest stable release.
 - **All env vars** with purpose + default + whether secret.
-- **Required ports** + healthcheck endpoint.
+- **Required ports** the app listens on.
 - **Dependencies** — Postgres? Redis? S3-compatible? Mail relay?
 - **Volumes** the app expects.
 - **Multi-service shape** — does it deploy a separate worker/webhook/UI?
@@ -123,8 +123,17 @@ Parametrize everything that varies per deployment:
 | `postgresql://app:secret@postgres:5432/db` | `postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/db` |
 | `external: true` (volumes other than `network_public`) | `driver: local` |
 
-Always include a healthcheck for long-running services. Use `network_public`
-external and `network_public` as the only network attached.
+Do NOT add a Swarm healthcheck to an app service. Bento removed them
+on purpose: `wget`-based probes on small VPS were SIGKILLing healthy
+containers (missing binary, slow boot, SSR compile inside the
+`start_period`). Traefik does the user-facing health check externally.
+The only healthchecks bento keeps are the cheap DB ones
+(`pg_isready`, `redis-cli ping`, `rabbitmq-diagnostics ping`).
+
+Always include a `logging:` block with `json-file` + `max-size: 10m`
++ `max-file: 3` — keeps a chatty debug app from filling the disk.
+
+Use `network_public` external and as the only network attached.
 
 **Env block layout** — group variables into commented sections with the
 same pattern n8n uses:
@@ -244,9 +253,13 @@ feat(<your-key>): bootstrap database on first deploy
   default; prefer `${VAR:-default}` or proper manifest entries.
 - **Flat env block without categories** — fails the quality bar. Group
   with comment headers like n8n does.
-- **Custom Dockerfile path drift** — when adding a Dockerfile, the compose
-  build context should be `.` (the stack directory) and the dockerfile
-  `Dockerfile`. See `stacks/app/paperclip/`.
+- **Reaching for a custom Dockerfile too quickly** — `lib/stacks.sh`
+  auto-detects `build:` and runs `docker compose build` before the
+  Portainer stack create, so a custom image will work, but the
+  operational cost (big images, slow first deploy, disk pressure) is
+  steep. Prefer extending the upstream image at runtime via
+  `docker exec` whenever possible. If you must use a Dockerfile,
+  context = `.` (the stack directory), dockerfile = `Dockerfile`.
 
 ## Reporting back
 

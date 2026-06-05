@@ -11,6 +11,25 @@ repo and is meant to be equally useful for any human contributor.
 > users outside Brazil; mixed-language strings break documentation tools
 > and look unprofessional. If you catch a `pt-BR` leak, fix it on sight.
 
+> **Docs stay in sync with code.** Any change deeper than a one-line bug
+> fix — a new stack, a behaviour change, a convention reversal, a path
+> rename, a removed file — must be reflected in the docs in the same PR.
+> Specifically:
+>
+> - **New / removed stack** → update the table in `README.md` *and* the
+>   `stacks/` ASCII tree in this file.
+> - **Convention change** (healthchecks, logging, secrets, deploy block,
+>   etc.) → update the "Quality bar" table and the "How to add a new
+>   application stack" section here, **and** the relevant guidance in
+>   `.claude/skills/add-app-stack/SKILL.md`.
+> - **New library file under `lib/`** → add it to the architecture box
+>   *and* the `lib/` ASCII tree below.
+> - **External-facing behaviour** (env vars, flags, prompts, report
+>   contents) → update `README.md`.
+>
+> If a maintainer notices doc drift before code drift, fix it the same
+> way. The rule is "no PR leaves the docs misleading."
+
 ## What this repo is
 
 `bento` is an all-in-one installer that takes a fresh Ubuntu/Debian VPS to
@@ -63,14 +82,15 @@ boot.sh ─ validates apt-get exists, installs git, clones repo, sources install
     ▼
 install.sh
     │
+    ├── lib/palette.sh ANSI palette shared with boot.sh / banner / deps
     ├── lib/deps.sh    ensures gum + jq + envsubst + curl (idempotent)
     ├── lib/banner.sh  themed ASCII bento banner
     ├── lib/state.sh   reads/writes ~/.config/bento/state.json (schema versioned)
-    ├── lib/ui.sh      gum wrappers + bento color palette
+    ├── lib/ui.sh      gum wrappers + bento color palette + ui_input_validated
     ├── lib/hardening.sh  copied from felipefontoura/ubinkaze
     ├── lib/infra.sh   swarm init, network, deploy Traefik + Portainer, init admin
-    ├── lib/portainer.sh  REST API client (auth, stacks CRUD)
-    ├── lib/stacks.sh  manifest discovery + env resolution + deploy via API
+    ├── lib/portainer.sh  REST client (auth + stacks CRUD + git redeploy + JWT retry)
+    ├── lib/stacks.sh  manifest discovery + env resolution + memory budget + deploy via API
     ├── lib/report.sh  generates handoff HTML at end of Step 3 / on demand
     └── lib/install-helpers.sh  helpers used by per-stack install.sh scripts
     │
@@ -122,6 +142,7 @@ bento/
 │   ├── hardening.sh              # copied from ubinkaze
 │   ├── infra.sh
 │   ├── install-helpers.sh        # helpers for per-stack install.sh scripts
+│   ├── palette.sh                # pre-gum ANSI palette
 │   ├── portainer.sh
 │   ├── report.sh                 # handoff HTML generator
 │   ├── stacks.sh
@@ -137,7 +158,7 @@ bento/
     └── app/
         ├── chatwoot/{compose.yml, manifest.json, install.sh}
         ├── n8n/{compose.yml, manifest.json, install.sh}
-        ├── paperclip/{compose.yml, Dockerfile, manifest.json}
+        ├── paperclip/{compose.yml, manifest.json}
         └── …
 ```
 
@@ -154,7 +175,7 @@ Files inside:
 | `compose.yml` | yes | Docker Compose YAML, parametrized with `${VAR}` |
 | `manifest.json` | yes | env spec + metadata |
 | `install.sh` | optional | post-deploy bootstrap (DB create, migrations, seed) |
-| `Dockerfile` | rarely | only when the stack ships a custom image (e.g. paperclip) |
+| `Dockerfile` | almost never | only when an upstream image genuinely cannot be reused. bento's build-first path in `lib/stacks.sh` picks it up automatically, but the operational cost (slow first boot, big images, disk pressure on small VPS) is steep — prefer extending the running container via `docker exec`. |
 
 Discovery in `lib/stacks.sh` globs `stacks/*/*/manifest.json` so adding a new
 stack means just creating its directory — no central registry to edit.
@@ -244,9 +265,10 @@ benchmark. Concretely:
 | Image tag | `:latest` accepted only if upstream is stable | Pin to a real release (`v1.x.y`) and document bump cadence |
 | Env vars | All deployment-variable values use `${VAR}` | Grouped into commented categories with a one-line WHY per variable, mirroring upstream's docs |
 | Hostnames | At least the primary hostname is parametrized | All public surfaces (editor + webhook + builder + viewer if applicable) |
-| Healthcheck | Every long-running service has one | Tuned `interval`/`timeout`/`retries`/`start_period` per service shape |
-| Deploy block | `replicas`, `placement` constraints | Adds `update_config` (parallelism, delay, order, failure_action) and `restart_policy` |
-| Resources | None acceptable for tiny services | `limits` + `reservations` for CPU and memory |
+| Healthcheck | DBs only (`pg_isready`, `redis-cli ping`, `rabbitmq-diagnostics ping`) — cheap, meaningful, never wedge boot | Same |
+| Deploy block | `replicas`, `placement`, `update_config`, `restart_policy` (start-first stateless / stop-first stateful) | Same + `resources.limits` + `resources.reservations` |
+| Logging | `json-file` + `max-size: 10m` + `max-file: 3` | Same |
+| Resources | None acceptable only for genuinely tiny services | `limits` + `reservations` for CPU and memory |
 | Network | `network_public` only | Same — apps connect via service name |
 | Volumes | `driver: local` for anything app-private | Same; no `external: true` outside `network_public` |
 | Secrets | Generated via manifest, never literal `secret` | Same |
@@ -314,7 +336,6 @@ existing stack:
   comment, and the deploy block has `update_config` + `restart_policy`.
   **Always aim for this depth** unless the app is genuinely simpler.
 - **Multi-service** (editor + worker + webhook pattern): same n8n.
-- **Custom-built image**: `stacks/app/paperclip/`.
 - **Rails-style with DB migrations**: `stacks/app/chatwoot/`.
 - **Genuinely tiny**: `stacks/app/cli-proxy-api/` — only when there are no
   meaningful knobs to document.
@@ -329,9 +350,26 @@ Replace any string that varies between deployments with `${VAR}`:
 **Volumes**: prefer `driver: local`. Only `network_public` should be
 `external` (it's created during Step 1).
 
-**Healthchecks**: always include one for long-running services. Common
-patterns: `wget -qO- http://127.0.0.1:<port>/health`, `pg_isready`,
-`redis-cli ping`.
+**Logging**: every long-running service must declare the standard
+rotation block so a chatty debug-level app cannot fill the disk:
+
+```yaml
+logging:
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+```
+
+**Healthchecks**: do NOT add a Swarm healthcheck to an app service.
+Earlier iterations had `wget -qO- http://127.0.0.1:<port>/` on every
+app — they SIGKILLed perfectly healthy containers on small VPS,
+either because the image lacked `wget` (typebot, paperclip) or
+because Rails/Next.js bootstrap exceeded `start_period` (chatwoot,
+typebot). Traefik's backend HTTP probe handles user-facing readiness
+externally. The only healthchecks bento keeps are on databases
+(`pg_isready`, `redis-cli ping`, `rabbitmq-diagnostics ping`) — they
+are cheap, instantaneous, and meaningful.
 
 **Traefik labels** (paste & adapt):
 

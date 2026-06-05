@@ -1,28 +1,14 @@
-<a name="readme-top"></a>
+![bento](.assets/bento-banner.png)
 
-<!-- LOGO -->
-<br />
-<div align="center">
-  <a href="https://github.com/felipefontoura/bento">
-    <img src=".assets/bento-banner.png" alt="bento" width="720">
-  </a>
+_Your VPS, served on a tray._
 
-  <p><em>Your VPS, served on a tray.</em></p>
+![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+![Made with Bash](https://img.shields.io/badge/made%20with-bash-1f425f.svg)
+![Docker Swarm](https://img.shields.io/badge/docker-swarm-2496ED.svg?logo=docker&logoColor=white)
+[![Stars](https://img.shields.io/github/stars/felipefontoura/bento?style=flat)](https://github.com/felipefontoura/bento/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/felipefontoura/bento)](https://github.com/felipefontoura/bento/commits/main)
 
-  <p>
-    <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
-    <img alt="Made with Bash" src="https://img.shields.io/badge/made%20with-bash-1f425f.svg">
-    <img alt="Docker Swarm" src="https://img.shields.io/badge/docker-swarm-2496ED.svg?logo=docker&logoColor=white">
-    <a href="https://github.com/felipefontoura/bento/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/felipefontoura/bento?style=flat"></a>
-    <a href="https://github.com/felipefontoura/bento/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/felipefontoura/bento"></a>
-  </p>
-
-  <p>
-    <a href="#quickstart"><strong>Quickstart</strong></a> ·
-    <a href="CLAUDE.md">Maintainers</a> ·
-    <a href="https://github.com/felipefontoura/bento/issues">Issues</a>
-  </p>
-</div>
+[Quickstart](#quickstart) · [Maintainers](CLAUDE.md) · [Issues](https://github.com/felipefontoura/bento/issues)
 
 ---
 
@@ -232,7 +218,7 @@ bash install.sh
 
 - Latest Ubuntu LTS, Debian, or any apt-based distro
 - `root` or a non-root user with `sudo` — running directly as `root` on a fresh VPS is fine
-- 1+ GB RAM, 20+ GB free disk
+- 1+ GB RAM, 5+ GB free disk
 - Public IPv4
 - Wildcard DNS pointing to that IPv4
 
@@ -251,5 +237,3 @@ PRs welcome. Open an issue first for anything beyond a small fix.
 ## License
 
 Distributed under the MIT License.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
