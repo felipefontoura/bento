@@ -248,6 +248,26 @@ stacks_deploy() {
 
     ui_section "Deploying $stack_key"
 
+    # If the compose declares a `build:` directive (paperclip is the only
+    # stack like this today), Swarm's `docker stack deploy` will ignore it
+    # and try to pull the image. Build it locally first so the resulting
+    # image is in the host daemon when Portainer's stack create runs.
+    local full_compose="${BENTO_REPO_ROOT}/${compose_path}"
+    if grep -qE '^[[:space:]]+build:' "$full_compose" 2>/dev/null; then
+        ui_info "Compose declares a build target — building image locally first"
+        local build_log=/tmp/bento-build-${stack_key}.log
+        : > "$build_log"
+        if (cd "$(dirname "$full_compose")" \
+            && sudo docker compose -f "$(basename "$full_compose")" build --pull \
+                >>"$build_log" 2>&1); then
+            ui_success "Local image built (log: $build_log)"
+        else
+            ui_error "Image build failed — see $build_log"
+            tail -8 "$build_log" >&2
+            return 1
+        fi
+    fi
+
     local env_payload stack_id
     env_payload="$(stacks_build_env_payload "$stack_key" "$manifest_path")" || return 1
 

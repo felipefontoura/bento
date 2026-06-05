@@ -2,6 +2,12 @@ x-typebot-common: &typebot-common
   networks:
     - network_public
   environment:
+    # Cap V8's heap below the container's memory limit so Node aborts
+    # cleanly on its own bookkeeping instead of being SIGABRT'd by the
+    # kernel during startup. 768 leaves ~256 MB headroom inside the
+    # 1 GB container.
+    - NODE_OPTIONS=--max-old-space-size=768
+
     # =============================================================================
     # Database (PostgreSQL)
     # =============================================================================
@@ -102,8 +108,8 @@ services:
       <<: *typebot-deploy
       resources:
         limits:
-          cpus: "0.5"
-          memory: 512M
+          cpus: "1"
+          memory: 1024M
       labels:
         - traefik.enable=true
         - traefik.http.routers.typebot_builder.rule=Host(`${TYPEBOT_BUILDER_HOST}`)
@@ -136,8 +142,8 @@ services:
       <<: *typebot-deploy
       resources:
         limits:
-          cpus: "0.5"
-          memory: 512M
+          cpus: "1"
+          memory: 1024M
       labels:
         - traefik.enable=true
         - traefik.http.routers.typebot_viewer.rule=Host(`${TYPEBOT_VIEWER_HOST}`)
