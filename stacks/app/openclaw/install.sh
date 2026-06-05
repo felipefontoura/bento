@@ -37,6 +37,14 @@ sudo docker run --rm -v "$volume_name:/cfg" alpine sh -c 'cat > /cfg/openclaw.js
         chatCompletions: { enabled: true },
       },
     },
+    controlUi: {
+      // Overlay-only deployment: no human ever browses the Control UI.
+      // Disabling it removes the unauthenticated 200 surface on /openclaw
+      // and / that any other container on network_public could otherwise
+      // hit. Admin tasks (pairing CLI device, channel config) happen via
+      // `docker exec` against the openclaw container.
+      enabled: false,
+    },
   },
 }
 EOF
