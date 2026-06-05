@@ -153,26 +153,39 @@ portainer_with_token_retry() {
 }
 
 # Get the default endpoint ID (usually 1 in a single-node Swarm).
+# Memoised — survives multiple calls in the same install run.
 portainer_endpoint_id() {
+    if [[ -n "${BENTO_PORTAINER_ENDPOINT_ID:-}" ]]; then
+        printf '%s' "$BENTO_PORTAINER_ENDPOINT_ID"
+        return 0
+    fi
     local base auth
     base="$(portainer_local_url)"
     auth="$(portainer_auth_header)"
 
-    portainer_curl -fsS "${base}/api/endpoints" \
+    BENTO_PORTAINER_ENDPOINT_ID=$(portainer_curl -fsS "${base}/api/endpoints" \
         -H "$auth" \
-        | jq -r '.[0].Id'
+        | jq -r '.[0].Id')
+    export BENTO_PORTAINER_ENDPOINT_ID
+    printf '%s' "$BENTO_PORTAINER_ENDPOINT_ID"
 }
 
-# Get the Swarm ID for the default endpoint.
+# Get the Swarm ID for the default endpoint. Memoised.
 portainer_swarm_id() {
+    if [[ -n "${BENTO_PORTAINER_SWARM_ID:-}" ]]; then
+        printf '%s' "$BENTO_PORTAINER_SWARM_ID"
+        return 0
+    fi
     local base auth endpoint_id
     base="$(portainer_local_url)"
     auth="$(portainer_auth_header)"
     endpoint_id="$(portainer_endpoint_id)"
 
-    portainer_curl -fsS "${base}/api/endpoints/${endpoint_id}/docker/swarm" \
+    BENTO_PORTAINER_SWARM_ID=$(portainer_curl -fsS "${base}/api/endpoints/${endpoint_id}/docker/swarm" \
         -H "$auth" \
-        | jq -r '.ID'
+        | jq -r '.ID')
+    export BENTO_PORTAINER_SWARM_ID
+    printf '%s' "$BENTO_PORTAINER_SWARM_ID"
 }
 
 # Create a Swarm stack from a Git repository.
