@@ -539,12 +539,11 @@ BENTO_VERBOSE=1 bash install.sh
 
 Every `curl` issued by `lib/portainer.sh` is logged to stderr.
 
-### Bump a base image version for paperclip-custom
+### Pin paperclip to a specific upstream tag
 
 ```bash
-docker compose -f stacks/app/paperclip/compose.yml build --pull \
-    --build-arg HERMES_VERSION=v2026.X.Y \
-    --build-arg PAPERCLIP_VERSION=v2026.A.B
+# edit stacks/app/paperclip/compose.yml:
+#   image: ghcr.io/paperclipai/paperclip:v2026.X.Y
 ```
 
 ---
@@ -609,9 +608,10 @@ above. A human can follow the recipe without Claude.
   `apt-get`-capable distro.
 - **UI** — Charm's [`gum`](https://github.com/charmbracelet/gum), installed
   from the Charm apt repo or downloaded as a release binary.
-- **Paperclip custom image** — `paperclip-custom` extends
-  `ghcr.io/paperclipai/paperclip` with Hermes (from
-  `nousresearch/hermes-agent`), Gemini CLI, Pi, and Grok Build CLIs.
+- **Paperclip** — upstream image
+  [`ghcr.io/paperclipai/paperclip`](https://github.com/paperclipai/paperclip).
+  Ships claude-code, codex, and opencode out of the box; extra CLIs are
+  installed via `docker exec` on the running container.
 
 ---
 

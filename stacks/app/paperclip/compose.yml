@@ -1,22 +1,8 @@
 x-paperclip-common: &paperclip-common
-  # Custom Paperclip image built from this directory's Dockerfile.
-  # Adds hermes/gemini/pi/grok to the official base.
-  #
-  # Build first:
-  #   docker compose -f stacks/app/paperclip/compose.yml build
-  # Then deploy (Swarm ignores `build:` and uses the local image):
-  #   docker stack deploy -c stacks/app/paperclip/compose.yml app
-  # Override the image to pull from a registry:
-  #   PAPERCLIP_CUSTOM_IMAGE=felipefontoura/paperclip-custom:1.2.3 docker stack deploy ...
-  image: ${PAPERCLIP_CUSTOM_IMAGE:-paperclip-custom:latest}
-  build:
-    context: .
-    dockerfile: Dockerfile
-    args:
-      PAPERCLIP_VERSION: latest
-      HERMES_VERSION: latest
-      GEMINI_CLI_VERSION: latest
-      PI_CLI_VERSION: latest
+  # Stock upstream image. CLIs already shipped: claude, codex, opencode.
+  # To add hermes / gemini / pi / grok, do it inside the running container
+  # with `docker exec`, or fork this stack to extend the image.
+  image: ghcr.io/paperclipai/paperclip:latest
   networks:
     - network_public
   logging:
@@ -98,15 +84,9 @@ x-paperclip-common: &paperclip-common
     # Bundled agent CLIs
     # =============================================================================
     #
-    # Pre-installed in the image: claude, codex, opencode, hermes, gemini, pi, grok.
-    # Hermes-specific runtime defaults (HERMES_HOME, HERMES_DASHBOARD,
-    # API_SERVER_ENABLED) live in the Dockerfile — override them here only if
-    # a deployment needs to differ.
-    #
-    # First-time setup per container:
-    #   docker exec -it <container> hermes auth add codex-oauth
-    #   docker exec -it <container> gemini config
-    #   docker exec -it <container> grok auth login
+    # Shipped by the upstream image: claude, codex, opencode.
+    # Add more CLIs at runtime if you need them, e.g.:
+    #   docker exec -it <container> npm install -g @google/gemini-cli
 
     # =============================================================================
     # Timezone
