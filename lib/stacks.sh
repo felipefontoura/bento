@@ -227,13 +227,10 @@ stacks_build_env_payload() {
     env_entries+=("$(jq -n --arg v "$git_sha"        '{name: "BENTO_DEPLOYED_REF", value: $v}')")
     env_entries+=("$(jq -n --arg v "$stack_key"      '{name: "BENTO_STACK_KEY",    value: $v}')")
 
-    printf '['
-    local first=1
-    for e in "${env_entries[@]}"; do
-        if (( first )); then first=0; else printf ','; fi
-        printf '%s' "$e"
-    done
-    printf ']'
+    # `jq -s '.'` slurps the stream of JSON objects into a single array
+    # — safer than concatenating with printf when values can contain
+    # commas, quotes, or newlines.
+    printf '%s\n' "${env_entries[@]}" | jq -cs '.'
 }
 
 # -----------------------------------------------------------------------------
