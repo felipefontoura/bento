@@ -1,6 +1,11 @@
 services:
   postgres:
-    image: postgres:15
+    # pgvector-enabled build of the same upstream postgres:15. Chatwoot's
+    # schema.rb hard-requires `CREATE EXTENSION vector` (used for AI/embeddings
+    # features) and refuses to load on a vanilla postgres:15. The image is
+    # otherwise byte-compatible with postgres:15 — same data dir layout, same
+    # CLI, same volumes — so apps that don't need pgvector are unaffected.
+    image: pgvector/pgvector:pg15
     entrypoint: docker-entrypoint.sh
     command: [postgres, --max_connections=200]
     networks:
