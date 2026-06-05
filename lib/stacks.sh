@@ -99,11 +99,76 @@ stacks_substitute_template() {
 #   5. manifest.prompt (required) → must ask
 #   6. manifest.prompt (optional) → ask, skippable
 # -----------------------------------------------------------------------------
+# Persist <value> at .envs[<stack>][<var>] in state, then echo it.
+# Centralising the write means stacks_resolve_env only chooses where the
+# value comes from — it doesn't repeat the same state_set+printf each
+# time we land on a source.
+_stacks_persist_env() {
+    local stack_key="$1" var_name="$2" value="$3"
+    state_set ".envs[\"$stack_key\"][\"$var_name\"]" "$value"
+    printf '%s' "$value"
+}
+
+# Look up <from_state_key> in any other deployed stack's envs first,
+# then in the bootstrap block. Echo the first non-empty match, or
+# nothing on miss.
+_stacks_lookup_from_state() {
+    local from_state="$1"
+    local sourced
+    sourced=$(jq -r --arg fs "$from_state" \
+        '[.envs // {} | .[]? | .[$fs] // empty] | map(select(. != null and . != "")) | first // ""' \
+        "$BENTO_STATE_FILE" 2>/dev/null)
+    [[ -z "$sourced" ]] && sourced="$(state_get ".bootstrap.$from_state")"
+    printf '%s' "$sourced"
+}
+
+# Unattended-mode resolver: BENTO_ENV_<STACK>_<VAR> override → default →
+# empty (fail if required). Echoes the resolved value (or nothing).
+# Returns 1 only on "required + nothing".
+_stacks_resolve_env_unattended() {
+    local stack_key="$1" var_name="$2" default_value="$3" required="$4"
+    local env_var env_val
+    env_var="BENTO_ENV_$(printf '%s' "$stack_key" | tr 'a-z-' 'A-Z_')_${var_name}"
+    env_val="${!env_var:-}"
+    if [[ -n "$env_val" ]]; then
+        _stacks_persist_env "$stack_key" "$var_name" "$env_val"
+        return 0
+    fi
+    if [[ -n "$default_value" ]]; then
+        _stacks_persist_env "$stack_key" "$var_name" "$default_value"
+        return 0
+    fi
+    if [[ "$required" == "true" ]]; then
+        ui_error "$var_name required for $stack_key (set $env_var)"
+        return 1
+    fi
+    _stacks_persist_env "$stack_key" "$var_name" ""
+}
+
+# Interactive resolver: prompt the user, hide if it's a secret.
+# Returns 1 on "required + empty answer".
+_stacks_resolve_env_interactive() {
+    local stack_key="$1" var_name="$2" prompt="$3" default_value="$4"
+    local required="$5" hide="$6"
+    local answer prompt_label
+    prompt_label="$var_name — $prompt"
+    if [[ "$hide" == "true" ]]; then
+        answer="$(ui_password "$prompt_label")"
+    else
+        answer="$(ui_input "$prompt_label" "$default_value" "$default_value")"
+    fi
+    if [[ -z "$answer" && "$required" == "true" ]]; then
+        ui_error "$var_name is required."
+        return 1
+    fi
+    _stacks_persist_env "$stack_key" "$var_name" "$answer"
+}
+
 stacks_resolve_env() {
     local stack_key="$1"
     local env_spec="$2"   # single JSON object from manifest.env array
 
-    local var_name from_state default_tpl generate_cmd prompt required hide existing
+    local var_name from_state default_tpl generate_cmd prompt required hide
     var_name=$(jq -r '.name' <<< "$env_spec")
     from_state=$(jq -r '.from_state // empty' <<< "$env_spec")
     default_tpl=$(jq -r '.default // empty' <<< "$env_spec")
@@ -112,90 +177,48 @@ stacks_resolve_env() {
     required=$(jq -r '.required // false' <<< "$env_spec")
     hide=$(jq -r '.hide // false' <<< "$env_spec")
 
-    # 1. Existing state.
+    # 1. Existing state — reuse without touching anything.
+    local existing
     existing="$(state_get ".envs[\"$stack_key\"][\"$var_name\"]")"
     if [[ -n "$existing" ]]; then
         printf '%s' "$existing"
         return 0
     fi
 
-    # 2. from_state — search any deployed stack's envs for a matching key.
+    # 2. from_state — pull another stack's env or a bootstrap field.
     if [[ -n "$from_state" ]]; then
         local sourced
-        sourced=$(jq -r --arg fs "$from_state" \
-            '[.envs // {} | .[]? | .[$fs] // empty] | map(select(. != null and . != "")) | first // ""' \
-            "$BENTO_STATE_FILE" 2>/dev/null)
-        if [[ -z "$sourced" ]]; then
-            sourced="$(state_get ".bootstrap.$from_state")"
-        fi
+        sourced=$(_stacks_lookup_from_state "$from_state")
         if [[ -n "$sourced" ]]; then
-            state_set ".envs[\"$stack_key\"][\"$var_name\"]" "$sourced"
-            printf '%s' "$sourced"
+            _stacks_persist_env "$stack_key" "$var_name" "$sourced"
             return 0
         fi
     fi
 
-    # 4. generate (handled before prompt so we don't ask for things we make).
+    # 3. generate — run the shell snippet once, persist the output.
     if [[ -n "$generate_cmd" ]]; then
         local generated
         generated=$(bash -c "$generate_cmd")
-        state_set ".envs[\"$stack_key\"][\"$var_name\"]" "$generated"
-        printf '%s' "$generated"
+        _stacks_persist_env "$stack_key" "$var_name" "$generated"
         return 0
     fi
 
-    # 3. default template (substituted).
+    # 4. Compute the default (template-substituted) for use by prompts.
     local default_value=""
-    if [[ -n "$default_tpl" ]]; then
-        default_value="$(stacks_substitute_template "$default_tpl")"
-    fi
+    [[ -n "$default_tpl" ]] && default_value="$(stacks_substitute_template "$default_tpl")"
 
-    # 5/6. prompt the user.
+    # 5/6. Prompt the user (env-driven in unattended mode).
     if [[ -n "$prompt" ]]; then
-        # Unattended path: pick env override → default → empty (fail if required).
         if [[ "${BENTO_UNATTENDED:-0}" == "1" ]]; then
-            local env_var env_val
-            env_var="BENTO_ENV_$(printf '%s' "$stack_key" | tr 'a-z-' 'A-Z_')_${var_name}"
-            env_val="${!env_var:-}"
-            if [[ -n "$env_val" ]]; then
-                state_set ".envs[\"$stack_key\"][\"$var_name\"]" "$env_val"
-                printf '%s' "$env_val"
-                return 0
-            fi
-            if [[ -n "$default_value" ]]; then
-                state_set ".envs[\"$stack_key\"][\"$var_name\"]" "$default_value"
-                printf '%s' "$default_value"
-                return 0
-            fi
-            if [[ "$required" == "true" ]]; then
-                ui_error "$var_name required for $stack_key (set $env_var)"
-                return 1
-            fi
-            state_set ".envs[\"$stack_key\"][\"$var_name\"]" ""
-            return 0
-        fi
-
-        local answer prompt_label
-        prompt_label="$var_name — $prompt"
-        if [[ "$hide" == "true" ]]; then
-            answer="$(ui_password "$prompt_label")"
+            _stacks_resolve_env_unattended "$stack_key" "$var_name" "$default_value" "$required"
         else
-            answer="$(ui_input "$prompt_label" "$default_value" "$default_value")"
+            _stacks_resolve_env_interactive "$stack_key" "$var_name" "$prompt" "$default_value" "$required" "$hide"
         fi
-        if [[ -z "$answer" && "$required" == "true" ]]; then
-            ui_error "$var_name is required."
-            return 1
-        fi
-        state_set ".envs[\"$stack_key\"][\"$var_name\"]" "$answer"
-        printf '%s' "$answer"
-        return 0
+        return $?
     fi
 
-    # No prompt — just use the default if there is one.
-    if [[ -n "$default_value" ]]; then
-        state_set ".envs[\"$stack_key\"][\"$var_name\"]" "$default_value"
-        printf '%s' "$default_value"
-    fi
+    # 7. No prompt — silent default if there is one.
+    [[ -n "$default_value" ]] && _stacks_persist_env "$stack_key" "$var_name" "$default_value"
 }
 
 # Build the env array Portainer expects ([{name, value}, …]).
