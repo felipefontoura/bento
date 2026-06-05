@@ -245,9 +245,12 @@ step3_run() {
         ui_warn "Run Step 2 first."
         return 0
     fi
-    stacks_step3_menu
+    local rc=0
+    stacks_step3_menu || rc=$?
     if stacks_is_apps_done; then
         report_run "auto"
+    elif (( rc != 0 )); then
+        ui_warn "Re-run Step 3 to retry the failed stacks."
     fi
 }
 
@@ -398,13 +401,18 @@ unattended_main() {
         step2_run || { ui_error "Step 2 failed"; exit 1; }
     fi
 
+    local step3_rc=0
     if [[ -n "${BENTO_APPS:-}" ]]; then
-        unattended_step3
+        unattended_step3 || step3_rc=$?
     else
         ui_warn "BENTO_APPS not set — skipping Step 3"
     fi
 
     report_run "auto"
+    if (( step3_rc != 0 )); then
+        ui_error "Unattended install finished with failures — see report and /var/log/bento-resume.log"
+        exit 2
+    fi
     ui_success "Unattended install complete"
 }
 
@@ -417,6 +425,7 @@ unattended_step3() {
     # deployed (state.stacks.<key>.stack_id present), so re-running with
     # a wider BENTO_APPS list only deploys the new ones.
     local seen=()
+    local failed=()
     while IFS= read -r _existing; do
         [[ -n "$_existing" ]] && seen+=("$_existing")
     done < <(jq -r '.stacks // {} | to_entries[] | select(.value.stack_id) | .key' \
@@ -432,6 +441,7 @@ unattended_step3() {
         manifest_path=$(stacks_manifest_for_key "$key")
         if [[ -z "$manifest_path" ]]; then
             ui_warn "Unknown stack key: $key — skipping"
+            failed+=("$key (unknown)")
             return 0
         fi
         # Resolve declared deps first
@@ -445,6 +455,7 @@ unattended_step3() {
             seen+=("$key")
         else
             ui_error "Deploy of $key failed; continuing"
+            failed+=("$key")
         fi
     }
 
@@ -454,7 +465,17 @@ unattended_step3() {
         [[ -z "$app" ]] && continue
         deploy_with_deps "$app"
     done
+
+    # Surface failures upstream so unattended_main can fail loudly and
+    # the handoff report carries the news.
+    if (( ${#failed[@]} > 0 )); then
+        printf '%s\n' "${failed[@]}" > "${BENTO_STATE_DIR}/last-run-failures"
+        ui_error "Some stacks failed to deploy: ${failed[*]}"
+        return 1
+    fi
+    rm -f "${BENTO_STATE_DIR}/last-run-failures"
     state_set '.steps.apps' "done"
+    return 0
 }
 
 # Installs a systemd one-shot that re-runs install.sh in unattended mode

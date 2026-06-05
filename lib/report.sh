@@ -77,6 +77,28 @@ HTML
 # -----------------------------------------------------------------------------
 # Internal — section renderers
 # -----------------------------------------------------------------------------
+# If unattended_step3 (or stacks_step3_menu) recorded failures, surface
+# them at the top of the report. The file is removed on a clean run so
+# its presence reliably indicates "something needs your attention".
+_section_failures() {
+    local marker="${BENTO_STATE_DIR}/last-run-failures"
+    [[ -f "$marker" ]] || return 0
+    local list=""
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        list+="<li><code>$(_html_escape "$line")</code></li>"
+    done < "$marker"
+    [[ -z "$list" ]] && return 0
+    cat <<HTML
+<section class="failures">
+<h2>⚠ Last run had failures</h2>
+<p>The following stacks did not deploy cleanly. Re-run Step 3 to retry
+or check <code>~/.local/state/bento/logs/</code> on the VPS.</p>
+<ul>${list}</ul>
+</section>
+HTML
+}
+
 _section_vps() {
     local base_domain admin_email advertise_addr
     base_domain=$(state_get '.bootstrap.base_domain')
@@ -286,6 +308,13 @@ section.card .lede { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 
 .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
 
+section.failures {
+    background: #fff3f3; border: 1px solid #f4b3b3; border-radius: 6px;
+    padding: 14px 16px; margin-bottom: 18px; color: #6b1a1a;
+}
+section.failures h2 { margin: 0 0 6px; font-size: 16px; }
+section.failures ul { margin: 6px 0 0 18px; }
+
 footer {
     color: var(--muted); font-size: 12px; text-align: center;
     margin: 28px 0 12px;
@@ -321,6 +350,7 @@ footer {
 </div>
 HTML
 
+        _section_failures
         _section_vps
         _section_infra
         _section_apps

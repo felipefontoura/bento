@@ -410,16 +410,35 @@ stacks_step3_menu() {
     picks="$(printf '%s\n' "${labels[@]}" | ui_choose_multi)"
     [[ -z "$picks" ]] && return 0
 
+    # Surface a memory budget for the chosen apps before the first deploy.
+    local picks_csv=""
+    while IFS= read -r picked; do
+        local pn="${picked%% — *}"
+        picks_csv+="${pn},"
+    done <<< "$picks"
+    stacks_memory_budget_check "${picks_csv%,}"
+
+    local failures=()
     while IFS= read -r picked; do
         local picked_name
         picked_name="${picked%% — *}"
         local m
         m=$(stacks_manifest_for_key "$picked_name")
         if [[ -n "$m" ]]; then
-            stacks_deploy "$m" || ui_error "Deploy of $picked_name failed; continuing."
+            if ! stacks_deploy "$m"; then
+                ui_error "Deploy of $picked_name failed; continuing."
+                failures+=("$picked_name")
+            fi
         fi
     done <<< "$picks"
 
+    if (( ${#failures[@]} > 0 )); then
+        printf '%s\n' "${failures[@]}" > "${BENTO_STATE_DIR}/last-run-failures"
+        ui_warn "Step 3 finished with failures: ${failures[*]}"
+        return 1
+    fi
+
+    rm -f "${BENTO_STATE_DIR}/last-run-failures"
     state_set '.steps.apps' "done"
 }
 
