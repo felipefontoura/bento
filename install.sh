@@ -410,6 +410,7 @@ unattended_main() {
 
 unattended_step3() {
     local apps_csv="${BENTO_APPS}"
+    stacks_memory_budget_check "$apps_csv"
     IFS=',' read -ra apps <<< "$apps_csv"
 
     # Pre-populate "seen" with stacks bento has already successfully

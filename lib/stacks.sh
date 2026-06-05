@@ -237,6 +237,53 @@ stacks_build_env_payload() {
 }
 
 # -----------------------------------------------------------------------------
+# Memory budget — sums every `memory: NNNm` / `NNNM` / `NNg` line in the
+# selected stacks' compose files and compares against `free -m` available.
+# Heuristic only: limits aren't reservations, so a single OOM-mark doesn't
+# kill the deploy, but a 4 GB VPS asked for 6 GB worth of limits is
+# something the user should know before tickets get cut.
+# -----------------------------------------------------------------------------
+stacks_memory_budget_check() {
+    local apps_csv="$1"
+    local sum_mb=0 stack_mb free_mb manifest compose app
+
+    IFS=',' read -ra apps <<< "$apps_csv"
+    for app in "${apps[@]}"; do
+        app="${app// /}"
+        [[ -z "$app" ]] && continue
+        manifest=$(stacks_manifest_for_key "$app")
+        [[ -z "$manifest" ]] && continue
+        compose="${BENTO_REPO_ROOT}/$(stacks_compose_path_for_manifest "$manifest")"
+        [[ -f "$compose" ]] || continue
+        # Sum every `memory:` value. Convert `Ng`/`Gg` → MB.
+        stack_mb=$(awk '
+            /^[[:space:]]*memory:[[:space:]]*[0-9]+[MmGg]?/ {
+                v = $2
+                if (v ~ /[Gg]/) { sub(/[Gg]/, "", v); v = v * 1024 }
+                else            { sub(/[Mm]/, "", v) }
+                sum += v + 0
+            }
+            END { print int(sum) }
+        ' "$compose" 2>/dev/null || echo 0)
+        sum_mb=$((sum_mb + stack_mb))
+    done
+
+    free_mb=$(free -m 2>/dev/null | awk '/^Mem:/{print $7}')
+    [[ -z "$free_mb" || "$free_mb" == "0" ]] && free_mb=$(free -m | awk '/^Mem:/{print $4}')
+
+    if (( sum_mb == 0 || free_mb == 0 )); then
+        return 0
+    fi
+
+    if (( sum_mb > free_mb * 12 / 10 )); then
+        ui_warn "Memory budget tight: stacks declare ~${sum_mb} MB of limits, only ${free_mb} MB available."
+        ui_warn "Either upgrade the VPS or deploy in smaller waves (lighter apps first)."
+    else
+        ui_info "Memory budget OK: stacks declare ~${sum_mb} MB of limits, ${free_mb} MB available."
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # Deploy
 # -----------------------------------------------------------------------------
 stacks_deploy() {
