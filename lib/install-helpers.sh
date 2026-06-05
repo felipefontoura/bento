@@ -17,12 +17,32 @@ set -euo pipefail
 # Container discovery
 # -----------------------------------------------------------------------------
 _find_container() {
+    # Echo the first container ID matching <pattern>, or fail loudly.
+    #
+    # `set -e` doesn't help callers when this runs inside $(...) — the
+    # captured stdout would just be empty and any downstream `docker
+    # exec ""` would error with a misleading message. So we explicitly
+    # check the captured value and abort the script if it's empty.
     local pattern="$1"
     local cid
     cid=$(sudo docker ps --filter "name=$pattern" --format '{{.ID}}' | head -1)
     if [[ -z "$cid" ]]; then
-        echo "Could not find a running container matching '$pattern'." >&2
+        printf 'No running container matches pattern: %s\n' "$pattern" >&2
+        printf 'Run `sudo docker ps` to confirm the service is up.\n' >&2
         return 1
+    fi
+    printf '%s' "$cid"
+}
+
+# Wrapper that abort()s the script with context when the container is
+# missing. Use this when "no container" is fatal — which is almost
+# always the case in post-deploy install scripts.
+require_container() {
+    local pattern="$1"
+    local cid
+    if ! cid=$(_find_container "$pattern"); then
+        printf 'install.sh aborted: cannot continue without a %s container.\n' "$pattern" >&2
+        exit 1
     fi
     printf '%s' "$cid"
 }
