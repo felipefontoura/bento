@@ -97,7 +97,7 @@ Each stack is a directory at `stacks/<category>/<key>/` with `compose.yml`, `man
 | app | [Evolution API](stacks/app/evolution-api) | WhatsApp gateway |
 | app | [n8n](stacks/app/n8n) | Workflow automation |
 | app | [n8n MCP](stacks/app/n8n-mcp) | MCP server for n8n |
-| app | [Paperclip](stacks/app/paperclip) | AI agent orchestration (custom image with Hermes, Gemini, Pi, Grok) |
+| app | [Paperclip](stacks/app/paperclip) | AI agent orchestration (Claude Code, Codex, OpenCode) |
 | app | [Plunk](stacks/app/plunk) | Open-source email platform |
 | app | [RabbitMQ](stacks/app/rabbitmq) | Message broker |
 | app | [Typebot](stacks/app/typebot) | Chatbot builder |
