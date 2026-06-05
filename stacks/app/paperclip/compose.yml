@@ -152,16 +152,10 @@ services:
     <<: *paperclip-common
     volumes:
       - paperclip-data:/paperclip
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:3100/ >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+    # Swarm healthcheck omitted — paperclip's boot bundles a Python venv
+    # warmup that occasionally exceeds the probe window. The Dockerfile
+    # still ships a HEALTHCHECK so `docker run` standalone gets one;
+    # Swarm just won't enforce it.
     deploy:
       <<: *paperclip-deploy
       resources:

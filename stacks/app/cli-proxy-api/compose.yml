@@ -29,16 +29,8 @@ services:
       - cli_proxy_api_auth:/root/.cli-proxy-api
     environment:
       - TZ=America/Sao_Paulo
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:8317/ >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+    # Swarm healthcheck omitted — overlay-only service (no Traefik route);
+    # external readiness is whether downstream apps can reach :8317.
     deploy:
       mode: replicated
       replicas: 1

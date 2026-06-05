@@ -86,13 +86,7 @@ services:
 
       # Signals that the app is running inside a Docker container.
       - DOCKER_ENV=true
-    healthcheck:
-      test:
-        ["CMD", "sh", "-c", "curl -f http://127.0.0.1:$${PORT:-3000}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    # Swarm healthcheck omitted — Traefik backend probe handles readiness.
     deploy:
       mode: replicated
       replicas: 1

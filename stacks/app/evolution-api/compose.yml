@@ -145,16 +145,7 @@ services:
       # Redis DB index. Per-stack allocation:
       #   /0 free  /1 n8n  /2 plunk  /3 chatwoot  /4 evolution-api  /5+ free
       - CACHE_REDIS_URI=redis://redis:6379/4
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
+    # Swarm healthcheck omitted — Traefik backend probe handles readiness.
     deploy:
       mode: replicated
       replicas: 1

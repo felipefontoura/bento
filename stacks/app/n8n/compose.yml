@@ -258,16 +258,10 @@ services:
     command: start
     volumes:
       - n8n-data:/home/node/.n8n
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:5678/healthz >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
+    # Swarm healthcheck intentionally omitted — n8n boots fast but a
+    # bad probe (wget hang, missing binary, OOM during migrations) was
+    # SIGKILLing healthy containers on small VPS. Traefik's backend
+    # health check covers user-facing readiness.
     deploy:
       <<: *n8n-deploy
       resources:
@@ -291,16 +285,7 @@ services:
       - |
         until wget -qO- http://n8n_editor:5678/healthz 2>/dev/null; do sleep 3; done
         exec /docker-entrypoint.sh webhook
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:5678/healthz >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
+    # Healthcheck omitted — see n8n_editor.
     deploy:
       <<: *n8n-deploy
       resources:
@@ -324,16 +309,7 @@ services:
       - |
         until wget -qO- http://n8n_editor:5678/healthz 2>/dev/null; do sleep 3; done
         exec /docker-entrypoint.sh worker --concurrency=10
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:5678/healthz >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
+    # Healthcheck omitted — see n8n_editor.
     deploy:
       <<: *n8n-deploy
       resources:
