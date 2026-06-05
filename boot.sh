@@ -22,15 +22,25 @@ BENTO_DEPS_LOG=/tmp/bento-deps.log
 : > "$BENTO_DEPS_LOG" || true
 
 # -----------------------------------------------------------------------------
-# Tiny ANSI palette — same hex as the gum-driven banner shown later so the
-# visual is continuous. Used only by boot.sh and lib/deps.sh, which run
-# before gum is installed.
+# Palette — sourced from a single file so deps.sh, banner.sh, and boot.sh
+# all use the exact same hex values. The library is loaded directly from
+# the repo we are about to clone if it doesn't exist yet in $BENTO_HOME
+# (first ever run); when boot.sh re-runs after the clone, it sources
+# from there.
 # -----------------------------------------------------------------------------
-readonly _S=$'\033[38;2;255;107;107m'   # salmon
-readonly _W=$'\033[38;2;6;214;160m'     # wasabi
-readonly _M=$'\033[38;2;120;120;120m'   # muted
-readonly _N=$'\033[0m'                  # reset
-readonly _B=$'\033[1m'                  # bold
+if [[ -f "$BENTO_HOME/lib/palette.sh" ]]; then
+    # shellcheck source=lib/palette.sh
+    source "$BENTO_HOME/lib/palette.sh"
+else
+    # First run — palette.sh isn't on disk yet. Inline the values.
+    BENTO_ANSI_SALMON=$'\033[38;2;255;107;107m'
+    BENTO_ANSI_WASABI=$'\033[38;2;6;214;160m'
+    BENTO_ANSI_MUTED=$'\033[38;2;120;120;120m'
+    BENTO_ANSI_BOLD=$'\033[1m'
+    BENTO_ANSI_RESET=$'\033[0m'
+fi
+_S=$BENTO_ANSI_SALMON _W=$BENTO_ANSI_WASABI _M=$BENTO_ANSI_MUTED
+_B=$BENTO_ANSI_BOLD _N=$BENTO_ANSI_RESET
 
 # Confirms the right command landed before any apt-get noise.
 prebanner() {

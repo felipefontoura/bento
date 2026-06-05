@@ -14,15 +14,15 @@ readonly BENTO_CHARM_REPO="deb [signed-by=/etc/apt/keyrings/charm.gpg] https://r
 BENTO_DEPS_LOG="${BENTO_DEPS_LOG:-/tmp/bento-deps.log}"
 : > "$BENTO_DEPS_LOG" || true
 
-# Local palette in case boot.sh's readonly globals were not exported.
-_dS=$'\033[38;2;255;107;107m'   # salmon
-_dW=$'\033[38;2;6;214;160m'     # wasabi
-_dM=$'\033[38;2;120;120;120m'   # muted
-_dN=$'\033[0m'
+# Palette comes from lib/palette.sh — single source of truth shared
+# with boot.sh. The guard inside palette.sh makes the second source a
+# no-op so we can re-source freely.
+# shellcheck source=lib/palette.sh
+source "$(dirname "${BASH_SOURCE[0]}")/palette.sh"
 
-_d_step()  { printf '  %s⏵%s %s' "$_dM" "$_dN" "$1"; }
-_d_ok()    { printf '\r\033[K  %s✓%s %s\n' "$_dW" "$_dN" "$1"; }
-_d_fail()  { printf '\r\033[K  %s✗%s %s\n' "$_dS" "$_dN" "$1" >&2; }
+_d_step()  { printf '  %s⏵%s %s' "$BENTO_ANSI_MUTED"  "$BENTO_ANSI_RESET" "$1"; }
+_d_ok()    { printf '\r\033[K  %s✓%s %s\n' "$BENTO_ANSI_WASABI" "$BENTO_ANSI_RESET" "$1"; }
+_d_fail()  { printf '\r\033[K  %s✗%s %s\n' "$BENTO_ANSI_SALMON" "$BENTO_ANSI_RESET" "$1" >&2; }
 
 deps_check_apt() {
     # boot.sh already validated this, but keep as a cheap safety net.
