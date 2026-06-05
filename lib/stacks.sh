@@ -291,10 +291,21 @@ stacks_deploy() {
         ui_info "Running post-deploy script: $install_script"
         local pg_pass
         pg_pass="$(state_get '.envs["postgres"]["POSTGRES_PASSWORD"]')"
-        BENTO_REPO_ROOT="$BENTO_REPO_ROOT" \
-        BENTO_STACK_KEY="$stack_key" \
-        BENTO_STATE_FILE="$BENTO_STATE_FILE" \
-        POSTGRES_PASSWORD="$pg_pass" \
+
+        # Export every env resolved for THIS stack so install.sh can read
+        # CHATWOOT_HOST, *_SECRET_KEY_BASE, etc. without cracking open
+        # state.json itself. POSTGRES_PASSWORD is always available.
+        local stack_env_assigns=()
+        while IFS= read -r kv; do
+            [[ -n "$kv" ]] && stack_env_assigns+=("$kv")
+        done < <(jq -r ".envs[\"$stack_key\"] // {} | to_entries[] | \"\(.key)=\(.value)\"" "$BENTO_STATE_FILE")
+
+        env \
+            BENTO_REPO_ROOT="$BENTO_REPO_ROOT" \
+            BENTO_STACK_KEY="$stack_key" \
+            BENTO_STATE_FILE="$BENTO_STATE_FILE" \
+            POSTGRES_PASSWORD="$pg_pass" \
+            "${stack_env_assigns[@]}" \
             "${BENTO_REPO_ROOT}/${install_script}"
     fi
 

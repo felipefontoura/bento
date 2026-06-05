@@ -94,16 +94,12 @@ services:
   typebot_builder:
     <<: *typebot-common
     image: baptistearno/typebot-builder:latest
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
+    # No Swarm healthcheck on purpose. Typebot's Next.js builder routes /
+    # through middleware that redirects to /signin and the SSR compile of
+    # that signin page can take longer than the 10s healthcheck timeout
+    # on small VPS — Swarm then SIGKILLs the (perfectly healthy) container
+    # before it ever serves a request. Traefik's backend probe does the
+    # right thing externally; we don't need a second one.
     deploy:
       <<: *typebot-deploy
       resources:
@@ -128,16 +124,7 @@ services:
       - |
         until wget -qO- http://typebot_builder:3000 2>/dev/null; do sleep 3; done
         exec ./viewer-entrypoint.sh
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:3000/api/healthz >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
+    # Healthcheck intentionally omitted — see typebot_builder above.
     deploy:
       <<: *typebot-deploy
       resources:
