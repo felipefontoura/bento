@@ -20,9 +20,18 @@ source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 volume_name="openclaw_openclaw-config"
 
 echo "Writing OpenAI-compat config to volume $volume_name…"
+# Three things happen in this one-shot container:
+#   1. Drop the 5-line JSON5 that enables /v1/chat/completions AND sets
+#      gateway.mode=local (openclaw refuses to boot when mode is absent).
+#   2. Create the logs/ subdir openclaw writes to on boot — otherwise the
+#      gateway logs EACCES on every start.
+#   3. chown the whole tree to uid/gid 1000 (the upstream `node` user),
+#      because Swarm's default mount is root-owned and openclaw drops
+#      privileges before writing.
 sudo docker run --rm -v "$volume_name:/cfg" alpine sh -c 'cat > /cfg/openclaw.json <<EOF
 {
   gateway: {
+    mode: "local",
     http: {
       endpoints: {
         chatCompletions: { enabled: true },
@@ -30,7 +39,9 @@ sudo docker run --rm -v "$volume_name:/cfg" alpine sh -c 'cat > /cfg/openclaw.js
     },
   },
 }
-EOF'
+EOF
+mkdir -p /cfg/logs
+chown -R 1000:1000 /cfg'
 
 # Recreate the running task so the gateway picks up the new config.
 # `--force` re-runs the service-update lifecycle even when nothing in the
