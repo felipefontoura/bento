@@ -122,7 +122,13 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - |
-        until wget -qO- http://typebot_builder:3000 2>/dev/null; do sleep 3; done
+        # Wait for typebot_builder to finish Prisma migrations before we
+        # start the viewer (the schema is shared). The typebot image is
+        # distroless-ish — no wget, no curl, not even nc — but Node IS
+        # there, so we use it to probe.
+        until node -e "require('http').get('http://typebot_builder:3000',r=>process.exit(0)).on('error',()=>process.exit(1))" 2>/dev/null; do
+          sleep 3
+        done
         exec ./viewer-entrypoint.sh
     # Healthcheck intentionally omitted — see typebot_builder above.
     deploy:
