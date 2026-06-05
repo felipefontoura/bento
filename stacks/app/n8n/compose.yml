@@ -251,6 +251,11 @@ x-n8n-common: &n8n-common
       delay: 30s
       order: start-first
       failure_action: rollback
+    restart_policy:
+      condition: any
+      delay: 10s
+      max_attempts: 5
+      window: 120s
 
 services:
   n8n_editor:

@@ -25,6 +25,18 @@ services:
       placement:
         constraints:
           - node.role == manager
+      # Stateful (appendonly file): stop-first prevents the new task
+      # from binding to /data while the old one still has it open.
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 120s
       resources:
         limits:
           cpus: "0.5"

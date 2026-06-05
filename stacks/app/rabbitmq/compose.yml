@@ -48,6 +48,18 @@ services:
       placement:
         constraints:
           - node.role == manager
+      # Stateful: avoid running two rabbitmq tasks against the same
+      # volume at the same time during a rolling update.
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 120s
       resources:
         limits:
           cpus: "1"
