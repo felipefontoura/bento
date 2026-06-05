@@ -80,9 +80,12 @@ deps_install_gum() {
     fi
 }
 
-# Fallback: download the gum binary directly from a GitHub release.
+# Fallback: download the gum binary directly from a GitHub release and
+# verify it against the SHA256SUMS file the release publishes alongside.
+# Without that check we'd be `sudo install`-ing whatever a transparent
+# proxy or compromised CDN handed us.
 deps_install_gum_binary() {
-    local arch tmpdir url
+    local arch tmpdir tar_url sums_url tar_name
     case "$(uname -m)" in
         x86_64)  arch="x86_64" ;;
         aarch64) arch="arm64" ;;
@@ -91,9 +94,41 @@ deps_install_gum_binary() {
             return 1 ;;
     esac
     tmpdir=$(mktemp -d)
-    url="https://github.com/charmbracelet/gum/releases/latest/download/gum_Linux_${arch}.tar.gz"
-    curl -fsSL "$url" -o "$tmpdir/gum.tar.gz" 2>>"$BENTO_DEPS_LOG" || return 1
-    tar -xzf "$tmpdir/gum.tar.gz" -C "$tmpdir" 2>>"$BENTO_DEPS_LOG" || return 1
+    tar_name="gum_Linux_${arch}.tar.gz"
+    tar_url="https://github.com/charmbracelet/gum/releases/latest/download/${tar_name}"
+    sums_url="https://github.com/charmbracelet/gum/releases/latest/download/checksums.txt"
+
+    if ! curl -fsSL "$tar_url" -o "$tmpdir/$tar_name" 2>>"$BENTO_DEPS_LOG"; then
+        _d_fail "Could not download gum tarball"
+        rm -rf "$tmpdir"
+        return 1
+    fi
+
+    if curl -fsSL "$sums_url" -o "$tmpdir/SHA256SUMS" 2>>"$BENTO_DEPS_LOG"; then
+        local expected actual
+        expected=$(awk -v n="$tar_name" '$2 ~ n {print $1; exit}' "$tmpdir/SHA256SUMS")
+        actual=$(sha256sum "$tmpdir/$tar_name" | awk '{print $1}')
+        if [[ -z "$expected" ]]; then
+            _d_fail "checksums.txt did not list $tar_name"
+            rm -rf "$tmpdir"
+            return 1
+        fi
+        if [[ "$expected" != "$actual" ]]; then
+            _d_fail "SHA-256 mismatch on $tar_name (expected $expected, got $actual)"
+            rm -rf "$tmpdir"
+            return 1
+        fi
+    else
+        # No checksums file — refuse to silently install untrusted bytes.
+        _d_fail "Could not fetch checksums.txt; refusing to install unverified gum"
+        rm -rf "$tmpdir"
+        return 1
+    fi
+
+    tar -xzf "$tmpdir/$tar_name" -C "$tmpdir" 2>>"$BENTO_DEPS_LOG" || {
+        rm -rf "$tmpdir"
+        return 1
+    }
     sudo install -m 0755 "$tmpdir"/gum_*/gum /usr/local/bin/gum
     rm -rf "$tmpdir"
 }
