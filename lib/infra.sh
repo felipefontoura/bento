@@ -173,8 +173,10 @@ infra_ensure_dns() {
             sleep 5
             elapsed=$((elapsed + 5))
         done
-        ui_warn "portainer.${base} did not resolve to ${advertise} within 120s — proceeding (Let's Encrypt may fail)"
-        return 0
+        ui_error "portainer.${base} did not resolve to ${advertise} within 120s."
+        ui_error "Let's Encrypt would HTTP-01 fail next. Aborting Step 2."
+        ui_error "Fix your DNS A record for *.${base} → ${advertise} and re-run."
+        return 1
     fi
 
     ui_section "DNS check"
