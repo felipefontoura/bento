@@ -2,8 +2,17 @@ x-chatwoot-common: &chatwoot-common
   image: chatwoot/chatwoot:latest
   volumes:
     - chatwoot_data:/app/storage
+    # Cache installed gems across restarts so the rails.sh entrypoint's
+    # `bundle install` is a no-op after the first boot (turns a ~5min
+    # cold start into ~30s).
+    - chatwoot_gems:/gems
   networks:
     - network_public
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
   environment:
     # =============================================================================
     # Core Application
@@ -240,6 +249,8 @@ services:
 
 volumes:
   chatwoot_data:
+    driver: local
+  chatwoot_gems:
     driver: local
 
 networks:

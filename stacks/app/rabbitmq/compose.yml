@@ -5,6 +5,11 @@ services:
     command: rabbitmq-server
     networks:
       - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # AMQP port (5672) is overlay-only — apps connect as host `rabbitmq`.
     # The management UI (15672) is reached over HTTPS via Traefik.
     hostname: rabbitmq

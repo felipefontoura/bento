@@ -3,6 +3,11 @@ services:
     image: evoapicloud/evolution-api:latest
     networks:
       - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - evolution_instances:/evolution/instances
       - evolution_store:/evolution/store

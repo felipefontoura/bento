@@ -16,6 +16,11 @@ services:
     # the world (UFW alone won't save you here).
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       # NOTE: do NOT quote this value. The postgres entrypoint passes

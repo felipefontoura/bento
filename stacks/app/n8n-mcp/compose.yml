@@ -3,6 +3,11 @@ services:
     image: ghcr.io/czlonkowski/n8n-mcp:latest
     networks:
       - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - n8n-mcp-data:/app/data
     environment:

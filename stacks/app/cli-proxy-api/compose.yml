@@ -19,6 +19,11 @@ services:
         exec ./CLIProxyAPI --config /CLIProxyAPI/config/config.yaml
     networks:
       - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - cli_proxy_api_config:/CLIProxyAPI/config
       - cli_proxy_api_auth:/root/.cli-proxy-api

@@ -8,6 +8,11 @@ services:
     # SSH-tunnel from your laptop for ad-hoc redis-cli access in dev.
     volumes:
       - redis-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

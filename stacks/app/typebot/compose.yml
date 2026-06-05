@@ -1,6 +1,11 @@
 x-typebot-common: &typebot-common
   networks:
     - network_public
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
   environment:
     # Cap V8's heap below the container's memory limit so Node aborts
     # cleanly on its own bookkeeping instead of being SIGABRT'd by the

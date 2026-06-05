@@ -4,6 +4,11 @@ services:
     entrypoint: ["/app/entry.sh"]
     networks:
       - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       # =============================================================================
       # Public URLs / API

@@ -10,6 +10,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # Publish 9000 on the host so bento's local wait_ready + admin init can
     # reach Portainer without going through Traefik / TLS. UFW should block
     # 9000 from the world in production; in a typical Hetzner Cloud Firewall
