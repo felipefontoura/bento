@@ -98,30 +98,18 @@ bootstrap_prompt_once() {
     ui_subtle "These values seed every stack you'll deploy. They're written to ~/.config/bento/state.json."
 
     local base_domain admin_email advertise_addr detected
-    while true; do
-        base_domain="$(ui_input "Base domain (e.g. mydomain.com)" "mydomain.com")"
-        if [[ "$base_domain" =~ $DOMAIN_REGEX ]]; then
-            break
-        fi
-        ui_warn "That doesn't look like a domain. Try again."
-    done
+    base_domain=$(ui_input_validated \
+        "Base domain (e.g. mydomain.com)" "mydomain.com" \
+        "$DOMAIN_REGEX" "That doesn't look like a domain. Try again.")
 
-    while true; do
-        admin_email="$(ui_input "Admin email (Let's Encrypt + alerts)" "admin@${base_domain}")"
-        if [[ "$admin_email" =~ $EMAIL_REGEX ]]; then
-            break
-        fi
-        ui_warn "That doesn't look like an email. Try again."
-    done
+    admin_email=$(ui_input_validated \
+        "Admin email (Let's Encrypt + alerts)" "admin@${base_domain}" \
+        "$EMAIL_REGEX" "That doesn't look like an email. Try again.")
 
     detected="$(curl -fsSL --max-time 5 https://ifconfig.me 2>/dev/null || true)"
-    while true; do
-        advertise_addr="$(ui_input "VPS public IP" "$detected" "$detected")"
-        if [[ "$advertise_addr" =~ $IP_REGEX ]]; then
-            break
-        fi
-        ui_warn "That doesn't look like an IPv4 address. Try again."
-    done
+    advertise_addr=$(ui_input_validated \
+        "VPS public IP" "$detected" \
+        "$IP_REGEX" "That doesn't look like an IPv4 address. Try again.")
 
     ui_format_md <<EOF
 **About to use:**

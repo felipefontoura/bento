@@ -121,6 +121,24 @@ ui_input() {
         --width=60
 }
 
+# Re-prompt until the answer matches <regex>, then echo it.
+# The 4th argument is the error message shown on a bad answer.
+ui_input_validated() {
+    local prompt="$1"
+    local default="$2"
+    local regex="$3"
+    local error="$4"
+    local answer
+    while true; do
+        answer="$(ui_input "$prompt" "$default" "$default")"
+        if [[ "$answer" =~ $regex ]]; then
+            printf '%s' "$answer"
+            return 0
+        fi
+        ui_warn "$error"
+    done
+}
+
 ui_password() {
     local prompt="$1"
     gum input \
