@@ -45,9 +45,6 @@ BENTO_UNATTENDED="${BENTO_UNATTENDED:-0}"
 # -----------------------------------------------------------------------------
 # Bootstrap inicial (single prompt screen with BASE_DOMAIN + ADMIN_EMAIL + IP)
 # -----------------------------------------------------------------------------
-DOMAIN_REGEX='^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$'
-EMAIL_REGEX='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
-IP_REGEX='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
 
 bootstrap_from_env() {
     local d="${BENTO_BASE_DOMAIN:-}"
@@ -96,6 +93,11 @@ bootstrap_prompt_once() {
 
     ui_section "First-time setup"
     ui_subtle "These values seed every stack you'll deploy. They're written to ~/.config/bento/state.json."
+
+    # Scoped here — used only by this function.
+    local DOMAIN_REGEX='^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$'
+    local EMAIL_REGEX='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+    local IP_REGEX='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
 
     local base_domain admin_email advertise_addr detected
     base_domain=$(ui_input_validated \
@@ -271,7 +273,7 @@ settings_run() {
             state_set '.bootstrap.admin_email' "$e"
             ;;
         "Show state file path")
-            ui_info "$(state_path)"
+            ui_info "$BENTO_STATE_FILE"
             ui_pause
             ;;
     esac

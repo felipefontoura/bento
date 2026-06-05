@@ -94,6 +94,3 @@ state_snapshot() {
     chmod 600 "${BENTO_STATE_HISTORY_DIR}/state-${ts}.json"
 }
 
-state_path() {
-    printf '%s' "$BENTO_STATE_FILE"
-}

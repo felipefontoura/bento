@@ -21,16 +21,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/portainer.sh"
 : "${BENTO_REPO_ROOT:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 : "${BENTO_REPO_URL:=https://github.com/felipefontoura/bento}"
 # BENTO_REPO_REF tells Portainer which branch to clone when creating
-# stacks. Default to the local bento clone's branch so Portainer stays in
-# sync with whatever the installer is running from.
-if [[ -z "${BENTO_REPO_REF:-}" ]]; then
-    if _bento_branch=$(git -C "$BENTO_REPO_ROOT" symbolic-ref --short HEAD 2>/dev/null) \
-       && [[ -n "$_bento_branch" ]]; then
-        BENTO_REPO_REF="refs/heads/${_bento_branch}"
-    else
-        BENTO_REPO_REF="refs/heads/main"
-    fi
-fi
+# stacks. Default to the local bento clone's branch so Portainer stays
+# in sync with whatever the installer is running from; fall back to main.
+: "${BENTO_REPO_REF:=refs/heads/$(git -C "$BENTO_REPO_ROOT" symbolic-ref --short HEAD 2>/dev/null || echo main)}"
 
 # -----------------------------------------------------------------------------
 # Manifest discovery

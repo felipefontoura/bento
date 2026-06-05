@@ -14,8 +14,13 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # --- Constants ---
-MIN_RAM_MB=1024
-MIN_DISK_GB=20
+# Prefixed with BENTO_HARDENING_* so they can't collide with anything
+# the user already exported. MIN_DISK_GB used to be 20 — that bounced
+# users on Hetzner CX11 (25 GB) when the docker image cache was warm.
+# 5 GB is enough to install all bento dependencies; the optional apps
+# inflate it from there.
+BENTO_HARDENING_MIN_RAM_MB="${BENTO_HARDENING_MIN_RAM_MB:-1024}"
+BENTO_HARDENING_MIN_DISK_GB="${BENTO_HARDENING_MIN_DISK_GB:-5}"
 BENTO_REBOOT_SENTINEL=/var/lib/bento/reboot-required
 
 # --- Aesthetics ---
@@ -69,13 +74,13 @@ check_resources() {
   local total_ram_mb=$(free -m | awk '/^Mem:/{print $2}')
   local total_disk_gb=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
 
-  if ((total_ram_mb < MIN_RAM_MB)); then
-    print_error "Insufficient RAM. Required: ${MIN_RAM_MB}MB, Found: ${total_ram_mb}MB"
+  if ((total_ram_mb < BENTO_HARDENING_MIN_RAM_MB)); then
+    print_error "Insufficient RAM. Required: ${BENTO_HARDENING_MIN_RAM_MB}MB, Found: ${total_ram_mb}MB"
     exit 1
   fi
 
-  if ((total_disk_gb < MIN_DISK_GB)); then
-    print_error "Insufficient disk space. Required: ${MIN_DISK_GB}GB, Found: ${total_disk_gb}GB"
+  if ((total_disk_gb < BENTO_HARDENING_MIN_DISK_GB)); then
+    print_error "Insufficient disk space. Required: ${BENTO_HARDENING_MIN_DISK_GB}GB, Found: ${total_disk_gb}GB"
     exit 1
   fi
 }
