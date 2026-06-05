@@ -54,18 +54,16 @@ state_get() {
 }
 
 state_set() {
+    # Always stores the value as a JSON string. If a caller genuinely
+    # needs to persist a number, boolean, object, or array, it should
+    # use state_set_json instead — otherwise a literal "true" coming from
+    # the user gets silently coerced into a boolean and breaks any code
+    # that compares it to the string "true".
     local path="$1"
     local value="$2"
     local tmp
     tmp=$(mktemp "${BENTO_STATE_FILE}.XXXXXX")
-
-    if [[ "$value" =~ ^(true|false|null)$ || "$value" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-        # numeric or boolean — pass raw
-        jq "${path} = ${value}" "$BENTO_STATE_FILE" > "$tmp"
-    else
-        # string — quote
-        jq --arg v "$value" "${path} = \$v" "$BENTO_STATE_FILE" > "$tmp"
-    fi
+    jq --arg v "$value" "${path} = \$v" "$BENTO_STATE_FILE" > "$tmp"
     mv "$tmp" "$BENTO_STATE_FILE"
     chmod 600 "$BENTO_STATE_FILE"
 }
