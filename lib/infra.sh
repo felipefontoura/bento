@@ -112,7 +112,10 @@ infra_init_portainer_admin() {
     fi
 
     local password
-    password=$(openssl rand -base64 24 | tr -d '\n=' | head -c 32)
+    # hex 16 → 32 chars, only [0-9a-f] — no quoting hazards, no length
+    # surprises. The base64|tr|head trick we used to use produced
+    # variable-length output and bit us in unrelated stacks.
+    password=$(openssl rand -hex 16)
     if ! portainer_init_admin "admin" "$password"; then
         ui_error "Portainer admin init failed."
         return 1
