@@ -81,8 +81,10 @@ Each stack is a directory at `stacks/<category>/<key>/` with `compose.yml`, `man
 | app | [Chatwoot](stacks/app/chatwoot) | Customer support platform |
 | app | [CLI Proxy API](stacks/app/cli-proxy-api) | OpenAI-compatible proxy in front of CLI providers |
 | app | [Evolution API](stacks/app/evolution-api) | WhatsApp gateway |
+| app | [Hermes](stacks/app/hermes) | OpenAI-compatible AI agent gateway (NousResearch, overlay-only) |
 | app | [n8n](stacks/app/n8n) | Workflow automation |
 | app | [n8n MCP](stacks/app/n8n-mcp) | MCP server for n8n |
+| app | [Openclaw](stacks/app/openclaw) | Chat-channel → LLM gateway with OpenAI-compatible API (overlay-only) |
 | app | [Paperclip](stacks/app/paperclip) | AI agent orchestration (Claude Code, Codex, OpenCode) |
 | app | [Plunk](stacks/app/plunk) | Open-source email platform |
 | app | [RabbitMQ](stacks/app/rabbitmq) | Message broker |

@@ -1,0 +1,9 @@
+{
+  "name": "openclaw",
+  "category": "app",
+  "description": "Chat-channel → LLM gateway with OpenAI-compatible /v1/chat/completions enabled (overlay-only)",
+  "depends_on": [],
+  "env": [
+    { "name": "OPENCLAW_GATEWAY_TOKEN", "generate": "openssl rand -hex 32", "hide": true }
+  ]
+}
