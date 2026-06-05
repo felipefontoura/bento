@@ -192,16 +192,11 @@ services:
     <<: *chatwoot-common
     entrypoint: docker/entrypoints/rails.sh
     command: bundle exec rails s -p 3000 -b 0.0.0.0
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:3000/health >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+    # No Swarm healthcheck on purpose. The rails.sh entrypoint runs
+    # `bundle install` + `bundle check` on every boot and Rails itself
+    # then needs ~30-90 s to come up on a small VPS — Swarm's probes
+    # were SIGKILLing healthy containers mid-boot. Traefik's external
+    # backend probe on /health handles the user-facing health check.
     deploy:
       <<: *chatwoot-deploy
       resources:
