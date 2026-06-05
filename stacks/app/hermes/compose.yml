@@ -27,6 +27,14 @@
 services:
   hermes:
     image: nousresearch/hermes-agent:latest
+    # The image's main-wrapper.sh, when invoked with no args, runs
+    # `hermes` (the TUI). In a non-TTY container that immediately reads
+    # EOF on stdin and exits with "Goodbye!" — Swarm sees an exit-0,
+    # restarts in a loop, and the API never serves a request.
+    # `gateway run` is the canonical "start the supervised long-lived
+    # gateway runtime" subcommand; combined with API_SERVER_ENABLED=true
+    # below it exposes the OpenAI-compatible /v1/* endpoints on 8642.
+    command: ["gateway", "run"]
     networks:
       - network_public
     logging:
