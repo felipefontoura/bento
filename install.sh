@@ -470,6 +470,42 @@ unattended_main() {
     ui_success "Unattended install complete"
 }
 
+# Depth-first deploy. <seen_arr> and <failed_arr> are nameref array
+# names so the recursion can accumulate state without globals. Lifted
+# out of unattended_step3 so it shows up in `grep` and `declare -f`.
+_deploy_with_deps() {
+    local -n _seen=$1
+    local -n _failed=$2
+    local key="$3"
+
+    local s
+    for s in "${_seen[@]}"; do
+        [[ "$s" == "$key" ]] && return 0
+    done
+
+    local manifest_path
+    manifest_path=$(stacks_manifest_for_key "$key")
+    if [[ -z "$manifest_path" ]]; then
+        ui_warn "Unknown stack key: $key — skipping"
+        _failed+=("$key (unknown)")
+        return 0
+    fi
+
+    local dep
+    while IFS= read -r dep; do
+        [[ -z "$dep" ]] && continue
+        _deploy_with_deps "$1" "$2" "$dep"
+    done < <(jq -r '.depends_on[]?' "$manifest_path")
+
+    ui_section "Deploying $key"
+    if stacks_deploy "$manifest_path"; then
+        _seen+=("$key")
+    else
+        ui_error "Deploy of $key failed; continuing"
+        _failed+=("$key")
+    fi
+}
+
 unattended_step3() {
     local apps_csv="${BENTO_APPS}"
     stacks_memory_budget_check "$apps_csv"
@@ -484,40 +520,12 @@ unattended_step3() {
         [[ -n "$_existing" ]] && seen+=("$_existing")
     done < <(jq -r '.stacks // {} | to_entries[] | select(.value.stack_id) | .key' \
         "$BENTO_STATE_FILE" 2>/dev/null)
-    deploy_with_deps() {
-        local key="$1"
-        # Skip if already in seen
-        local s
-        for s in "${seen[@]}"; do
-            [[ "$s" == "$key" ]] && return 0
-        done
-        local manifest_path
-        manifest_path=$(stacks_manifest_for_key "$key")
-        if [[ -z "$manifest_path" ]]; then
-            ui_warn "Unknown stack key: $key — skipping"
-            failed+=("$key (unknown)")
-            return 0
-        fi
-        # Resolve declared deps first
-        local dep
-        while IFS= read -r dep; do
-            [[ -z "$dep" ]] && continue
-            deploy_with_deps "$dep"
-        done < <(jq -r '.depends_on[]?' "$manifest_path")
-        ui_section "Deploying $key"
-        if stacks_deploy "$manifest_path"; then
-            seen+=("$key")
-        else
-            ui_error "Deploy of $key failed; continuing"
-            failed+=("$key")
-        fi
-    }
 
     local app
     for app in "${apps[@]}"; do
         app="${app// /}"
         [[ -z "$app" ]] && continue
-        deploy_with_deps "$app"
+        _deploy_with_deps seen failed "$app"
     done
 
     # Surface failures upstream so unattended_main can fail loudly and
