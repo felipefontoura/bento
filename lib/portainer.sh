@@ -131,6 +131,27 @@ portainer_invalidate_token() {
     unset BENTO_PORTAINER_JWT
 }
 
+# Run a Portainer API call and, if it returns 401/403, drop the cached
+# JWT and retry exactly once. Avoids a class of "rate-limit recovery"
+# bugs where the JWT survives in memory but Portainer no longer accepts
+# it. Echoes whatever the inner callback echoes; returns its exit code.
+#
+# Usage:
+#   portainer_with_token_retry _portainer_do_get /api/endpoints
+portainer_with_token_retry() {
+    local fn="$1"; shift
+    local out rc
+    out=$("$fn" "$@")
+    rc=$?
+    if (( rc != 0 )) && [[ "${BENTO_LAST_PORTAINER_HTTP_CODE:-}" =~ ^(401|403)$ ]]; then
+        portainer_invalidate_token
+        out=$("$fn" "$@")
+        rc=$?
+    fi
+    printf '%s' "$out"
+    return $rc
+}
+
 # Get the default endpoint ID (usually 1 in a single-node Swarm).
 portainer_endpoint_id() {
     local base auth
@@ -190,19 +211,37 @@ portainer_create_stack_from_git() {
             env: $env
         }')
 
-    http_code=$(portainer_curl -o /tmp/bento-portainer-stack.json -w '%{http_code}' \
+    local resp
+    resp=$(mktemp)
+    # shellcheck disable=SC2064
+    trap "rm -f '$resp'" RETURN
+
+    http_code=$(portainer_curl -o "$resp" -w '%{http_code}' \
         -X POST "${base}/api/stacks/create/swarm/repository?endpointId=${endpoint_id}" \
         -H "$auth" \
         -H 'Content-Type: application/json' \
         -d "$body")
+    export BENTO_LAST_PORTAINER_HTTP_CODE="$http_code"
+
+    # Stale JWT after rate-limit recovery: drop the token and retry once.
+    if [[ "$http_code" =~ ^(401|403)$ ]]; then
+        portainer_invalidate_token
+        auth="$(portainer_auth_header)"
+        http_code=$(portainer_curl -o "$resp" -w '%{http_code}' \
+            -X POST "${base}/api/stacks/create/swarm/repository?endpointId=${endpoint_id}" \
+            -H "$auth" \
+            -H 'Content-Type: application/json' \
+            -d "$body")
+        export BENTO_LAST_PORTAINER_HTTP_CODE="$http_code"
+    fi
 
     if [[ "$http_code" != "200" ]]; then
         echo "Portainer stack create failed (HTTP $http_code):" >&2
-        cat /tmp/bento-portainer-stack.json >&2 || true
+        cat "$resp" >&2 || true
         return 1
     fi
 
-    jq -r '.Id' /tmp/bento-portainer-stack.json
+    jq -r '.Id' "$resp"
 }
 
 # List all stacks.
@@ -234,15 +273,32 @@ portainer_redeploy_stack() {
     body=$(jq -n --argjson env "$env_json" \
         '{env: $env, prune: false, pullImage: true}')
 
-    http_code=$(portainer_curl -o /tmp/bento-portainer-redeploy.json -w '%{http_code}' \
+    local resp
+    resp=$(mktemp)
+    # shellcheck disable=SC2064
+    trap "rm -f '$resp'" RETURN
+
+    http_code=$(portainer_curl -o "$resp" -w '%{http_code}' \
         -X PUT "${base}/api/stacks/${stack_id}/git/redeploy?endpointId=${endpoint_id}" \
         -H "$auth" \
         -H 'Content-Type: application/json' \
         -d "$body")
+    export BENTO_LAST_PORTAINER_HTTP_CODE="$http_code"
+
+    if [[ "$http_code" =~ ^(401|403)$ ]]; then
+        portainer_invalidate_token
+        auth="$(portainer_auth_header)"
+        http_code=$(portainer_curl -o "$resp" -w '%{http_code}' \
+            -X PUT "${base}/api/stacks/${stack_id}/git/redeploy?endpointId=${endpoint_id}" \
+            -H "$auth" \
+            -H 'Content-Type: application/json' \
+            -d "$body")
+        export BENTO_LAST_PORTAINER_HTTP_CODE="$http_code"
+    fi
 
     if [[ "$http_code" != "200" ]]; then
         echo "Portainer redeploy failed (HTTP $http_code):" >&2
-        cat /tmp/bento-portainer-redeploy.json >&2 || true
+        cat "$resp" >&2 || true
         return 1
     fi
 }
