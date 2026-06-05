@@ -114,12 +114,19 @@ infra_deploy_traefik_and_portainer() {
 
 # Wait for Portainer to be reachable, then initialize the admin user.
 infra_init_portainer_admin() {
-    ui_spin "Waiting for Portainer to come up…" \
-        bash -c 'source "$1" && portainer_wait_ready "" 240' _ \
-            "${BENTO_REPO_ROOT}/lib/portainer.sh"
+    # portainer_wait_ready is already sourced — just call it. The spin
+    # animation is purely visual; the work is the same as a plain call.
+    if ! ui_spin "Waiting for Portainer to come up…" \
+            portainer_wait_ready "" 240; then
+        ui_error "Portainer did not become ready within 240s."
+        return 1
+    fi
 
+    # Belt-and-suspenders: confirm one more time after the spinner
+    # returns. gum spin sometimes exits with rc=0 even when the inner
+    # command failed; this re-check makes the failure mode explicit.
     if ! portainer_wait_ready "" 30; then
-        ui_error "Portainer did not become ready in time."
+        ui_error "Portainer is not responding on $(portainer_local_url)."
         return 1
     fi
 
