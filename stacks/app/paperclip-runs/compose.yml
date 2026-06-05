@@ -1,0 +1,93 @@
+# =============================================================================
+# paperclip-runs — async LLM bridge between Paperclip and Hermes/Openclaw
+# =============================================================================
+#
+# Two long-lived processes share one image (ghcr.io/felipefontoura/paperclip-runs).
+# The first arg picks the role:
+#
+#   - api      Express server, listens on :8787 for Paperclip's http adapter.
+#   - worker   BullMQ consumer + Paperclip wakeup driver on :8788 (health).
+#
+# OVERLAY-ONLY. No Traefik labels, no host port. Paperclip and the bridge
+# both live on network_public; the adapter URL is
+# http://paperclip_runs_api:8787/paperclip/execute.
+#
+# Picking a provider:
+#   - PROVIDER=hermes   (default)  → PROVIDER_BASE_URL=http://hermes:8642
+#   - PROVIDER=openclaw            → PROVIDER_BASE_URL=http://openclaw:18789
+#                                    + PROVIDER_MODEL=openclaw/default
+#                                    + PROVIDER_API_KEY=${OPENCLAW_GATEWAY_TOKEN}
+#
+# Bento's manifest defaults to the Hermes wiring. To switch to Openclaw at
+# deploy time, set BENTO_ENV_PAPERCLIP_RUNS_PROVIDER=openclaw and friends.
+# =============================================================================
+
+x-paperclip-runs-common: &paperclip-runs-common
+  image: ghcr.io/felipefontoura/paperclip-runs:latest
+  networks:
+    - network_public
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  environment:
+    - NODE_ENV=production
+    - BRIDGE_TOKEN=${BRIDGE_TOKEN}
+    - REDIS_URL=redis://redis:6379/5
+    - PROVIDER=${PROVIDER:-hermes}
+    - PROVIDER_BASE_URL=${PROVIDER_BASE_URL:-http://hermes:8642}
+    - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+    - PROVIDER_MODEL=${PROVIDER_MODEL:-hermes-agent}
+    - PAPERCLIP_API_URL=${PAPERCLIP_API_URL:-http://paperclip:3100}
+    - QUEUE_NAME=paperclip-runs
+    - WORKER_CONCURRENCY=1
+    - JOB_TIMEOUT_MS=1800000
+    - JOB_ATTEMPTS=2
+    - JOB_BACKOFF_MS=30000
+    - MAX_WAITING_JOBS=20
+    - SESSION_LOCK_TTL_MS=1800000
+    - RESULT_CACHE_TTL_MS=3600000
+    - LOG_LEVEL=info
+
+x-paperclip-runs-deploy: &paperclip-runs-deploy
+  mode: replicated
+  replicas: 1
+  placement:
+    constraints:
+      - node.role == manager
+  update_config:
+    parallelism: 1
+    delay: 30s
+    order: start-first
+    failure_action: rollback
+  restart_policy:
+    condition: any
+    delay: 10s
+    max_attempts: 5
+    window: 120s
+  resources:
+    limits:
+      cpus: "0.5"
+      memory: 512M
+    reservations:
+      cpus: "0.1"
+      memory: 128M
+
+services:
+  paperclip_runs_api:
+    <<: *paperclip-runs-common
+    command: ["api"]
+    deploy:
+      <<: *paperclip-runs-deploy
+
+  paperclip_runs_worker:
+    <<: *paperclip-runs-common
+    command: ["worker"]
+    deploy:
+      <<: *paperclip-runs-deploy
+
+networks:
+  network_public:
+    external: true
+    name: network_public

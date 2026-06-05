@@ -86,6 +86,7 @@ Each stack is a directory at `stacks/<category>/<key>/` with `compose.yml`, `man
 | app | [n8n MCP](stacks/app/n8n-mcp) | MCP server for n8n |
 | app | [Openclaw](stacks/app/openclaw) | Chat-channel → LLM gateway with OpenAI-compatible API (overlay-only) |
 | app | [Paperclip](stacks/app/paperclip) | AI agent orchestration (Claude Code, Codex, OpenCode) |
+| app | [Paperclip runs](stacks/app/paperclip-runs) | Queue-backed bridge: Paperclip http adapter → Hermes/Openclaw with re-wake callbacks (overlay-only) |
 | app | [Plunk](stacks/app/plunk) | Open-source email platform |
 | app | [RabbitMQ](stacks/app/rabbitmq) | Message broker |
 | app | [Typebot](stacks/app/typebot) | Chatbot builder |
