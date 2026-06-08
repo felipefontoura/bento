@@ -146,16 +146,31 @@ _stacks_resolve_env_unattended() {
 }
 
 # Interactive resolver: prompt the user, hide if it's a secret.
-# Returns 1 on "required + empty answer".
+# Returns 1 on "required + empty answer" OR explicit cancel (ESC/Ctrl-C).
 _stacks_resolve_env_interactive() {
     local stack_key="$1" var_name="$2" prompt="$3" default_value="$4"
     local required="$5" hide="$6"
-    local answer prompt_label
+    local answer prompt_label rc=0
     prompt_label="$var_name — $prompt"
     if [[ "$hide" == "true" ]]; then
-        answer="$(ui_password "$prompt_label")"
+        answer="$(ui_password "$prompt_label")" || rc=$?
     else
-        answer="$(ui_input "$prompt_label" "$default_value" "$default_value")"
+        answer="$(ui_input "$prompt_label" "$default_value" "$default_value")" || rc=$?
+    fi
+    # gum exits non-zero when the user hits ESC or Ctrl-C. Without this
+    # check, command substitution swallows the exit code and we'd persist
+    # an empty value — which for hostnames means a Traefik label like
+    # Host(``), so Portainer happily reports the stack as "deployed"
+    # while the route never resolves.
+    if (( rc != 0 )); then
+        ui_error "Cancelled — aborting deploy of $stack_key."
+        return 1
+    fi
+    # Safety net: if the operator wiped a pre-filled default, fall back
+    # to it rather than silently accept empty. Anyone who genuinely
+    # wants an empty value can leave the prompt out of the manifest.
+    if [[ -z "$answer" && -n "$default_value" ]]; then
+        answer="$default_value"
     fi
     if [[ -z "$answer" && "$required" == "true" ]]; then
         ui_error "$var_name is required."
