@@ -163,7 +163,6 @@ bento/
         ├── n8n/{compose.yml, manifest.json, install.sh}
         ├── openclaw/{compose.yml, manifest.json, install.sh}
         ├── paperclip/{compose.yml, manifest.json, install.sh}
-        ├── paperclip-runs/{compose.yml, manifest.json}
         └── …
 ```
 
