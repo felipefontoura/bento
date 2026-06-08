@@ -211,12 +211,12 @@ services:
         exec node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js
     volumes:
       - paperclip-data:/paperclip
-      # Read-only mount of the Hermes Agent install seeded by the `hermes`
-      # stack. Provides /opt/hermes/bin/hermes (a self-contained venv at
-      # /opt/hermes/.venv/) so the bundled hermes_local adapter can spawn
-      # the CLI as a subprocess. The volume is `external` because it's
-      # created and seeded by another stack — see stacks/app/hermes/.
-      - hermes-bin:/opt/hermes:ro
+      # Note: when the optional `hermes` stack is also deployed on this Swarm
+      # it grafts a `/opt/hermes:ro` mount onto this service via
+      # `docker service update --mount-add` (see stacks/app/hermes/install.sh).
+      # We do NOT declare that mount here — keeping paperclip's compose free
+      # of cross-stack volumes so paperclip runs identically on hosts that
+      # don't deploy hermes.
     # Swarm healthcheck omitted — paperclip's boot bundles a Python venv
     # warmup that occasionally exceeds the probe window. The Dockerfile
     # still ships a HEALTHCHECK so `docker run` standalone gets one;
@@ -255,9 +255,3 @@ networks:
 volumes:
   paperclip-data:
     driver: local
-  hermes-bin:
-    external: true
-    # Created and seeded by `stacks/app/hermes/`. The stack name there
-    # composes to `hermes_hermes-bin` under Swarm. Override here so we
-    # don't end up looking for `paperclip_hermes-bin`.
-    name: hermes_hermes-bin

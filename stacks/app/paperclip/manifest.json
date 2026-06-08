@@ -2,7 +2,7 @@
   "name": "paperclip",
   "category": "app",
   "description": "AI agent orchestration (Claude Code / Codex / OpenCode / Hermes via hermes-bin volume)",
-  "depends_on": ["postgres", "hermes"],
+  "depends_on": ["postgres"],
   "env": [
     { "name": "PAPERCLIP_HOST",     "default": "paperclip.${BASE_DOMAIN}", "prompt": "Paperclip hostname" },
     { "name": "BETTER_AUTH_SECRET", "generate": "openssl rand -hex 32",    "hide": true },
