@@ -253,12 +253,41 @@ stacks_build_env_payload() {
 
     local env_entries=()
     local env_spec value var_name
+    local -A seen_vars=()  # for dedup against ambient state.providers
 
     while IFS= read -r env_spec; do
         var_name=$(jq -r '.name' <<< "$env_spec")
         value="$(stacks_resolve_env "$stack_key" "$env_spec")" || return 1
         env_entries+=("$(jq -n --arg n "$var_name" --arg v "$value" '{name: $n, value: $v}')")
+        seen_vars["$var_name"]=1
     done < <(jq -c '.env[]?' "$manifest_path")
+
+    # Ambient AI-provider tokens — see scripts/bento-auth.
+    #
+    # state.providers is a flat object { ENV_VAR_NAME: token, … } that
+    # bento-auth writes after a successful device-flow login (or after
+    # the operator pastes an API key). Inject every entry that the stack
+    # didn't already declare in its own manifest — manifests win on
+    # collision, so a stack that wants a different per-deployment token
+    # for the same env var keeps full control via its normal env prompt.
+    #
+    # We emit each (key, value) verbatim. The key is the env var name
+    # itself (e.g. CLAUDE_CODE_OAUTH_TOKEN, not the abstract "anthropic")
+    # — encapsulating the dual-header gotcha from PR #20 at the state
+    # layer means downstream consumers never have to know which env var
+    # name maps to which auth mode for which provider.
+    #
+    # Stacks that don't use the var simply ignore it. Pollution in
+    # `docker service inspect` of e.g. postgres is the cosmetic cost we
+    # accept to avoid a manifest-side opt-in.
+    if state_has '.providers'; then
+        local provider_var provider_val
+        while IFS=$'\t' read -r provider_var provider_val; do
+            [[ -z "$provider_var" ]] && continue
+            [[ -n "${seen_vars[$provider_var]:-}" ]] && continue
+            env_entries+=("$(jq -n --arg n "$provider_var" --arg v "$provider_val" '{name: $n, value: $v}')")
+        done < <(jq -r '.providers // {} | to_entries[] | "\(.key)\t\(.value)"' "$BENTO_STATE_FILE")
+    fi
 
     # Always add the tracking labels so bento knows which stacks it owns.
     local git_sha

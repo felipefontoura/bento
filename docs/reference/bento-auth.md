@@ -95,9 +95,14 @@ and third-party callers.
    walks the user through the device flow (URL in stdout, code from
    user, persists `~/.claude/.credentials.json` on success).
 4. Read `claudeAiOauth.accessToken` from that JSON.
-5. Update the paperclip swarm service with
-   `--env-add CLAUDE_CODE_OAUTH_TOKEN=<token> --env-rm ANTHROPIC_API_KEY`.
-   The replacement task picks up the new env on next restart (~30s).
+5. **Persist to bento state** at `~/.config/bento/state.json` under
+   `providers.CLAUDE_CODE_OAUTH_TOKEN` and **drop the mutually exclusive
+   `ANTHROPIC_API_KEY`** from state (see the dual-header invariant
+   below).
+6. **Propagate to every running stack** with label `BENTO_MANAGED=true`
+   via `docker service update --env-rm ANTHROPIC_API_KEY --env-add
+   CLAUDE_CODE_OAUTH_TOKEN=<token>`. Future deploys of any stack
+   automatically inherit the token via `stacks_build_env_payload`.
 
 The choice of `CLAUDE_CODE_OAUTH_TOKEN` instead of `ANTHROPIC_API_KEY`
 is load-bearing — see [Why `CLAUDE_CODE_OAUTH_TOKEN` and not `ANTHROPIC_API_KEY`](#why-claude_code_oauth_token-and-not-anthropic_api_key)
@@ -112,10 +117,12 @@ below.
    `opencode` CLI walks the user through the OAuth device flow and
    persists `~/.local/share/opencode/auth.json`.
 4. Read `openai.access` from that JSON.
-5. Update the service env (`--env-add OPENAI_API_KEY=<token>`).
+5. **Persist to bento state** under `providers.OPENAI_API_KEY` and
+   propagate to every `BENTO_MANAGED=true` stack.
 6. Live-register with Hermes by running
    `hermes auth add openai-codex --type api-key --api-key <token> --label chatgpt-plus`
-   inside the current task — no restart needed.
+   inside the current paperclip task — no restart needed for the
+   immediate live registration.
 
 ### `bento-auth list` and `status <provider>`
 
@@ -169,6 +176,51 @@ has to think about it. The `--env-rm ANTHROPIC_API_KEY` in the service
 update guards against a pre-existing leftover.
 
 ---
+
+## Ambient propagation — state.providers
+
+`bento-auth` writes every token to `~/.config/bento/state.json` under
+`providers.<ENV_VAR_NAME>` and propagates it to every running stack
+labeled `BENTO_MANAGED=true`. The key is the env var name itself
+(`CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY`, …) — encapsulating the
+auth-mode invariant at the state layer means downstream stacks just
+read the env var they expect, no provider abstraction in the middle.
+
+```json
+// ~/.config/bento/state.json
+{
+  "providers": {
+    "CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-...",
+    "OPENAI_API_KEY":          "eyJhbGc...",
+    "OPENROUTER_API_KEY":      "sk-or-v1-..."
+  }
+}
+```
+
+When `lib/stacks.sh::stacks_build_env_payload` constructs the env array
+for a new (or re-)deployed stack, it injects every entry in
+`state.providers` that the stack's own manifest didn't already declare.
+Stacks that don't use them simply ignore them.
+
+### Override semantics
+
+- **Manifest envs win on collision.** A stack that declares
+  `OPENAI_API_KEY` in its own `manifest.json` env list (with an operator
+  prompt) gets that value, not the ambient one. The per-stack
+  `BENTO_ENV_<STACK>_<VAR>` override knob already works because
+  manifest envs are resolved AFTER `state.providers` are injected (but
+  the dedup logic keeps the manifest value).
+- **Cosmetic pollution.** Stacks like postgres, redis, traefik will
+  show provider env vars in their `docker service inspect` output. No
+  technical impact — they ignore env vars they don't read.
+
+### Switching OAuth ↔ API key for the same provider
+
+For Anthropic specifically, OAuth (`CLAUDE_CODE_OAUTH_TOKEN`) and API
+key (`ANTHROPIC_API_KEY`) cannot coexist — the dual-header trap below
+makes them mutually exclusive. `bento-auth claude` always drops the
+other variant from state AND removes it from every BENTO_MANAGED stack
+before propagating the new one.
 
 ## Limits of the MVP
 

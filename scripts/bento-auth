@@ -153,15 +153,18 @@ cmd_claude() {
         return 1
     fi
 
-    _info "Wiring CLAUDE_CODE_OAUTH_TOKEN into paperclip service env..."
-    if ! auth_set_claude_oauth_env "$token"; then
-        _err "Failed to update paperclip service env. Token is still valid in the container — re-wire manually with:"
-        printf '  docker service update --env-add CLAUDE_CODE_OAUTH_TOKEN=<token> %s\n' "$AUTH_PAPERCLIP_SERVICE" >&2
-        return 1
-    fi
+    _info "Persisting CLAUDE_CODE_OAUTH_TOKEN to bento state..."
+    auth_state_providers_set "CLAUDE_CODE_OAUTH_TOKEN" "$token"
+    # OAuth and API key for Anthropic are mutually exclusive — they
+    # trigger the dual-header trap if both are set. Drop the other
+    # before propagating the new value.
+    auth_state_providers_unset "ANTHROPIC_API_KEY"
 
-    _ok   "Claude OAuth registered."
-    _info "Test inside the container:"
+    _info "Propagating to every running BENTO_MANAGED stack..."
+    auth_propagate_state_providers "ANTHROPIC_API_KEY"
+
+    _ok   "Claude OAuth registered. Every present and future bento stack will inherit it."
+    _info "Test inside the paperclip container:"
     printf '  docker exec --user node -e HOME=/paperclip %s \\\n' "$(printf '%.12s' "$cid")"
     printf '    /opt/hermes/bin/hermes chat -q "ping" -Q --provider anthropic --model claude-haiku-4-5\n'
     _info "Expect HTTP 400 with 'extra usage' until you load credits at https://claude.ai/settings/usage."
@@ -212,16 +215,20 @@ INFO
         return 1
     fi
 
-    _info "Registering token with Hermes (openai-codex provider)..."
-    if ! auth_set_codex_oauth_env "$token" "chatgpt-plus"; then
-        _warn "Failed to fully wire openai-codex. The token is in the container — register it manually:"
-        printf '  docker exec --user node -e HOME=/paperclip %s \\\n' "$(printf '%.12s' "$cid")" >&2
-        printf '    /opt/hermes/bin/hermes auth add openai-codex --type api-key --api-key <token>\n' >&2
-        return 1
-    fi
+    _info "Persisting OPENAI_API_KEY to bento state..."
+    auth_state_providers_set "OPENAI_API_KEY" "$token"
 
-    _ok   "OpenAI Codex OAuth registered."
-    _info "Test inside the container:"
+    _info "Propagating to every running BENTO_MANAGED stack..."
+    auth_propagate_state_providers
+
+    # Live-register with Hermes on paperclip without waiting for the
+    # service-update restart cycle to swap envs in.
+    sudo docker exec --user node -e HOME=/paperclip "$cid" \
+        /opt/hermes/bin/hermes auth add openai-codex \
+            --type api-key --api-key "$token" --label "chatgpt-plus" >/dev/null 2>&1 || true
+
+    _ok   "OpenAI Codex OAuth registered. Every present and future bento stack will inherit it."
+    _info "Test inside the paperclip container:"
     printf '  docker exec --user node -e HOME=/paperclip %s \\\n' "$(printf '%.12s' "$cid")"
     printf '    /opt/hermes/bin/hermes chat -q "ping" -Q --provider openai-codex --model gpt-5.4\n'
 }
