@@ -201,32 +201,7 @@ else
     fi
 fi
 
-# =============================================================================
-# Optional: if the `hermes` stack is also deployed, graft its seeded binary
-# volume onto this paperclip service so the bundled `hermes_local` adapter
-# can exec /opt/hermes/bin/hermes. Symmetric to the equivalent block in
-# stacks/app/hermes/install.sh — either stack deployed last wires the mount.
-#
-# Idempotent. Silent no-op when the volume is absent (i.e. someone runs
-# paperclip without hermes).
-# =============================================================================
-
-readonly HERMES_VOLUME="hermes_hermes-bin"
-readonly HERMES_MOUNT_TARGET="/opt/hermes"
-
-if docker volume inspect "$HERMES_VOLUME" >/dev/null 2>&1; then
-    existing=$(docker service inspect paperclip_paperclip \
-        --format '{{range .Spec.TaskTemplate.ContainerSpec.Mounts}}{{.Target}}{{"\n"}}{{end}}' \
-        2>/dev/null | grep -Fx "$HERMES_MOUNT_TARGET" || true)
-    if [[ -z "$existing" ]]; then
-        echo "[hermes-coupling] grafting ${HERMES_VOLUME}:${HERMES_MOUNT_TARGET}:ro onto paperclip_paperclip"
-        docker service update \
-            --mount-add "type=volume,source=${HERMES_VOLUME},target=${HERMES_MOUNT_TARGET},readonly" \
-            paperclip_paperclip >/dev/null || \
-            echo "[hermes-coupling] mount graft failed — paperclip will run without Hermes CLI" >&2
-    else
-        echo "[hermes-coupling] paperclip already mounts ${HERMES_MOUNT_TARGET} — no change"
-    fi
-else
-    echo "[hermes-coupling] hermes_hermes-bin volume not present — paperclip starting without Hermes CLI (deploy the hermes stack to enable)"
-fi
+# Cross-stack: if hermes is deployed, mount its binary tree at /opt/hermes
+# so `hermes_local` agents can exec /opt/hermes/bin/hermes. Symmetric to
+# stacks/app/hermes/install.sh — whichever stack deploys last wires it up.
+graft_external_volume_to_service paperclip_paperclip hermes_hermes-bin /opt/hermes
