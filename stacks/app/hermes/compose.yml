@@ -43,9 +43,10 @@ services:
         limits:
           cpus: "0.1"
           memory: 128M
-        reservations:
-          cpus: "0.05"
-          memory: 32M
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=hermes
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 volumes:
   hermes-bin:

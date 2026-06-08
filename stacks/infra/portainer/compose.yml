@@ -42,6 +42,9 @@ services:
         - "traefik.http.routers.portainer.tls.certresolver=letsencryptresolver"
         - "traefik.http.routers.portainer.service=portainer"
         - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+        - "BENTO_MANAGED=true"
+        - "BENTO_STACK_KEY=portainer"
+        - "BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}"
 networks:
   network_public:
     external: true

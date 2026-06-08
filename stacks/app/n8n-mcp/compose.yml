@@ -116,6 +116,9 @@ services:
         - traefik.http.routers.n8n_mcp.service=n8n_mcp
         - traefik.http.services.n8n_mcp.loadbalancer.server.port=3000
         - traefik.http.services.n8n_mcp.loadbalancer.passHostHeader=true
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=n8n-mcp
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 volumes:
   n8n-mcp-data:

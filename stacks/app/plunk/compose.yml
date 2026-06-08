@@ -96,6 +96,9 @@ services:
         - traefik.http.routers.plunk.service=plunk
         - traefik.http.services.plunk.loadbalancer.server.port=3000
         - traefik.http.services.plunk.loadbalancer.passHostHeader=true
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=plunk
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 networks:
   network_public:
     name: network_public

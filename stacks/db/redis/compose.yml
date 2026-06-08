@@ -41,6 +41,10 @@ services:
         limits:
           cpus: "0.5"
           memory: 128M
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=redis
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 networks:
   network_public:
     external: true

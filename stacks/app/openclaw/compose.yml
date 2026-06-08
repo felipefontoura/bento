@@ -99,9 +99,10 @@ services:
         limits:
           cpus: "1.0"
           memory: 1024M
-        reservations:
-          cpus: "0.25"
-          memory: 256M
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=openclaw
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 volumes:
   openclaw-config:

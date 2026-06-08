@@ -47,6 +47,9 @@ services:
         - "traefik.http.routers.http-catchall.entrypoints=web"
         - "traefik.http.routers.http-catchall.middlewares=redirect-https@docker"
         - "traefik.http.routers.http-catchall.priority=1"
+        - "BENTO_MANAGED=true"
+        - "BENTO_STACK_KEY=traefik"
+        - "BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "vol_certificates:/etc/traefik/letsencrypt"
