@@ -431,23 +431,32 @@ stacks_step3_menu() {
     done <<< "$picks"
     stacks_memory_budget_check "${picks_csv%,}"
 
+    # Pre-populate `seen` with stacks bento already deployed so the
+    # depends_on walk below doesn't re-deploy postgres/redis on every
+    # checklist run.
+    local seen=()
     local failures=()
+    while IFS= read -r _existing; do
+        [[ -n "$_existing" ]] && seen+=("$_existing")
+    done < <(jq -r '.stacks // {} | to_entries[] | select(.value.stack_id) | .key' \
+        "$BENTO_STATE_FILE" 2>/dev/null)
+
     while IFS= read -r picked; do
         local picked_name
         picked_name="${picked%% — *}"
-        local m
-        m=$(stacks_manifest_for_key "$picked_name")
-        if [[ -n "$m" ]]; then
-            if ! stacks_deploy "$m"; then
-                ui_error "Deploy of $picked_name failed; continuing."
-                failures+=("$picked_name")
-            fi
-        fi
+        # Use the same depends_on-aware helper as unattended mode so
+        # picking just `n8n` from the checklist still pulls postgres +
+        # redis in first — without their deploys, n8n's from_state
+        # POSTGRES_PASSWORD resolves empty and Portainer rejects it.
+        _deploy_with_deps seen failures "$picked_name"
     done <<< "$picks"
 
     if (( ${#failures[@]} > 0 )); then
         printf '%s\n' "${failures[@]}" > "${BENTO_STATE_DIR}/last-run-failures"
-        ui_warn "Step 3 finished with failures: ${failures[*]}"
+        ui_error "Step 3 finished with failures: ${failures[*]}"
+        # Hold the screen so the operator can read the failure list before
+        # the main_menu loop redraws and wipes it.
+        ui_pause
         return 1
     fi
 
