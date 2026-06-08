@@ -366,9 +366,13 @@ ufw default allow outgoing
 ufw limit ssh
 ufw allow http
 ufw allow https
-# ICMP echo helps with debugging from `ping`. The kernel sysctl
-# net.ipv4.icmp_echo_ignore_broadcasts=1 still drops broadcast pings.
-ufw allow proto icmp
+# ICMP (echo-request, destination-unreachable, time-exceeded,
+# parameter-problem) is already accepted by /etc/ufw/before.rules on
+# stock Ubuntu/Debian, so we do NOT add a user rule here. UFW 0.36.2+
+# rejects the legacy `ufw allow proto icmp` syntax altogether
+# ("Need 'to' or 'from' clause" / "Unsupported protocol 'icmp'"), and
+# the kernel sysctl net.ipv4.icmp_echo_ignore_broadcasts=1 (set above)
+# still drops broadcast pings.
 ufw --force enable
 
 # --- fail2ban Configuration ---
