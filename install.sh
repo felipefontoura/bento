@@ -8,6 +8,34 @@ set -uo pipefail
 BENTO_REPO_ROOT="${BENTO_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 export BENTO_REPO_ROOT
 
+# Validation patterns reused by both interactive bootstrap and the
+# BENTO_UNATTENDED env-driven path. Living here (not inside a function)
+# means unattended_main can reject garbage BENTO_ADVERTISE_ADDR / etc.
+# before any state mutation, instead of discovering the typo at deploy
+# time.
+readonly BENTO_DOMAIN_REGEX='^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$'
+readonly BENTO_EMAIL_REGEX='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+readonly BENTO_IPV4_REGEX='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+
+# Detect the host's public IPv4. `curl -4` forces v4 — without it,
+# dual-stack hosts (most Hetzner / DigitalOcean VPS) often return v6,
+# which the user can't paste into a Swarm advertise-addr field. Echoes
+# nothing on failure so the caller can decide what to do (prompt, error,
+# default placeholder).
+bento_detect_public_ipv4() {
+    local ip
+    # Two providers; the second is a fallback when the first is rate-
+    # limited or down. Both are documented IPv4-only when forced with -4.
+    for endpoint in https://api.ipify.org https://ifconfig.me; do
+        ip=$(curl -4 -fsSL --max-time 5 "$endpoint" 2>/dev/null || true)
+        if [[ "$ip" =~ $BENTO_IPV4_REGEX ]]; then
+            printf '%s' "$ip"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # -----------------------------------------------------------------------------
 # Load libraries
 # -----------------------------------------------------------------------------
@@ -55,14 +83,28 @@ bootstrap_from_env() {
         ui_error "BENTO_UNATTENDED requires BENTO_BASE_DOMAIN"
         exit 1
     fi
+    if [[ ! "$d" =~ $BENTO_DOMAIN_REGEX ]]; then
+        ui_error "BENTO_BASE_DOMAIN='$d' is not a valid domain."
+        exit 1
+    fi
     if [[ -z "$e" ]]; then
         e="admin@${d}"
     fi
-    if [[ -z "$a" ]]; then
-        a=$(curl -fsSL --max-time 5 https://ifconfig.me 2>/dev/null || true)
+    if [[ ! "$e" =~ $BENTO_EMAIL_REGEX ]]; then
+        ui_error "BENTO_ADMIN_EMAIL='$e' is not a valid email."
+        exit 1
     fi
     if [[ -z "$a" ]]; then
-        ui_error "Could not detect ADVERTISE_ADDR — set BENTO_ADVERTISE_ADDR"
+        a=$(bento_detect_public_ipv4 || true)
+    fi
+    if [[ -z "$a" ]]; then
+        ui_error "Could not detect a public IPv4 — set BENTO_ADVERTISE_ADDR explicitly."
+        exit 1
+    fi
+    # Reject IPv6 / garbage in unattended mode. Interactive mode loops
+    # the prompt; unattended has no human to re-ask, so bail.
+    if [[ ! "$a" =~ $BENTO_IPV4_REGEX ]]; then
+        ui_error "BENTO_ADVERTISE_ADDR='$a' is not a valid IPv4 address."
         exit 1
     fi
 
@@ -87,30 +129,26 @@ bootstrap_prompt_once() {
     ui_section "First-time setup"
     ui_subtle "These values seed every stack you'll deploy. They're written to ~/.config/bento/state.json."
 
-    # Scoped here — used only by this function.
-    local DOMAIN_REGEX='^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$'
-    local EMAIL_REGEX='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
-    local IP_REGEX='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
-
     # Placeholders for domain + email; the IP is the exception — we
-    # auto-detect it via ifconfig.me and pre-fill the field so the
+    # auto-detect it (IPv4-forced) and pre-fill the field so the
     # operator only confirms with enter when the detection is right.
     # Domain and email stay placeholder-only because their "obvious"
     # guess (derived email, hand-typed domain) is too easy to accept by
-    # mistake.
-    local base_domain admin_email advertise_addr detected_ip
+    # mistake. If detection fails we leave the field empty rather than
+    # suggest an IPv6 (the rejected form before this fix).
+    local base_domain admin_email advertise_addr detected_ip=""
     base_domain=$(ui_input_validated \
         "Base domain" "mydomain.com" "" \
-        "$DOMAIN_REGEX" "That doesn't look like a domain. Try again.")
+        "$BENTO_DOMAIN_REGEX" "That doesn't look like a domain. Try again.")
 
     admin_email=$(ui_input_validated \
         "Admin email (Let's Encrypt + alerts)" "admin@yourdomain.com" "" \
-        "$EMAIL_REGEX" "That doesn't look like an email. Try again.")
+        "$BENTO_EMAIL_REGEX" "That doesn't look like an email. Try again.")
 
-    detected_ip="$(curl -fsSL --max-time 5 https://ifconfig.me 2>/dev/null || true)"
+    detected_ip="$(bento_detect_public_ipv4 || true)"
     advertise_addr=$(ui_input_validated \
-        "VPS public IP" "${detected_ip:-198.51.100.42}" "$detected_ip" \
-        "$IP_REGEX" "That doesn't look like an IPv4 address. Try again.")
+        "VPS public IPv4" "${detected_ip:-198.51.100.42}" "$detected_ip" \
+        "$BENTO_IPV4_REGEX" "That doesn't look like an IPv4 address. Try again.")
 
     ui_format_md <<EOF
 **About to use:**
@@ -336,8 +374,26 @@ update_run() {
         "Back")"
     case "$choice" in
         "Update bento (pull latest from git)")
-            (cd "$BENTO_REPO_ROOT" && git fetch --quiet origin && git reset --hard "origin/${BENTO_REF:-stable}")
-            ui_success "Bento updated. Restart the menu to load fresh code."
+            local ref="${BENTO_REF:-stable}"
+            # Fetch first so origin/<ref> is current. Then prove the ref
+            # actually exists on the remote before doing a hard reset —
+            # the previous form silently no-op'd when the branch was
+            # missing (forked repos without 'stable'), so operators
+            # thought they were updated when they weren't.
+            if ! (cd "$BENTO_REPO_ROOT" && git fetch --quiet origin); then
+                ui_error "git fetch failed — check network / remote access."
+                return 1
+            fi
+            if ! (cd "$BENTO_REPO_ROOT" && git rev-parse --verify --quiet "origin/${ref}" >/dev/null); then
+                ui_error "Branch 'origin/${ref}' does not exist on the remote."
+                ui_warn  "Set BENTO_REF to a valid branch (e.g. 'main' or 'stable')."
+                return 1
+            fi
+            (cd "$BENTO_REPO_ROOT" && git reset --hard "origin/${ref}") || {
+                ui_error "git reset --hard failed."
+                return 1
+            }
+            ui_success "Bento updated to origin/${ref}. Restart the menu to load fresh code."
             exit 0
             ;;
         "Re-deploy stacks from latest git ref")
