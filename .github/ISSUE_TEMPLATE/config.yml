@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/felipefontoura/bento/discussions
+    about: For general questions, ideas, or "is this the right approach" — please use Discussions instead of opening an Issue.

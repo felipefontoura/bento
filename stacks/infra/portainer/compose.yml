@@ -1,0 +1,52 @@
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    # Single-node Swarm: Portainer talks to docker.sock directly. No agent
+    # needed (and the agent's tasks.<service> cluster lookup fails on solo
+    # deployments where it's the only peer at startup).
+    command: -H unix:///var/run/docker.sock
+    volumes:
+      - portainer_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Publish 9000 on the host so bento's local wait_ready + admin init can
+    # reach Portainer without going through Traefik / TLS. UFW should block
+    # 9000 from the world in production; in a typical Hetzner Cloud Firewall
+    # setup port 9000 is not in the allowlist.
+    ports:
+      - target: 9000
+        published: 9000
+        protocol: tcp
+        mode: host
+    # No healthcheck — portainer/portainer-ce ships with no shell, so the
+    # standard CMD-SHELL wget probe can't run. Swarm treats the task as
+    # healthy once the process is up; bento's portainer_wait_ready does the
+    # real readiness check externally.
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=network_public"
+        - "traefik.http.routers.portainer.rule=Host(`${PORTAINER_HOST}`)"
+        - "traefik.http.routers.portainer.entrypoints=websecure"
+        - "traefik.http.routers.portainer.priority=1"
+        - "traefik.http.routers.portainer.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.portainer.service=portainer"
+        - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+networks:
+  network_public:
+    external: true
+    attachable: true
+    name: network_public
+volumes:
+  portainer_data:
+    driver: local

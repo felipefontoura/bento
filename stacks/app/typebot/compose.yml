@@ -1,0 +1,168 @@
+x-typebot-common: &typebot-common
+  networks:
+    - network_public
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  environment:
+    # Cap V8's heap below the container's memory limit so Node aborts
+    # cleanly on its own bookkeeping instead of being SIGABRT'd by the
+    # kernel during startup. 768 leaves ~256 MB headroom inside the
+    # 1 GB container.
+    - NODE_OPTIONS=--max-old-space-size=768
+
+    # =============================================================================
+    # Database (PostgreSQL)
+    # =============================================================================
+
+    # Full database connection URL.
+    - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/typebot
+
+    # =============================================================================
+    # Core Security
+    # =============================================================================
+
+    # 256-bit key used to encrypt sensitive data.
+    # MUST remain stable across restarts/upgrades.
+    - ENCRYPTION_SECRET=${TYPEBOT_ENCRYPTION_SECRET}
+
+    # =============================================================================
+    # Public URLs / Reverse Proxy
+    # =============================================================================
+
+    # Builder publicly accessible URL (used for OAuth callbacks).
+    - NEXTAUTH_URL=https://${TYPEBOT_BUILDER_HOST}
+
+    # Viewer publicly accessible URL.
+    - NEXT_PUBLIC_VIEWER_URL=https://${TYPEBOT_VIEWER_HOST}
+
+    # Internal URL used by the builder for server-side requests.
+    - NEXTAUTH_URL_INTERNAL=http://localhost:3000
+
+    # =============================================================================
+    # Workspace & Signup
+    # =============================================================================
+
+    # Default workspace plan for new users.
+    # Possible values: FREE, STARTER, PRO, LIFETIME, UNLIMITED.
+    - DEFAULT_WORKSPACE_PLAN=UNLIMITED
+
+    # Disable public signups. Invited users can still sign up.
+    - DISABLE_SIGNUP=true
+
+    # =============================================================================
+    # Email (SMTP)
+    # =============================================================================
+
+    # - ADMIN_EMAIL=example@example.com
+    # - NEXT_PUBLIC_SMTP_FROM='Typebot' <no-reply@website.com>
+    # - SMTP_AUTH_DISABLED=false
+    # - SMTP_HOST=smtp.sendgrid.net
+    # - SMTP_PORT=587
+    # - SMTP_USERNAME=user
+    # - SMTP_PASSWORD=secret
+    # - SMTP_SECURE=true
+
+    # =============================================================================
+    # OAuth / Authentication
+    # =============================================================================
+
+    # - NEXT_PUBLIC_GOOGLE_API_KEY=xxx
+    # - GOOGLE_CLIENT_ID=xxx
+    # - GOOGLE_CLIENT_SECRET=xxx
+
+    # =============================================================================
+    # S3 Storage (Media Uploads)
+    # =============================================================================
+
+    # - S3_ACCESS_KEY=xxx
+    # - S3_SECRET_KEY=xxx
+    # - S3_BUCKET=website.com-typebot
+    # - S3_REGION=us-east-1
+    # - S3_ENDPOINT=s3.us-east-1.amazonaws.com
+
+    # =============================================================================
+    # Integrations
+    # =============================================================================
+
+    # - NEXT_PUBLIC_GIPHY_API_KEY=xxx
+  deploy: &typebot-deploy
+    mode: replicated
+    replicas: 1
+    placement:
+      constraints:
+        - node.role == manager
+    update_config:
+      parallelism: 1
+      delay: 30s
+      order: start-first
+      failure_action: rollback
+    restart_policy:
+      condition: any
+      delay: 10s
+      max_attempts: 5
+      window: 120s
+
+services:
+  typebot_builder:
+    <<: *typebot-common
+    image: baptistearno/typebot-builder:latest
+    # No Swarm healthcheck on purpose. Typebot's Next.js builder routes /
+    # through middleware that redirects to /signin and the SSR compile of
+    # that signin page can take longer than the 10s healthcheck timeout
+    # on small VPS — Swarm then SIGKILLs the (perfectly healthy) container
+    # before it ever serves a request. Traefik's backend probe does the
+    # right thing externally; we don't need a second one.
+    deploy:
+      <<: *typebot-deploy
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.typebot_builder.rule=Host(`${TYPEBOT_BUILDER_HOST}`)
+        - traefik.http.routers.typebot_builder.entrypoints=websecure
+        - traefik.http.routers.typebot_builder.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.typebot_builder.priority=2
+        - traefik.http.services.typebot_builder.loadbalancer.server.port=3000
+        - traefik.http.services.typebot_builder.loadbalancer.passHostHeader=true
+        - traefik.http.routers.typebot_builder.service=typebot_builder
+
+  typebot_viewer:
+    <<: *typebot-common
+    image: baptistearno/typebot-viewer:latest
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        # Wait for typebot_builder to finish Prisma migrations before we
+        # start the viewer (the schema is shared). The typebot image is
+        # distroless-ish — no wget, no curl, not even nc — but Node IS
+        # there, so we use it to probe.
+        until node -e "require('http').get('http://typebot_builder:3000',r=>process.exit(0)).on('error',()=>process.exit(1))" 2>/dev/null; do
+          sleep 3
+        done
+        exec ./viewer-entrypoint.sh
+    # Healthcheck intentionally omitted — see typebot_builder above.
+    deploy:
+      <<: *typebot-deploy
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.typebot_viewer.rule=Host(`${TYPEBOT_VIEWER_HOST}`)
+        - traefik.http.routers.typebot_viewer.entrypoints=websecure
+        - traefik.http.routers.typebot_viewer.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.typebot_viewer.priority=2
+        - traefik.http.services.typebot_viewer.loadbalancer.server.port=3000
+        - traefik.http.services.typebot_viewer.loadbalancer.passHostHeader=true
+        - traefik.http.routers.typebot_viewer.service=typebot_viewer
+
+networks:
+  network_public:
+    external: true
+    name: network_public

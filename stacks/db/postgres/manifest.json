@@ -1,0 +1,13 @@
+{
+  "name": "postgres",
+  "category": "db",
+  "description": "PostgreSQL 15 — apps create their own databases via install scripts",
+  "depends_on": [],
+  "env": [
+    {
+      "name": "POSTGRES_PASSWORD",
+      "generate": "openssl rand -hex 16",
+      "hide": true
+    }
+  ]
+}

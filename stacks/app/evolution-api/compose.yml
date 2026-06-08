@@ -1,0 +1,186 @@
+services:
+  evolution:
+    image: evoapicloud/evolution-api:latest
+    networks:
+      - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    environment:
+      # =============================================================================
+      # Core Application
+      # =============================================================================
+
+      # Public-facing base URL of the API.
+      - SERVER_URL=https://${EVOLUTION_HOST}
+
+      # Internal HTTP server port.
+      - SERVER_PORT=8080
+
+      # Signals that the app is running inside a Docker container.
+      - DOCKER_ENV=true
+
+      # =============================================================================
+      # Instance Management
+      # =============================================================================
+
+      # Whether to delete the instance data when the session is closed.
+      - DEL_INSTANCE=false
+
+      # =============================================================================
+      # Session / Client Config
+      # =============================================================================
+
+      # WhatsApp client identifier displayed to contacts.
+      - CONFIG_SESSION_PHONE_CLIENT=EvolutionAPI
+
+      # Browser name reported during WhatsApp Web pairing.
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+
+      # =============================================================================
+      # Data Persistence
+      # =============================================================================
+
+      # Persist received messages to the store.
+      - STORE_MESSAGES=true
+
+      # Persist message status updates (delivered, read, etc.) to the store.
+      - STORE_MESSAGE_UP=true
+
+      # Persist contacts to the store.
+      - STORE_CONTACTS=true
+
+      # Persist chat threads to the store.
+      - STORE_CHATS=true
+
+      # =============================================================================
+      # Store Cleanup
+      # =============================================================================
+
+      # Interval in seconds for running the store cleanup job (7200 = 2h).
+      - CLEAN_STORE_CLEANING_INTERVAL=7200
+
+      # Enable cleanup of stored messages.
+      - CLEAN_STORE_MESSAGES=true
+
+      # Enable cleanup of stored message status updates.
+      - CLEAN_STORE_MESSAGE_UP=true
+
+      # Enable cleanup of stored contacts.
+      - CLEAN_STORE_CONTACTS=true
+
+      # Enable cleanup of stored chats.
+      - CLEAN_STORE_CHATS=true
+
+      # =============================================================================
+      # Authentication
+      # =============================================================================
+
+      # Authentication mode: apikey | jwt | none.
+      - AUTHENTICATION_TYPE=apikey
+
+      # API key used when AUTHENTICATION_TYPE=apikey.
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+
+      # Expose the API key in the fetch-instances response.
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+
+      # =============================================================================
+      # QR Code
+      # =============================================================================
+
+      # Maximum number of QR-code generation attempts before failing.
+      - QRCODE_LIMIT=30
+
+      # =============================================================================
+      # Integrations
+      # =============================================================================
+
+      # Enable RabbitMQ event publishing.
+      - RABBITMQ_ENABLED=false
+
+      # Enable Chatwoot integration for ticket creation.
+      - CHATWOOT_ENABLED=true
+
+      # =============================================================================
+      # Database (PostgreSQL)
+      # =============================================================================
+
+      # Enable PostgreSQL persistence.
+      - DATABASE_ENABLED=true
+
+      # Database driver: postgresql | mysql.
+      - DATABASE_PROVIDER=postgresql
+
+      # Full database connection URI.
+      - DATABASE_CONNECTION_URI=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/evolution?schema=public
+
+      # Persist instance metadata to the database.
+      - DATABASE_SAVE_DATA_INSTANCE=true
+
+      # Persist new messages to the database.
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+
+      # Persist message status updates to the database.
+      - DATABASE_SAVE_MESSAGE_UPDATE=true
+
+      # Persist contacts to the database.
+      - DATABASE_SAVE_DATA_CONTACTS=true
+
+      # Persist chats to the database.
+      - DATABASE_SAVE_DATA_CHATS=true
+
+      # =============================================================================
+      # Cache (Redis)
+      # =============================================================================
+
+      # Enable Redis caching.
+      - CACHE_REDIS_ENABLED=true
+
+      # Redis DB index. Per-stack allocation:
+      #   /0 free  /1 n8n  /2 plunk  /3 chatwoot  /4 evolution-api  /5+ free
+      - CACHE_REDIS_URI=redis://redis:6379/4
+    # Swarm healthcheck omitted — Traefik backend probe handles readiness.
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.evolution.rule=Host(`${EVOLUTION_HOST}`)
+        - traefik.http.routers.evolution.entrypoints=websecure
+        - traefik.http.routers.evolution.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.evolution.priority=2
+        - traefik.http.routers.evolution.service=evolution
+        - traefik.http.services.evolution.loadbalancer.server.port=8080
+        - traefik.http.services.evolution.loadbalancer.passHostHeader=true
+volumes:
+  evolution_instances:
+    driver: local
+  evolution_store:
+    driver: local
+networks:
+  network_public:
+    name: network_public
+    external: true

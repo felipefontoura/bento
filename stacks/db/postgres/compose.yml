@@ -1,0 +1,66 @@
+services:
+  postgres:
+    # pgvector-enabled build of the same upstream postgres:15. Chatwoot's
+    # schema.rb hard-requires `CREATE EXTENSION vector` (used for AI/embeddings
+    # features) and refuses to load on a vanilla postgres:15. The image is
+    # otherwise byte-compatible with postgres:15 — same data dir layout, same
+    # CLI, same volumes — so apps that don't need pgvector are unaffected.
+    image: pgvector/pgvector:pg15
+    entrypoint: docker-entrypoint.sh
+    command: [postgres, --max_connections=200]
+    networks:
+      - network_public
+    # No `ports:` publish. Apps reach postgres via the overlay network
+    # as host `postgres`. To connect from your laptop in dev, run
+    # `ssh -L 5432:postgres:5432 user@vps` instead of opening 5432 to
+    # the world (UFW alone won't save you here).
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      # NOTE: do NOT quote this value. The postgres entrypoint passes
+      # POSTGRES_INITDB_ARGS verbatim to initdb, so quoting it makes the
+      # whole string a single (invalid) arg and initdb silently ignores it.
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1 -p 5432 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      # Stateful: never run two postgres tasks against the same data
+      # directory at the same time. stop-first is mandatory here.
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+networks:
+  network_public:
+    external: true
+    name: network_public
+volumes:
+  postgres-data:
+    driver: local

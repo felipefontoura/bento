@@ -1,0 +1,12 @@
+{
+  "name": "chatwoot",
+  "category": "app",
+  "description": "Customer support platform (Rails + Sidekiq)",
+  "depends_on": ["postgres", "redis"],
+  "env": [
+    { "name": "CHATWOOT_HOST",            "default": "chatwoot.${BASE_DOMAIN}", "prompt": "Chatwoot hostname" },
+    { "name": "CHATWOOT_SECRET_KEY_BASE", "generate": "openssl rand -hex 64", "hide": true },
+    { "name": "POSTGRES_PASSWORD",        "from_state": "POSTGRES_PASSWORD" }
+  ],
+  "post_deploy_url": "https://${CHATWOOT_HOST}"
+}

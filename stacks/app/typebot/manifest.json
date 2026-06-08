@@ -1,0 +1,30 @@
+{
+  "name": "typebot",
+  "category": "app",
+  "description": "Open-source chatbot builder (builder + viewer)",
+  "depends_on": [
+    "postgres"
+  ],
+  "env": [
+    {
+      "name": "TYPEBOT_BUILDER_HOST",
+      "default": "builder-typebot.${BASE_DOMAIN}",
+      "prompt": "Typebot builder hostname"
+    },
+    {
+      "name": "TYPEBOT_VIEWER_HOST",
+      "default": "viewer-typebot.${BASE_DOMAIN}",
+      "prompt": "Typebot viewer hostname"
+    },
+    {
+      "name": "TYPEBOT_ENCRYPTION_SECRET",
+      "generate": "openssl rand -hex 16",
+      "hide": true
+    },
+    {
+      "name": "POSTGRES_PASSWORD",
+      "from_state": "POSTGRES_PASSWORD"
+    }
+  ],
+  "post_deploy_url": "https://${TYPEBOT_BUILDER_HOST}"
+}

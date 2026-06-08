@@ -1,0 +1,50 @@
+services:
+  redis:
+    image: redis:7
+    command: redis-server --appendonly yes --port 6379
+    networks:
+      - network_public
+    # Internal-only: apps reach redis via the overlay as host `redis`.
+    # SSH-tunnel from your laptop for ad-hoc redis-cli access in dev.
+    volumes:
+      - redis-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      # Stateful (appendonly file): stop-first prevents the new task
+      # from binding to /data while the old one still has it open.
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+networks:
+  network_public:
+    external: true
+    name: network_public
+volumes:
+  redis-data:
+    driver: local

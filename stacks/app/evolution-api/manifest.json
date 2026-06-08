@@ -1,0 +1,26 @@
+{
+  "name": "evolution-api",
+  "category": "app",
+  "description": "WhatsApp API gateway (Evolution API)",
+  "depends_on": [
+    "postgres",
+    "redis"
+  ],
+  "env": [
+    {
+      "name": "EVOLUTION_HOST",
+      "default": "evolution.${BASE_DOMAIN}",
+      "prompt": "Evolution API hostname"
+    },
+    {
+      "name": "EVOLUTION_API_KEY",
+      "generate": "openssl rand -hex 32",
+      "hide": true
+    },
+    {
+      "name": "POSTGRES_PASSWORD",
+      "from_state": "POSTGRES_PASSWORD"
+    }
+  ],
+  "post_deploy_url": "https://${EVOLUTION_HOST}"
+}
