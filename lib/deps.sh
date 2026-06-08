@@ -66,9 +66,15 @@ deps_install_gum() {
 
     _d_step "Installing gum (Charm TUI)…"
     sudo mkdir -p /etc/apt/keyrings
-    if ! curl -fsSL "$BENTO_CHARM_KEY_URL" \
-        | sudo gpg --dearmor --batch --yes \
-              -o /etc/apt/keyrings/charm.gpg 2>>"$BENTO_DEPS_LOG"; then
+    # Split fetch + dearmor instead of 'curl | gpg'. Under pipefail a
+    # mid-stream curl failure used to leave gpg processing a truncated
+    # key, occasionally producing a malformed keyring that apt-get
+    # update accepted at first and rejected on the next run. Fetch to
+    # a tmp file we can checksum / inspect, then dearmor.
+    local tmpkey
+    tmpkey=$(mktemp)
+    if ! curl -fsSL "$BENTO_CHARM_KEY_URL" -o "$tmpkey" 2>>"$BENTO_DEPS_LOG"; then
+        rm -f "$tmpkey"
         _d_fail "Charm key fetch failed — trying release binary"
         if deps_install_gum_binary; then
             _d_ok "gum installed (binary fallback)"
@@ -76,6 +82,17 @@ deps_install_gum() {
         fi
         return 1
     fi
+    if ! sudo gpg --dearmor --batch --yes \
+              -o /etc/apt/keyrings/charm.gpg < "$tmpkey" 2>>"$BENTO_DEPS_LOG"; then
+        rm -f "$tmpkey"
+        _d_fail "gpg --dearmor on Charm key failed — trying release binary"
+        if deps_install_gum_binary; then
+            _d_ok "gum installed (binary fallback)"
+            return 0
+        fi
+        return 1
+    fi
+    rm -f "$tmpkey"
 
     echo "$BENTO_CHARM_REPO" | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
     if sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get update -qq \
