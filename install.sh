@@ -384,6 +384,16 @@ Open it in any browser. Sensitive values are masked by default; click
 "show" to reveal individual entries. Print to PDF for offline delivery.
 EOF
     )"
+
+    # Hold the screen until the operator acknowledges. Without this,
+    # 'auto' callers (step3_run after a successful Step 3) drop back
+    # to main_menu, which immediately redraws and wipes the path the
+    # operator needs for the `scp` command above. Unattended runs
+    # skip the pause — no human in the loop, and the handoff HTML
+    # path is already in the resume log.
+    if [[ "${BENTO_UNATTENDED:-0}" != "1" ]]; then
+        ui_pause
+    fi
 }
 
 update_run() {
