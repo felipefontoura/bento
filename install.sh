@@ -424,8 +424,14 @@ update_run() {
                 ui_error "git reset --hard failed."
                 return 1
             }
-            ui_success "Bento updated to origin/${ref}. Restart the menu to load fresh code."
-            exit 0
+            ui_success "Bento updated to origin/${ref}. Reloading menu…"
+            # Re-exec the freshly-pulled install.sh in-place so the
+            # operator stays in the menu without retyping anything. The
+            # current bash process is replaced entirely; every sourced
+            # lib/* is re-read from the new git ref. `$0` would be
+            # unreliable here (could be boot.sh or a path with `bash -c`
+            # in front) — go through the canonical repo path.
+            exec bash "${BENTO_REPO_ROOT}/install.sh"
             ;;
         "Re-deploy stacks from latest git ref")
             update_redeploy_stacks
