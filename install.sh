@@ -92,10 +92,13 @@ bootstrap_prompt_once() {
     local EMAIL_REGEX='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
     local IP_REGEX='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
 
-    # Placeholders only — no pre-filled values. The operator types the real
-    # domain, email, and IP explicitly so a stray enter never persists a
-    # guess (derived email, auto-detected ifconfig.me IP, etc).
-    local base_domain admin_email advertise_addr
+    # Placeholders for domain + email; the IP is the exception — we
+    # auto-detect it via ifconfig.me and pre-fill the field so the
+    # operator only confirms with enter when the detection is right.
+    # Domain and email stay placeholder-only because their "obvious"
+    # guess (derived email, hand-typed domain) is too easy to accept by
+    # mistake.
+    local base_domain admin_email advertise_addr detected_ip
     base_domain=$(ui_input_validated \
         "Base domain" "mydomain.com" "" \
         "$DOMAIN_REGEX" "That doesn't look like a domain. Try again.")
@@ -104,8 +107,9 @@ bootstrap_prompt_once() {
         "Admin email (Let's Encrypt + alerts)" "admin@yourdomain.com" "" \
         "$EMAIL_REGEX" "That doesn't look like an email. Try again.")
 
+    detected_ip="$(curl -fsSL --max-time 5 https://ifconfig.me 2>/dev/null || true)"
     advertise_addr=$(ui_input_validated \
-        "VPS public IP" "198.51.100.42" "" \
+        "VPS public IP" "${detected_ip:-198.51.100.42}" "$detected_ip" \
         "$IP_REGEX" "That doesn't look like an IPv4 address. Try again.")
 
     ui_format_md <<EOF
