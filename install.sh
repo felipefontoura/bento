@@ -598,7 +598,8 @@ _deploy_with_deps() {
         _deploy_with_deps "$1" "$2" "$dep"
     done < <(jq -r '.depends_on[]?' "$manifest_path")
 
-    ui_section "Deploying $key"
+    # The section header lives inside stacks_deploy. Printing it here
+    # too was the source of the doubled 'Deploying X' lines.
     if stacks_deploy "$manifest_path"; then
         _seen+=("$key")
     else
