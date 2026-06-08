@@ -17,7 +17,7 @@
 #      operator. The URL is the only path to create the first
 #      instance_admin in `authenticated/public` mode (browser claim is
 #      intentionally disabled upstream). The URL is also persisted to
-#      ${BENTO_STATE_DIR}/paperclip-invite-url.txt so the handoff HTML
+#      ${state_dir}/paperclip-invite-url.txt so the handoff HTML
 #      can recover it if the operator loses the install terminal.
 #
 #      Re-deploy behaviour: `bootstrap-ceo` refuses (non-zero exit) if
@@ -127,7 +127,12 @@ invite_url=$(printf '%s\n' "$invite_output" \
     | grep -oE 'https?://[^[:space:]]+/invite/pcp_bootstrap_[A-Za-z0-9]+' \
     | head -1 || true)
 
-marker="${BENTO_STATE_DIR}/paperclip-invite-url.txt"
+# Derive the state dir from BENTO_STATE_FILE (the only state-related
+# var bento's contract guarantees to install.sh — see CLAUDE.md).
+# `lib/stacks.sh` invokes us via `env VAR=val …` and does NOT pass
+# BENTO_STATE_DIR, so referencing it directly trips set -u.
+state_dir="$(dirname "$BENTO_STATE_FILE")"
+marker="${state_dir}/paperclip-invite-url.txt"
 
 if [[ -n "$invite_url" ]]; then
     # Persist for the handoff HTML to surface even if the operator
