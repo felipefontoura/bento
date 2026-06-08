@@ -476,7 +476,14 @@ EOF
 # Reload audit rules
 auditctl -R /etc/audit/rules.d/audit.rules
 
-# Configure unattended-upgrades for automated security updates
+# Configure unattended-upgrades for automated security updates.
+#
+# Automatic-Reboot is "true" with a 04:00 window because a kernel CVE
+# patched but not applied is the single biggest residual exposure on a
+# small unattended VPS — auto-reboot turns "downloaded" into "running"
+# without depending on the operator remembering. Off-peak 04:00 caps the
+# worst case at "users get bumped from an SSH session in the middle of
+# the night".
 print_message "${YELLOW}" "Configuring automatic updates..."
 cat <<EOF >/etc/apt/apt.conf.d/50unattended-upgrades
 Unattended-Upgrade::Allowed-Origins {
@@ -485,7 +492,8 @@ Unattended-Upgrade::Allowed-Origins {
     "\${distro_id}ESM:\${distro_codename}-infra-security";
 };
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
-Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "04:00";
 EOF
 
 # --- Final Cleanup ---
