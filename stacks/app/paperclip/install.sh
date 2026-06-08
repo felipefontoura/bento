@@ -200,3 +200,48 @@ else
         echo "      auth bootstrap-ceo --config ${config_path} --expires-hours 24 --force'" >&2
     fi
 fi
+
+# Cross-stack: if hermes is deployed, mount its binary tree at /opt/hermes
+# so `hermes_local` agents can exec /opt/hermes/bin/hermes. Symmetric to
+# stacks/app/hermes/install.sh — whichever stack deploys last wires it up.
+graft_external_volume_to_service paperclip_paperclip hermes_hermes-bin /opt/hermes
+
+# Make Paperclip's bundled skills discoverable to the Hermes CLI.
+#
+# The upstream paperclip image ships its agent skills (paperclip,
+# paperclip-create-agent, para-memory-files, …) under /app/skills/. The
+# hermes-paperclip-adapter v0.2.x walks two relative candidate paths
+# (`../../skills` and `../../../../../skills` resolved from its own dist/
+# directory) when trying to enumerate Paperclip-managed skills, and neither
+# candidate resolves to /app/skills/ inside the upstream image. The skills
+# end up invisible to `skill_view`, `skills_list`, and the adapter's
+# listSkills snapshot — so the agent has no way to load them at runtime.
+#
+# Workaround: symlink each /app/skills/<name> into the Hermes skills home
+# (HOME=/paperclip, so ~/.hermes/skills/). Hermes's own skill scanner picks
+# up symlinks just like real directories and registers each one. After this
+# the agent can call `skill_view name=paperclip` and load the canonical
+# Paperclip control-plane skill.
+#
+# Idempotent (only creates missing links) and a soft no-op when paperclip
+# is not yet up. The hermes stack does not need to be deployed for this to
+# work — paperclip ships these skills standalone.
+if cid=$(_find_container 'paperclip_paperclip' 2>/dev/null); then
+    sudo docker exec --user node "$cid" sh -c '
+        set -e
+        skills_src=/app/skills
+        skills_dst=$HOME/.hermes/skills
+        if [ ! -d "$skills_src" ]; then
+            exit 0
+        fi
+        mkdir -p "$skills_dst"
+        for src in "$skills_src"/*/; do
+            name=$(basename "$src")
+            link="$skills_dst/$name"
+            if [ ! -e "$link" ]; then
+                ln -s "$src" "$link"
+                echo "[skills-graft] linked $name"
+            fi
+        done
+    '
+fi

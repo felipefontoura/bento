@@ -1,10 +1,7 @@
 {
   "name": "hermes",
   "category": "app",
-  "description": "OpenAI-compatible AI agent gateway (NousResearch Hermes, overlay-only)",
+  "description": "Seeds a shared named volume with the upstream Hermes Agent /opt/hermes tree so peer containers (paperclip) can mount it and call the CLI via Paperclip's hermes_local adapter (overlay-only, idle sleep, no gateway)",
   "depends_on": [],
-  "env": [
-    { "name": "HERMES_API_KEY",     "generate": "openssl rand -hex 32", "hide": true },
-    { "name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (optional — at least one provider required for Hermes to serve a model)", "hide": true }
-  ]
+  "env": []
 }
