@@ -157,7 +157,6 @@ step1_run() {
 - Update + upgrade all packages
 - Install Docker, UFW, fail2ban, AppArmor, AIDE, auditd, chrony
 - Apply kernel sysctl hardening
-- Create a \`docker\` user, copy your SSH keys
 - Enable firewall (ssh/http/https)
 - Initialize Docker Swarm + create overlay network \`network_public\`
 
