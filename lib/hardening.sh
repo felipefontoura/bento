@@ -108,9 +108,19 @@ verify_security_settings() {
     fi
   done
 
-  # Check Docker settings
-  if ! docker info 2>/dev/null | grep -q "Cgroup Driver: systemd"; then
-    print_error "Docker is not using systemd cgroup driver"
+  # Check Docker cgroup driver.
+  #
+  # The previous check piped `docker info` to `grep -q "Cgroup Driver: systemd"`
+  # — exact-string match against `docker info`'s human output. On Ubuntu 26.04
+  # + Docker 29.x + cgroup v2 unified the formatting shifted enough that the
+  # grep failed even when the daemon was configured correctly via
+  # /etc/docker/daemon.json's "exec-opts": ["native.cgroupdriver=systemd"].
+  # Use the format-string accessor instead — it returns the literal value the
+  # daemon reports for CgroupDriver, no parsing.
+  local cgroup_driver
+  cgroup_driver=$(docker info --format '{{.CgroupDriver}}' 2>/dev/null)
+  if [[ "$cgroup_driver" != "systemd" ]]; then
+    print_error "Docker cgroup driver is '$cgroup_driver' (expected 'systemd')"
     failed=1
   fi
 
