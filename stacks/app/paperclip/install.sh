@@ -65,13 +65,15 @@ config_path="/paperclip/instances/production/config.json"
 # the escape bash would interpolate \$meta as an empty variable
 # and the schema validator would reject the file with
 # '\$meta: Required'.
+now_iso=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+
 sudo docker exec -i -u root "$cid" sh -c "
     mkdir -p /paperclip/instances/production/logs
     cat > ${config_path}
     chown -R node:node /paperclip/instances/production
 " <<EOF
 {
-  "\$meta": { "version": 1, "source": "bento-install" },
+  "\$meta": { "version": 1, "updatedAt": "${now_iso}", "source": "onboard" },
   "database": {
     "mode": "postgres",
     "connectionString": "${db_url}"
@@ -113,10 +115,17 @@ invite_output=$(sudo docker exec "$cid" sh -c "
 # Strip ANSI colour codes before grep — bootstrap-ceo output wraps
 # the URL in clack/prompt styling (\\e[36m … \\e[39m) which can
 # otherwise embed inside the captured string.
+#
+# `|| true` on the grep pipeline is CRITICAL: grep -oE exits 1 when
+# no match, pipefail propagates that, set -e then aborts install.sh
+# silently — which previously hid the bootstrap-ceo error AND
+# skipped the "already-claimed" branch below, so the operator
+# never saw anything between "Database 'paperclip' …" and the
+# "paperclip is ready" success box.
 invite_url=$(printf '%s\n' "$invite_output" \
     | sed 's/\x1b\[[0-9;]*m//g' \
     | grep -oE 'https?://[^[:space:]]+/invite/pcp_bootstrap_[A-Za-z0-9]+' \
-    | head -1)
+    | head -1 || true)
 
 marker="${BENTO_STATE_DIR}/paperclip-invite-url.txt"
 
@@ -144,9 +153,21 @@ if [[ -n "$invite_url" ]]; then
 
 MSG
 else
-    # Re-deploy path: admin exists, CLI refused. Remove any stale
-    # marker from a previous install so the handoff HTML doesn't
-    # print a long-expired URL.
+    # Two reasons we land here:
+    #   1. Re-deploy and CLI refused because admin already exists.
+    #   2. Genuine error from the CLI (bad config, DB unreachable, …).
+    # The user needs to know which. Drop any stale marker either way,
+    # then surface bootstrap-ceo's full stderr so the operator can act.
     rm -f "$marker"
-    echo "Paperclip already has an instance_admin; skipping bootstrap-ceo."
+    if printf '%s' "$invite_output" | grep -qiE 'admin already exists|already claim'; then
+        echo "Paperclip already has an instance_admin; skipping bootstrap-ceo."
+    else
+        echo "bootstrap-ceo did not produce an invite URL. CLI output:" >&2
+        printf '%s\n' "$invite_output" | sed 's/^/  /' >&2
+        echo "" >&2
+        echo "Recover manually inside the container:" >&2
+        echo "  sudo docker exec -it <paperclip-container> sh -c '\\" >&2
+        echo "    cd /app && node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts \\\\" >&2
+        echo "      auth bootstrap-ceo --config ${config_path} --expires-hours 24 --force'" >&2
+    fi
 fi
