@@ -44,10 +44,17 @@ cid=$(_find_container 'paperclip_paperclip')
 paperclip_host="${PAPERCLIP_HOST:-paperclip.localhost}"
 db_url="postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/paperclip"
 
-# Seed the CLI's config file inside the container. The `node` user
-# already owns /paperclip/instances/production (created on first boot),
-# so a plain `docker exec` (default user) can write the file.
-sudo docker exec -i "$cid" sh -c 'cat > /paperclip/instances/production/config.json' <<EOF
+# Seed the CLI's config file inside the container. On a fresh
+# deploy the /paperclip/instances/production directory may not exist
+# yet — paperclip's server creates it on first boot, but install.sh
+# can race against the bash postgres-TCP wait wrapper in the
+# container's command, so we mkdir up front and chown back to node
+# so the CLI (which runs as node) can read what we wrote.
+sudo docker exec -i -u root "$cid" sh -c '
+    mkdir -p /paperclip/instances/production
+    cat > /paperclip/instances/production/config.json
+    chown -R node:node /paperclip/instances/production
+' <<EOF
 {
   "\$meta": { "version": 1, "source": "bento-install" },
   "database": {
