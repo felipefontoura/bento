@@ -43,23 +43,42 @@ fi
 cid=$(_find_container 'paperclip_paperclip')
 paperclip_host="${PAPERCLIP_HOST:-paperclip.localhost}"
 db_url="postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/paperclip"
+# Path matches PAPERCLIP_INSTANCE_ID=production from the compose env.
+# Both the running server AND the bootstrap-ceo CLI (when invoked
+# with `--config`) read from here.
+config_path="/paperclip/instances/production/config.json"
 
-# Seed the CLI's config file inside the container. On a fresh
-# deploy the /paperclip/instances/production directory may not exist
-# yet — paperclip's server creates it on first boot, but install.sh
-# can race against the bash postgres-TCP wait wrapper in the
-# container's command, so we mkdir up front and chown back to node
-# so the CLI (which runs as node) can read what we wrote.
-sudo docker exec -i -u root "$cid" sh -c '
-    mkdir -p /paperclip/instances/production
-    cat > /paperclip/instances/production/config.json
+# Seed the CLI's config file inside the container. On a fresh deploy
+# /paperclip/instances/production may not exist yet — paperclip's
+# server creates it on first boot, but install.sh races against the
+# postgres-TCP wait wrapper inside the container's command, so we
+# mkdir up front and chown back to node (the CLI runs as node).
+#
+# Schema requirements verified against upstream's onboard output:
+#   - $meta { version, source }       (required)
+#   - logging { mode, logDir }        (required)
+#   - database { mode, connectionString }
+#   - server, auth
+#
+# The literal '\$meta' below escapes once for the bash heredoc so
+# the JSON written to disk has the literal key '\$meta'. Without
+# the escape bash would interpolate \$meta as an empty variable
+# and the schema validator would reject the file with
+# '\$meta: Required'.
+sudo docker exec -i -u root "$cid" sh -c "
+    mkdir -p /paperclip/instances/production/logs
+    cat > ${config_path}
     chown -R node:node /paperclip/instances/production
-' <<EOF
+" <<EOF
 {
   "\$meta": { "version": 1, "source": "bento-install" },
   "database": {
     "mode": "postgres",
     "connectionString": "${db_url}"
+  },
+  "logging": {
+    "mode": "file",
+    "logDir": "/paperclip/instances/production/logs"
   },
   "server": {
     "deploymentMode": "authenticated",
@@ -77,14 +96,25 @@ sudo docker exec -i -u root "$cid" sh -c '
 }
 EOF
 
-# Mint the bootstrap-ceo invite. Idempotent on re-deploy: CLI returns
-# non-zero with "admin already exists" once first claim happened.
-# `|| true` so we don't trip set -e on the re-deploy path.
-invite_output=$(sudo docker exec "$cid" sh -c \
-    'cd /app && node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts auth bootstrap-ceo --expires-hours 24' \
-    2>&1 || true)
+# Mint the bootstrap-ceo invite. We pass --config explicitly because
+# without it the CLI defaults to /paperclip/instances/default/config.json
+# (the CLI's notion of "default" instance is independent of the
+# server's PAPERCLIP_INSTANCE_ID env, so it would not find our
+# production/config.json without the flag).
+#
+# Idempotent on re-deploy: CLI returns non-zero with "admin already
+# exists" once first claim happened. `|| true` keeps us from
+# tripping set -e.
+invite_output=$(sudo docker exec "$cid" sh -c "
+    cd /app && node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts \\
+        auth bootstrap-ceo --config ${config_path} --expires-hours 24
+" 2>&1 || true)
 
+# Strip ANSI colour codes before grep — bootstrap-ceo output wraps
+# the URL in clack/prompt styling (\\e[36m … \\e[39m) which can
+# otherwise embed inside the captured string.
 invite_url=$(printf '%s\n' "$invite_output" \
+    | sed 's/\x1b\[[0-9;]*m//g' \
     | grep -oE 'https?://[^[:space:]]+/invite/pcp_bootstrap_[A-Za-z0-9]+' \
     | head -1)
 
