@@ -87,11 +87,23 @@ psql_exec() {
 
 ensure_database() {
     local db_name="$1"
-    if psql_exec "SELECT 1 FROM pg_database WHERE datname='${db_name}'" | grep -q 1; then
+    # Split the existence check from the grep so a psql failure
+    # (postgres not ready, bad password, network blip) is detected
+    # explicitly. The old 'psql_exec … | grep -q 1' masked psql's
+    # exit code: an empty/error response collapsed to "false" and the
+    # script then attempted CREATE DATABASE against a broken
+    # connection, producing two confusing errors instead of one
+    # informative one.
+    local exists
+    exists=$(psql_exec "SELECT 1 FROM pg_database WHERE datname='${db_name}'") || {
+        echo "psql_exec failed while checking for database '${db_name}'." >&2
+        return 1
+    }
+    if [[ "$exists" == "1" ]]; then
         echo "Database '${db_name}' already exists."
         return 0
     fi
-    psql_exec "CREATE DATABASE \"${db_name}\""
+    psql_exec "CREATE DATABASE \"${db_name}\"" || return 1
     echo "Created database '${db_name}'."
 }
 
@@ -99,11 +111,16 @@ ensure_db_user() {
     # ensure_db_user <username> <password>
     local user="$1"
     local password="$2"
-    if psql_exec "SELECT 1 FROM pg_roles WHERE rolname='${user}'" | grep -q 1; then
-        psql_exec "ALTER ROLE \"${user}\" WITH LOGIN PASSWORD '${password}'"
+    local exists
+    exists=$(psql_exec "SELECT 1 FROM pg_roles WHERE rolname='${user}'") || {
+        echo "psql_exec failed while checking for role '${user}'." >&2
+        return 1
+    }
+    if [[ "$exists" == "1" ]]; then
+        psql_exec "ALTER ROLE \"${user}\" WITH LOGIN PASSWORD '${password}'" || return 1
         echo "Updated password for role '${user}'."
     else
-        psql_exec "CREATE ROLE \"${user}\" WITH LOGIN PASSWORD '${password}'"
+        psql_exec "CREATE ROLE \"${user}\" WITH LOGIN PASSWORD '${password}'" || return 1
         echo "Created role '${user}'."
     fi
 }
@@ -112,7 +129,7 @@ grant_db_ownership() {
     # grant_db_ownership <database> <user>
     local db="$1"
     local user="$2"
-    psql_exec "ALTER DATABASE \"${db}\" OWNER TO \"${user}\""
+    psql_exec "ALTER DATABASE \"${db}\" OWNER TO \"${user}\"" || return 1
     echo "Database '${db}' is now owned by '${user}'."
 }
 
