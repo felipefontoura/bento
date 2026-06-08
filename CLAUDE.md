@@ -638,6 +638,27 @@ Read with `state_get '.bootstrap.base_domain'`, write with
 `state_set '.foundation.swarm' "active"`. Always go through `lib/state.sh`
 so the schema migration runs.
 
+**State reconciliation.** `state.stacks.*` is bento's cached view of
+"what's deployed." Operators are encouraged to manage day-2 ops via
+the Portainer UI (per the ownership table above), so that cache will
+drift whenever someone deletes a stack outside of bento. To prevent
+the orphan entries from short-circuiting future Step 3 deploys (e.g.
+a re-deploy of `paperclip` would silently skip `postgres` if the
+operator deleted postgres via Portainer but it still appears in
+state.stacks), `stacks_reconcile_state_with_portainer` runs on entry
+to every code path that reads `state.stacks.*.stack_id`:
+
+- `stacks_step3_menu` (interactive Step 3)
+- `unattended_step3` (`BENTO_UNATTENDED=1` path)
+- `update_redeploy_stacks` (Update → Re-deploy stacks)
+
+The reconcile is one HTTP call to Portainer's `/api/stacks`. Entries
+whose `stack_id` is not in Portainer's live list, OR whose live entry
+doesn't carry `BENTO_MANAGED=true` in its env, are dropped from state.
+If Portainer is unreachable, the reconcile is skipped with a visible
+warning (`ui_warn "Portainer not reachable — using cached state…"`)
+rather than mutating state on bad data.
+
 ---
 
 ## What lives in `.claude/`

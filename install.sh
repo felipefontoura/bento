@@ -499,6 +499,11 @@ update_run() {
 # the compose, and applies a rolling update honouring the stack's
 # update_config.
 update_redeploy_stacks() {
+    # Same staleness trap as Step 3 — operators who deleted stacks via
+    # Portainer would otherwise see the orphans listed here and pick a
+    # redeploy that targets a non-existent stack id. Reconcile first.
+    stacks_reconcile_state_with_portainer
+
     local stacks_json
     if ! stacks_json="$(portainer_list_stacks 2>/dev/null)"; then
         ui_error "Portainer not reachable — cannot list stacks."
@@ -684,6 +689,11 @@ unattended_step3() {
     local apps_csv="${BENTO_APPS}"
     stacks_memory_budget_check "$apps_csv"
     IFS=',' read -ra apps <<< "$apps_csv"
+
+    # Same reconcile as the interactive path — unattended re-runs after
+    # the operator has done Portainer-side cleanup would otherwise hit
+    # the same orphan trap and silently skip deploys.
+    stacks_reconcile_state_with_portainer
 
     # Pre-populate "seen" with stacks bento has already successfully
     # deployed (state.stacks.<key>.stack_id present), so re-running with
