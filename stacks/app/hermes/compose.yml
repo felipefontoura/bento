@@ -1,34 +1,17 @@
-# =============================================================================
-# Hermes — local-binary provider sidecar
-# =============================================================================
+# Hermes — local-binary provider sidecar (overlay-only, idle).
 #
-# OVERLAY-ONLY. No Traefik route, no host port, no HTTP gateway. The container
-# exists solely to seed the `hermes-bin` named volume with the `/opt/hermes`
-# tree from the upstream `nousresearch/hermes-agent` image, so peer containers
-# (typically paperclip) can mount that volume read-only and invoke the Hermes
-# CLI as a local subprocess via Paperclip's `hermes_local` adapter.
+# Seeds the `hermes-bin` named volume with the upstream image's /opt/hermes
+# tree (Python venv + Hermes CLI), then sleeps. Peer containers mount the
+# volume read-only and call /opt/hermes/bin/hermes as a local subprocess
+# via Paperclip's `hermes_local` adapter — graft is wired by install.sh
+# on either side (see lib/install-helpers.sh::graft_external_volume_to_service).
 #
-# How the seeding works:
-#   - On the FIRST start, Docker copies the contents of `/opt/hermes` from
-#     the image into the empty `hermes-bin` named volume (named-volume
-#     seeding behaviour).
-#   - The container then sleeps forever — it does NOT run the Hermes gateway.
-#     We only need the bytes on disk, not a long-lived process.
-#   - To upgrade Hermes: `docker volume rm <stack>_hermes-bin` then redeploy.
-#     This forces a fresh seed from the (now-pulled) newer image.
-#
-# `/opt/hermes/.venv/bin/python3` is the embedded Python interpreter, so the
-# tree is self-contained — the peer container does NOT need Python or any
-# Hermes deps installed; it just needs the volume mounted.
-# =============================================================================
+# Upgrade: `docker volume rm <stack>_hermes-bin && docker stack deploy hermes`.
 
 services:
   hermes:
     image: nousresearch/hermes-agent:latest
-    # Override the image entrypoint completely. The default s6-overlay /init
-    # would try to start the gateway, write to /opt/hermes (mutating the
-    # volume), and run as the `hermes` user. We need none of that — pure
-    # binary provider, idle process.
+    # Override image entrypoint — no gateway, no s6 init, no /opt/hermes writes.
     entrypoint: ["sleep", "infinity"]
     networks:
       - network_public
@@ -38,9 +21,8 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
-      # Named-volume seeding: on first mount the image's /opt/hermes tree is
-      # copied into this empty volume. Subsequent boots reuse the volume as-is
-      # (so upgrades require an explicit volume wipe + redeploy).
+      # Named-volume seeding: empty volume + image path with content → Docker
+      # copies the tree on first mount. Subsequent boots reuse the volume.
       - hermes-bin:/opt/hermes
     deploy:
       mode: replicated
