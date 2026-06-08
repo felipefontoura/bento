@@ -92,7 +92,8 @@ install.sh
     ├── lib/portainer.sh  REST client (auth + stacks CRUD + git redeploy + JWT retry)
     ├── lib/stacks.sh  manifest discovery + env resolution + memory budget + deploy via API
     ├── lib/report.sh  generates handoff HTML at end of Step 3 / on demand
-    └── lib/install-helpers.sh  helpers used by per-stack install.sh scripts
+    ├── lib/install-helpers.sh  helpers used by per-stack install.sh scripts
+    └── lib/auth-helpers.sh     helpers for scripts/bento-auth (OAuth wiring)
     │
     ▼
 Bootstrap (one-time): asks BASE_DOMAIN + ADMIN_EMAIL + ADVERTISE_ADDR, persists to state
@@ -139,9 +140,12 @@ bento/
 │       └── install-bento/
 │           └── SKILL.md
 ├── docs/
-│   └── architecture/
-│       └── cross-stack-volume-graft.md  # pattern: producer→consumer via shared volume
+│   ├── architecture/
+│   │   └── cross-stack-volume-graft.md  # pattern: producer→consumer via shared volume
+│   └── reference/
+│       └── bento-auth.md         # AI provider OAuth login (bento-auth script)
 ├── lib/
+│   ├── auth-helpers.sh           # helpers for scripts/bento-auth
 │   ├── banner.sh
 │   ├── deps.sh
 │   ├── hardening.sh              # copied from ubinkaze
@@ -153,6 +157,8 @@ bento/
 │   ├── stacks.sh
 │   ├── state.sh
 │   └── ui.sh
+├── scripts/
+│   └── bento-auth                # AI provider OAuth + API-key login wrapper
 └── stacks/
     ├── infra/
     │   ├── traefik/compose.yml
