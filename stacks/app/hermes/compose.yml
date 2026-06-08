@@ -80,8 +80,8 @@ services:
       # Provide at least one of the following or /v1/chat/completions will 500.
 
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
 
-      # - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
 

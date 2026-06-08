@@ -5,6 +5,7 @@
   "depends_on": [],
   "env": [
     { "name": "HERMES_API_KEY",     "generate": "openssl rand -hex 32", "hide": true },
-    { "name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (optional — at least one provider required for Hermes to serve a model)", "hide": true }
+    { "name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (optional — at least one provider required for Hermes to serve a model)", "hide": true },
+    { "name": "OPENAI_API_KEY",     "prompt": "OpenAI API key or OAuth access token (optional — alternative to OpenRouter)", "hide": true }
   ]
 }
