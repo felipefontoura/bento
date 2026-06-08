@@ -16,7 +16,6 @@ _BENTO_UI_LOADED=1
 readonly BENTO_COLOR_SALMON="#FF6B6B"     # primary accent (sushi salmon)
 readonly BENTO_COLOR_WASABI="#06D6A0"     # info / progress
 readonly BENTO_COLOR_RICE="#FAF3DD"       # neutral foreground on dark bg
-readonly BENTO_COLOR_NORI="#293241"       # background for boxes
 readonly BENTO_COLOR_SUCCESS="#06D6A0"
 readonly BENTO_COLOR_WARNING="#FFD166"
 readonly BENTO_COLOR_DANGER="#EF476F"

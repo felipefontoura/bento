@@ -192,10 +192,11 @@ _render_app_card() {
         url=$(stacks_substitute_template_with_stack_envs "$stack_key" "$post_deploy_tpl" 2>/dev/null || true)
     fi
 
-    local esc_key esc_desc esc_url
+    local esc_key esc_desc
     esc_key=$(_html_escape "$stack_key")
     esc_desc=$(_html_escape "$description")
-    esc_url=$(_html_escape "$url")
+    # $url is escaped inside _secret_row at the print site below, so we
+    # don't need an esc_url here.
 
     cat <<HTML
 <section class="card" id="stack-${esc_key}">

@@ -173,7 +173,7 @@ EOF
 # Step 1 — Hardening (+ Docker foundation as tail)
 # -----------------------------------------------------------------------------
 step1_status() {
-    if [[ "$(state_get '.steps.hardening')" == "done" ]]; then echo done
+    if [[ "$(state_get '.steps.hardening')" == "done" ]]; then echo "done"
     elif [[ -f /var/lib/bento/reboot-required ]]; then echo pending
     else echo pending
     fi
@@ -258,7 +258,7 @@ EOF
 # Step 2 — Infra (Traefik + Portainer)
 # -----------------------------------------------------------------------------
 step2_status() {
-    if infra_is_done; then echo done
+    if infra_is_done; then echo "done"
     elif [[ "$(state_get '.steps.hardening')" != "done" ]]; then echo locked
     else echo pending
     fi
@@ -276,7 +276,7 @@ step2_run() {
 # Step 3 — Apps
 # -----------------------------------------------------------------------------
 step3_status() {
-    if stacks_is_apps_done; then echo done
+    if stacks_is_apps_done; then echo "done"
     elif ! infra_is_done; then echo locked
     else echo pending
     fi

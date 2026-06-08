@@ -71,8 +71,9 @@ check_distro() {
 }
 
 check_resources() {
-  local total_ram_mb=$(free -m | awk '/^Mem:/{print $2}')
-  local total_disk_gb=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
+  local total_ram_mb total_disk_gb
+  total_ram_mb=$(free -m | awk '/^Mem:/{print $2}')
+  total_disk_gb=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
 
   if ((total_ram_mb < BENTO_HARDENING_MIN_RAM_MB)); then
     print_error "Insufficient RAM. Required: ${BENTO_HARDENING_MIN_RAM_MB}MB, Found: ${total_ram_mb}MB"
@@ -100,7 +101,8 @@ verify_security_settings() {
   for param in "${params[@]}"; do
     local name=${param%=*}
     local expected=${param#*=}
-    local actual=$(sysctl -n "$name" 2>/dev/null || echo "NOT_FOUND")
+    local actual
+    actual=$(sysctl -n "$name" 2>/dev/null || echo "NOT_FOUND")
 
     if [[ "$actual" != "$expected" ]]; then
       print_error "Kernel parameter $name = $actual (expected $expected)"

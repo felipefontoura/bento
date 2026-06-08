@@ -105,6 +105,11 @@ fi
 # -----------------------------------------------------------------------------
 if ! command -v git >/dev/null 2>&1; then
     _step "Installing git…"
+    # shellcheck disable=SC2024
+    # The redirect runs as the calling shell (root in the curl|bash
+    # path), not as sudo. BENTO_DEPS_LOG lives under /tmp and is
+    # already writable by the caller, so sudo-vs-redirect ownership
+    # is a non-issue here.
     if sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get update -qq \
             >>"$BENTO_DEPS_LOG" 2>&1 \
        && sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git \
@@ -133,13 +138,18 @@ if git clone --quiet --depth 1 --branch "$BENTO_REF" \
        "$BENTO_REPO_URL" "$BENTO_HOME" 2>>"$BENTO_DEPS_LOG"; then
     _ok "Cloned to $BENTO_HOME"
 else
-    _fail "git clone failed for '$BENTO_REF' on $BENTO_REPO_URL"
-    # Surface git's actual stderr — "branch may not exist" was wrong as
-    # often as it was right (CWD gone, network blip, disk full, …).
+    # Print the failure line INLINE (don't go through _fail, which
+    # calls exit and would skip the log tail below). Then dump git's
+    # real stderr — "branch may not exist" was the wrong default
+    # diagnosis as often as it was right (CWD gone, network blip,
+    # disk full, …) — and finally exit.
+    printf '\r\033[K  %s✗%s git clone failed for %s on %s\n' \
+        "$_S" "$_N" "'$BENTO_REF'" "$BENTO_REPO_URL" >&2
     if [[ -s "$BENTO_DEPS_LOG" ]]; then
         printf '\n  git said:\n' >&2
         tail -5 "$BENTO_DEPS_LOG" | sed 's/^/    /' >&2
     fi
+    exit 1
 fi
 
 printf '\n'

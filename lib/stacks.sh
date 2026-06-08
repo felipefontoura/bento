@@ -55,8 +55,9 @@ stacks_compose_path_for_manifest() {
         printf '%s' "$override"
     else
         # Path relative to repo root.
-        local dir="$(dirname "$manifest_path")"
-        printf '%s' "${dir#${BENTO_REPO_ROOT}/}/compose.yml"
+        local dir
+        dir="$(dirname "$manifest_path")"
+        printf '%s' "${dir#"${BENTO_REPO_ROOT}"/}/compose.yml"
     fi
 }
 
@@ -69,9 +70,10 @@ stacks_install_script_for_manifest() {
         printf '%s' "$override"
         return 0
     fi
-    local dir="$(dirname "$manifest_path")"
+    local dir
+    dir="$(dirname "$manifest_path")"
     if [[ -x "$dir/install.sh" ]]; then
-        printf '%s' "${dir#${BENTO_REPO_ROOT}/}/install.sh"
+        printf '%s' "${dir#"${BENTO_REPO_ROOT}"/}/install.sh"
     fi
 }
 
@@ -363,8 +365,12 @@ stacks_deploy() {
         # Logs land in BENTO_LOG_DIR with a timestamp so a reboot or
         # /tmp clean doesn't wipe the evidence operators need to debug
         # a failed build days later.
-        local build_log="${BENTO_LOG_DIR}/build-${stack_key}-$(date +%Y%m%d-%H%M%S).log"
+        local build_log
+        build_log="${BENTO_LOG_DIR}/build-${stack_key}-$(date +%Y%m%d-%H%M%S).log"
         : > "$build_log"
+        # shellcheck disable=SC2024
+        # build_log lives under BENTO_LOG_DIR which is owned by the
+        # calling user; sudo here is only for `docker compose build`.
         if (cd "$(dirname "$full_compose")" \
             && sudo docker compose -f "$(basename "$full_compose")" build --pull \
                 >>"$build_log" 2>&1); then
@@ -477,7 +483,7 @@ stacks_step3_menu() {
         "$BENTO_STATE_FILE" 2>/dev/null)
 
     # Build "name — description [installed]" labels for gum choose.
-    local labels=() label name desc tag
+    local labels=() name desc tag
     for m in "${manifests[@]}"; do
         name=$(jq -r '.name' "$m")
         desc=$(jq -r '.description // ""' "$m")
@@ -511,6 +517,10 @@ stacks_step3_menu() {
     # Seed `seen` with stacks bento already deployed so the depends_on
     # walk below doesn't re-deploy postgres/redis on every checklist run,
     # and so picking an "[installed]" item is a silent no-op.
+    # shellcheck disable=SC2034
+    # `seen` and `failures` are read via nameref inside _deploy_with_deps
+    # (defined in install.sh), so shellcheck's per-file linter doesn't
+    # see the use site.
     local seen=("${installed_keys[@]}")
     local failures=()
 

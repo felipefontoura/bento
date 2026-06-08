@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck shell=bash disable=SC2034
 # bento — pre-gum ANSI palette
 #
 # Single source of truth for the salmon / wasabi / muted colours used
@@ -6,6 +7,10 @@
 # the same palette in hex form for gum once it's available.
 #
 # Keep names short — these are typed a lot in printf format strings.
+#
+# SC2034 is disabled file-wide here: every variable is consumed by
+# callers that source this file (boot.sh, lib/deps.sh). shellcheck
+# only sees palette.sh in isolation so it flags them all as unused.
 
 [[ -n "${_BENTO_PALETTE_LOADED:-}" ]] && return 0
 _BENTO_PALETTE_LOADED=1

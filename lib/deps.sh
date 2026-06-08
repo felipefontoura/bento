@@ -47,6 +47,10 @@ deps_install_base() {
     fi
 
     _d_step "Installing core packages (curl, jq, envsubst, gpg)…"
+    # shellcheck disable=SC2024
+    # Redirects run as the calling shell (root during install). The log
+    # path is in /tmp and writable by the caller — sudo-vs-redirect
+    # ownership is a non-issue.
     if sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get update -qq \
             >>"$BENTO_DEPS_LOG" 2>&1 \
        && sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
@@ -95,6 +99,7 @@ deps_install_gum() {
     rm -f "$tmpkey"
 
     echo "$BENTO_CHARM_REPO" | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
+    # shellcheck disable=SC2024
     if sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get update -qq \
             >>"$BENTO_DEPS_LOG" 2>&1 \
        && sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gum \
