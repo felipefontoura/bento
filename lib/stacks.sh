@@ -489,6 +489,85 @@ stacks_substitute_template_with_stack_envs() {
         envsubst <<< "$template"
 }
 
+# Reconcile state.stacks.* against what's actually deployed in Portainer
+# right now.
+#
+# Why: bento records every successful deploy as state.stacks.<key>.stack_id
+# and uses that record for the [installed] annotation and the `seen` seed
+# in _deploy_with_deps. If the operator deletes a stack via the Portainer
+# UI (the supported day-2 op per CLAUDE.md's ownership model), state.stacks
+# keeps the stale stack_id forever. Result: the orphan looks "[installed]"
+# in Step 3, picking it is a silent no-op, and any dependent stack
+# short-circuits on the same key — paperclip gets re-deployed with
+# DATABASE_URL pointing at a postgres that no longer exists, and the
+# deploy reports success because Portainer accepts the create.
+#
+# Behaviour:
+#   * Live Portainer ⇒ drop entries whose stack_id is no longer listed
+#     OR whose listed entry doesn't carry the BENTO_MANAGED=true env tag
+#     (covers the case where an operator deleted+recreated outside of
+#     bento). One-line summary echoed to stderr.
+#   * Portainer unreachable ⇒ honest warning, return without mutating
+#     state. Better stale-but-known than a partial wipe.
+#
+# Closes GH-9.
+stacks_reconcile_state_with_portainer() {
+    local stacks_json
+    if ! stacks_json="$(portainer_list_stacks 2>/dev/null)"; then
+        ui_warn "Portainer not reachable — using cached state (entries may be stale)"
+        return 0
+    fi
+
+    # Build the set of (id, key) pairs that Portainer currently agrees
+    # are bento-managed. The match is by stack_id AND the BENTO_MANAGED
+    # env tag — either alone is insufficient because Portainer IDs are
+    # reused after delete on some versions.
+    local live
+    live=$(jq -r '
+        [ .[]
+          | select(any(.Env[]?; .name == "BENTO_MANAGED" and .value == "true"))
+          | "\(.Id)" ]
+        | .[]
+    ' <<< "$stacks_json")
+
+    local recorded
+    recorded=$(jq -r '.stacks // {} | to_entries[]
+        | select(.value.stack_id)
+        | "\(.key)\t\(.value.stack_id)"' "$BENTO_STATE_FILE" 2>/dev/null)
+
+    local dropped=()
+    while IFS=$'\t' read -r key sid; do
+        [[ -z "$key" ]] && continue
+        if ! grep -qFx "$sid" <<< "$live"; then
+            dropped+=("$key")
+        fi
+    done <<< "$recorded"
+
+    if (( ${#dropped[@]} == 0 )); then
+        return 0
+    fi
+
+    # Mutate state in a single jq pass so we don't leave the file in an
+    # intermediate state if interrupted.
+    local tmp
+    tmp=$(mktemp "${BENTO_STATE_FILE}.XXXXXX")
+    local filter='.'
+    local k
+    for k in "${dropped[@]}"; do
+        filter+=" | del(.stacks[\"${k}\"])"
+    done
+    jq "$filter" "$BENTO_STATE_FILE" > "$tmp" && mv "$tmp" "$BENTO_STATE_FILE"
+    chmod 600 "$BENTO_STATE_FILE"
+
+    # Plain-English summary — operators who've never touched Portainer
+    # should still understand what just happened.
+    if (( ${#dropped[@]} == 1 )); then
+        ui_info "Noticed ${dropped[0]} was removed from Portainer — cleared it from bento's installed list."
+    else
+        ui_info "Noticed ${#dropped[@]} apps were removed from Portainer (${dropped[*]}) — cleared them from bento's installed list."
+    fi
+}
+
 # -----------------------------------------------------------------------------
 # Menu — Step 3
 # -----------------------------------------------------------------------------
@@ -500,6 +579,11 @@ stacks_step3_menu() {
         ui_warn "No app stack manifests found yet."
         return 2
     fi
+
+    # Reconcile against Portainer before reading state.stacks — operators
+    # who use the Portainer UI as their day-2 surface (per CLAUDE.md) will
+    # have stale stack_id entries here otherwise.
+    stacks_reconcile_state_with_portainer
 
     # Read the set of stacks bento has already deployed (have stack_id in
     # state) once, up-front. We use it twice: to annotate labels with
