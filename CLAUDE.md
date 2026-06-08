@@ -602,7 +602,7 @@ Every `curl` issued by `lib/portainer.sh` is logged to stderr.
     "advertise_addr": "198.51.100.42",
     "portainer_host": "portainer.mydomain.com",
     "portainer_url": "http://127.0.0.1:9000",
-    "portainer_admin_user": "admin"
+    "portainer_admin_user": "deployer"
   },
   "foundation": {
     "swarm": "active",

@@ -120,11 +120,11 @@ _section_infra() {
     local portainer_host portainer_url portainer_user portainer_pass
     portainer_host=$(state_get '.bootstrap.portainer_host')
     portainer_url="https://${portainer_host}"
-    portainer_user="admin"
+    portainer_user="deployer"
     portainer_pass=""
     if [[ -f "${BENTO_STATE_DIR}/portainer.json" ]]; then
-        portainer_user=$(jq -r '.username // "admin"' "${BENTO_STATE_DIR}/portainer.json")
-        portainer_pass=$(jq -r '.password // ""'      "${BENTO_STATE_DIR}/portainer.json")
+        portainer_user=$(jq -r '.username // "deployer"' "${BENTO_STATE_DIR}/portainer.json")
+        portainer_pass=$(jq -r '.password // ""'         "${BENTO_STATE_DIR}/portainer.json")
     fi
 
     cat <<HTML

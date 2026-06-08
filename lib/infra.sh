@@ -129,12 +129,17 @@ infra_init_portainer_admin() {
     # surprises. The base64|tr|head trick we used to use produced
     # variable-length output and bit us in unrelated stacks.
     password=$(openssl rand -hex 16)
-    if ! portainer_init_admin "admin" "$password"; then
+    # Use 'deployer' instead of 'admin'. Scanners reflexively brute-force
+    # username "admin" on every Portainer instance they find; renaming the
+    # account is a tiny, free reduction in noise + a meaningful one in
+    # auto-pwn risk when password rotation slips.
+    local portainer_user="deployer"
+    if ! portainer_init_admin "$portainer_user" "$password"; then
         ui_error "Portainer admin init failed."
         return 1
     fi
 
-    state_set '.bootstrap.portainer_admin_user' "admin"
+    state_set '.bootstrap.portainer_admin_user' "$portainer_user"
     state_set '.foundation.portainer' "ready"
 
     local public_url
@@ -144,7 +149,7 @@ infra_init_portainer_admin() {
 Portainer is ready.
 
   URL:       $public_url
-  Username:  admin
+  Username:  $portainer_user
   Password:  $password
 
 Credentials are also persisted at:
