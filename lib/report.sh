@@ -210,6 +210,24 @@ HTML
         printf '  %s\n' "$(_secret_row "URL" "$url" 0)"
     fi
 
+    # Per-stack post-deploy notes. install.sh drops a marker file
+    # under ${BENTO_STATE_DIR}/<stack>-<topic>.txt; if it exists we
+    # surface the contents here. Today: paperclip's bootstrap-ceo
+    # first-admin invite URL (single line, expires 24h after install).
+    local marker="${BENTO_STATE_DIR}/${stack_key}-invite-url.txt"
+    if [[ -s "$marker" ]]; then
+        local invite_url esc_invite_url
+        invite_url=$(head -1 "$marker")
+        esc_invite_url=$(_html_escape "$invite_url")
+        cat <<HTML
+  <div class="post-deploy-note">
+    <p class="post-deploy-note-title">First-admin claim — single use, expires 24h after install</p>
+    <p>The first signup via this URL becomes <code>instance_admin</code>. Public signup is currently open on the public URL above; lock it later from Portainer (set <code>PAPERCLIP_AUTH_DISABLE_SIGN_UP</code> to <code>true</code>).</p>
+    <p><a class="post-deploy-link" href="${esc_invite_url}" target="_blank" rel="noopener noreferrer">${esc_invite_url}</a></p>
+  </div>
+HTML
+    fi
+
     # Iterate envs.
     local rows
     rows=$(jq -c ".envs[\"$stack_key\"] // {} | to_entries[]?" "$BENTO_STATE_FILE")
