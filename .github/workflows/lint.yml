@@ -1,0 +1,111 @@
+name: Lint
+
+on:
+  push:
+    branches: [main, stable, "feat/**"]
+  pull_request:
+    branches: [main, stable]
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
+
+      - name: shellcheck version
+        run: shellcheck --version
+
+      # Lint every shell script in the repo. .shellcheckrc at the root
+      # controls severity (warning+) and project-wide disables.
+      - name: Run shellcheck
+        run: |
+          set -e
+          # Collect everything that looks like a shell script. Skip .git
+          # and anything inside .github/workflows.
+          mapfile -t files < <(
+            find . \
+              \( -path ./.git -o -path ./.github/workflows \) -prune \
+              -o -type f \( -name '*.sh' -o -name '*.bash' \) -print
+          )
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No shell scripts found — nothing to lint."
+            exit 0
+          fi
+          printf 'Linting %d files…\n' "${#files[@]}"
+          # --severity=warning matches the .shellcheckrc default for
+          # local runs. We pass it explicitly so the gate is the same
+          # regardless of which shellcheck version GitHub's runner
+          # ships — older versions ignore the rc-level setting.
+          shellcheck --shell=bash --severity=warning "${files[@]}"
+
+  bash-syntax:
+    name: bash -n
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Parse every shell file
+        run: |
+          set -e
+          mapfile -t files < <(
+            find . \( -path ./.git \) -prune -o -type f -name '*.sh' -print
+          )
+          for f in "${files[@]}"; do
+            bash -n "$f"
+            echo "ok  $f"
+          done
+
+  manifests:
+    name: jq manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate every manifest.json
+        run: |
+          set -e
+          mapfile -t files < <(find stacks -name manifest.json)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No manifests found."
+            exit 0
+          fi
+          for f in "${files[@]}"; do
+            jq -e . "$f" > /dev/null
+            echo "ok  $f"
+          done
+
+  compose:
+    name: docker compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate every compose.yml
+        env:
+          BASE_DOMAIN: example.test
+          ADMIN_EMAIL: admin@example.test
+          PORTAINER_HOST: portainer.example.test
+          TRAEFIK_ACME_EMAIL: admin@example.test
+        run: |
+          set -e
+          mapfile -t files < <(find stacks -name 'compose.yml')
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No compose files found."
+            exit 0
+          fi
+          # `docker compose config` chokes on undefined ${VARS}; export a
+          # superset of placeholders extracted from every compose at once.
+          # We don't care about real values — just that the YAML parses
+          # with substitutions applied. Anything still missing falls
+          # back to the literal var name so the parser is happy.
+          mapfile -t vars < <(grep -rhoE '\$\{[A-Z_][A-Z0-9_]*' stacks 2>/dev/null \
+                              | tr -d '${' | sort -u)
+          for v in "${vars[@]}"; do
+            : "${!v:=placeholder}"
+            export "$v"
+          done
+          for f in "${files[@]}"; do
+            docker compose -f "$f" config > /dev/null
+            echo "ok  $f"
+          done

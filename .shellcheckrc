@@ -1,0 +1,15 @@
+# bento — shellcheck configuration
+#
+# Apply to every *.sh in the repo by default. CI runs shellcheck with no
+# args; this file controls the severity and false-positive suppressions
+# that hold across the codebase.
+
+# Treat warnings as errors. Info is too noisy (SC1091 fires for every
+# `source` of a sibling file that the per-file invocation can't see).
+severity=warning
+
+# SC1091: "not following" — sourced files outside the linter's view.
+# Every bento module sources its siblings, and we don't want the noise.
+# The CI script can re-enable this with `shellcheck -x` when invoking
+# install.sh as the entrypoint so cross-file checks still run.
+disable=SC1091

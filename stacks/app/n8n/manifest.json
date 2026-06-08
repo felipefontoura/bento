@@ -1,0 +1,13 @@
+{
+  "name": "n8n",
+  "category": "app",
+  "description": "Workflow automation (editor + worker + webhook)",
+  "depends_on": ["postgres", "redis"],
+  "env": [
+    { "name": "N8N_HOST",          "default": "editor-n8n.${BASE_DOMAIN}",  "prompt": "n8n editor hostname" },
+    { "name": "N8N_WEBHOOK_HOST",  "default": "webhook-n8n.${BASE_DOMAIN}", "prompt": "n8n webhook hostname" },
+    { "name": "N8N_ENCRYPTION_KEY","generate": "openssl rand -hex 32",  "hide": true },
+    { "name": "POSTGRES_PASSWORD", "from_state": "POSTGRES_PASSWORD" }
+  ],
+  "post_deploy_url": "https://${N8N_HOST}"
+}

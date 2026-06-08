@@ -1,0 +1,181 @@
+# =============================================================================
+# paperclip-runs — async LLM bridge between Paperclip and Hermes/Openclaw
+# =============================================================================
+#
+# Two long-lived processes share one image (ghcr.io/felipefontoura/paperclip-runs).
+# The first arg picks the role:
+#
+#   - api      Express server, listens on :8787 for Paperclip's http adapter.
+#   - worker   BullMQ consumer + Paperclip wakeup driver on :8788 (health).
+#
+# OVERLAY-ONLY. No Traefik labels, no host port. Paperclip and the bridge
+# both live on network_public; the adapter URL is
+# http://paperclip_runs_api:8787/paperclip/execute.
+#
+# Picking a provider:
+#   - PROVIDER=hermes   (default)  → PROVIDER_BASE_URL=http://hermes:8642
+#   - PROVIDER=openclaw            → PROVIDER_BASE_URL=http://openclaw:18789
+#                                    + PROVIDER_MODEL=openclaw/default
+#                                    + PROVIDER_API_KEY=${OPENCLAW_GATEWAY_TOKEN}
+#
+# Bento's manifest defaults to the Hermes wiring. To switch to Openclaw at
+# deploy time, set BENTO_ENV_PAPERCLIP_RUNS_PROVIDER=openclaw and friends.
+# =============================================================================
+
+x-paperclip-runs-common: &paperclip-runs-common
+  image: ghcr.io/felipefontoura/paperclip-runs:latest
+  networks:
+    - network_public
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  environment:
+    # =============================================================================
+    # Core Application
+    # =============================================================================
+
+    # Runtime environment.
+    - NODE_ENV=production
+
+    # Logging level: fatal | error | warn | info | debug | trace.
+    - LOG_LEVEL=info
+
+    # =============================================================================
+    # Security
+    # =============================================================================
+
+    # Bearer token Paperclip's http adapter must send on every POST.
+    # MUST remain stable for the lifetime of the configured Paperclip agent.
+    - BRIDGE_TOKEN=${BRIDGE_TOKEN}
+
+    # =============================================================================
+    # Cache / Queue (Redis)
+    # =============================================================================
+
+    # Redis connection URL. DB index allocation across bento stacks:
+    #   /0 free  /1 n8n  /2 plunk  /3 chatwoot  /4 evolution-api
+    #   /5 paperclip-runs  /6+ free
+    - REDIS_URL=redis://redis:6379/5
+
+    # BullMQ queue name. Change only if you run two bridge instances
+    # against the same Redis instance and want them isolated.
+    - QUEUE_NAME=paperclip-runs
+
+    # =============================================================================
+    # Provider (LLM gateway)
+    # =============================================================================
+
+    # Which provider serves the runs: hermes | openclaw.
+    - PROVIDER=${PROVIDER:-hermes}
+
+    # OpenAI-compatible /v1 base URL. Overlay-internal by default.
+    # Openclaw alternative: http://openclaw:18789
+    - PROVIDER_BASE_URL=${PROVIDER_BASE_URL:-http://hermes:8642}
+
+    # Bearer token for the provider's /v1/chat/completions.
+    # For hermes this is HERMES_API_KEY; for openclaw it's OPENCLAW_GATEWAY_TOKEN.
+    - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+
+    # Model id sent in the chat-completions body.
+    # Hermes: hermes-agent
+    # Openclaw: openclaw, openclaw/default, or openclaw/<agentId>
+    - PROVIDER_MODEL=${PROVIDER_MODEL:-hermes-agent}
+
+    # =============================================================================
+    # Paperclip callback (re-wake)
+    # =============================================================================
+
+    # Where the worker POSTs /api/agents/:agentId/wakeup once the job is done.
+    # Must be reachable from the worker container over the overlay.
+    - PAPERCLIP_API_URL=${PAPERCLIP_API_URL:-http://paperclip:3100}
+
+    # Optional bearer for the wakeup endpoint if the operator enforces auth.
+    # - PAPERCLIP_API_KEY=
+
+    # =============================================================================
+    # Worker / Queue Tuning
+    # =============================================================================
+
+    # Jobs processed in parallel by one worker. Leave at 1 on small VPS —
+    # the whole point of the bridge is to stop Paperclip from overrunning
+    # the provider with fan-out.
+    - WORKER_CONCURRENCY=1
+
+    # Per-job wall-clock budget (30 min). Worker aborts the provider call
+    # and marks the run failed when exceeded.
+    - JOB_TIMEOUT_MS=1800000
+
+    # BullMQ retry count for transient failures (provider 5xx, network).
+    - JOB_ATTEMPTS=2
+
+    # Exponential-backoff base between attempts.
+    - JOB_BACKOFF_MS=30000
+
+    # Queue depth at which the API returns 503 (backpressure).
+    # Paperclip's http adapter treats non-2xx as a failed run.
+    - MAX_WAITING_JOBS=20
+
+    # =============================================================================
+    # Locks & Result Cache (Redis)
+    # =============================================================================
+
+    # Per-sessionKey lock TTL — bounds how long a stuck job can block the
+    # next run for the same agent/issue.
+    - SESSION_LOCK_TTL_MS=1800000
+
+    # How long a completed RunResult stays cached under result:<runId> while
+    # we wait for Paperclip to fire the re-wake. After this window the
+    # cached result is gone and the wake will mis-resolve.
+    - RESULT_CACHE_TTL_MS=3600000
+
+    # =============================================================================
+    # Prompt
+    # =============================================================================
+
+    # Override the built-in system prompt. Leave commented to use the
+    # default ("autonomous engineering agent, no destructive actions, …").
+    # - SYSTEM_PROMPT="You are …"
+
+x-paperclip-runs-deploy: &paperclip-runs-deploy
+  mode: replicated
+  replicas: 1
+  placement:
+    constraints:
+      - node.role == manager
+  update_config:
+    parallelism: 1
+    delay: 30s
+    order: start-first
+    failure_action: rollback
+  restart_policy:
+    condition: any
+    delay: 10s
+    max_attempts: 5
+    window: 120s
+  resources:
+    limits:
+      cpus: "0.5"
+      memory: 512M
+    reservations:
+      cpus: "0.1"
+      memory: 128M
+
+services:
+  paperclip_runs_api:
+    <<: *paperclip-runs-common
+    command: ["api"]
+    deploy:
+      <<: *paperclip-runs-deploy
+
+  paperclip_runs_worker:
+    <<: *paperclip-runs-common
+    command: ["worker"]
+    deploy:
+      <<: *paperclip-runs-deploy
+
+networks:
+  network_public:
+    external: true
+    name: network_public

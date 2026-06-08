@@ -1,0 +1,44 @@
+{
+  "name": "plunk",
+  "category": "app",
+  "description": "Open-source transactional email platform",
+  "depends_on": [
+    "postgres",
+    "redis"
+  ],
+  "env": [
+    {
+      "name": "PLUNK_HOST",
+      "default": "plunk.${BASE_DOMAIN}",
+      "prompt": "Plunk hostname"
+    },
+    {
+      "name": "PLUNK_JWT_SECRET",
+      "generate": "openssl rand -hex 32",
+      "hide": true
+    },
+    {
+      "name": "POSTGRES_PASSWORD",
+      "from_state": "POSTGRES_PASSWORD"
+    },
+    {
+      "name": "AWS_REGION",
+      "default": "us-east-1",
+      "prompt": "AWS SES region"
+    },
+    {
+      "name": "AWS_ACCESS_KEY_ID",
+      "prompt": "AWS SES access key (skip if not using email)"
+    },
+    {
+      "name": "AWS_SECRET_ACCESS_KEY",
+      "prompt": "AWS SES secret key",
+      "hide": true
+    },
+    {
+      "name": "AWS_SES_CONFIGURATION_SET",
+      "prompt": "AWS SES configuration set name"
+    }
+  ],
+  "post_deploy_url": "https://${PLUNK_HOST}"
+}

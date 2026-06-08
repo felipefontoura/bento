@@ -1,0 +1,102 @@
+services:
+  plunk:
+    image: driaug/plunk:latest
+    entrypoint: ["/app/entry.sh"]
+    networks:
+      - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      # =============================================================================
+      # Public URLs / API
+      # =============================================================================
+
+      # Base application URI.
+      - APP_URI=https://${PLUNK_HOST}
+
+      # API endpoint URI.
+      - API_URI=https://${PLUNK_HOST}/api
+
+      # Public-facing API URI exposed to the frontend.
+      - NEXT_PUBLIC_API_URI=https://${PLUNK_HOST}/api
+
+      # =============================================================================
+      # Database (PostgreSQL)
+      # =============================================================================
+
+      # Full database connection URL.
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/plunk
+
+      # =============================================================================
+      # Cache / Queue (Redis)
+      # =============================================================================
+
+      # Redis connection URL (DB index 2).
+      - REDIS_URL=redis://redis:6379/2
+
+      # =============================================================================
+      # Security
+      # =============================================================================
+
+      # JWT signing secret. MUST remain stable across restarts/upgrades.
+      - JWT_SECRET=${PLUNK_JWT_SECRET}
+
+      # =============================================================================
+      # Email (AWS SES)
+      # =============================================================================
+
+      # AWS region where SES is configured.
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+
+      # AWS access key for SES.
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+
+      # AWS secret key for SES.
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
+      # AWS SES configuration set name.
+      - AWS_SES_CONFIGURATION_SET=${AWS_SES_CONFIGURATION_SET}
+
+      # =============================================================================
+      # Account Management
+      # =============================================================================
+
+      # Disable public signups.
+      - DISABLE_SIGNUPS=true
+    # Swarm healthcheck omitted — Traefik backend probe handles readiness.
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.plunk.rule=Host(`${PLUNK_HOST}`)
+        - traefik.http.routers.plunk.entrypoints=websecure
+        - traefik.http.routers.plunk.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.plunk.priority=2
+        - traefik.http.routers.plunk.service=plunk
+        - traefik.http.services.plunk.loadbalancer.server.port=3000
+        - traefik.http.services.plunk.loadbalancer.passHostHeader=true
+networks:
+  network_public:
+    name: network_public
+    external: true

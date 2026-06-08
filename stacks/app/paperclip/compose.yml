@@ -1,0 +1,172 @@
+x-paperclip-common: &paperclip-common
+  # Stock upstream image. CLIs already shipped: claude, codex, opencode.
+  # To add hermes / gemini / pi / grok, do it inside the running container
+  # with `docker exec`, or fork this stack to extend the image.
+  image: ghcr.io/paperclipai/paperclip:latest
+  networks:
+    - network_public
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  environment:
+    # =============================================================================
+    # Core Application
+    # =============================================================================
+
+    - HOST=0.0.0.0
+    - PAPERCLIP_HOME=/paperclip
+    - PAPERCLIP_INSTANCE_ID=production
+    - NODE_ENV=production
+
+    # =============================================================================
+    # Public URL / Reverse Proxy
+    # =============================================================================
+
+    - PAPERCLIP_PUBLIC_URL=https://${PAPERCLIP_HOST}
+    - PAPERCLIP_DEPLOYMENT_MODE=authenticated
+    - PAPERCLIP_DEPLOYMENT_EXPOSURE=private
+
+    # =============================================================================
+    # Authentication / Security
+    # =============================================================================
+
+    # Generate with:
+    #   openssl rand -hex 32
+    - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+
+    # After first setup, keep signups disabled.
+    # If onboarding fails, temporarily set this to false.
+    - PAPERCLIP_AUTH_DISABLE_SIGN_UP=true
+
+    # =============================================================================
+    # AI Providers
+    # =============================================================================
+
+    # -----------------------------------------------------------------------------
+    # Z.ai / GLM
+    # -----------------------------------------------------------------------------
+    #
+    # Use this endpoint for subscription/coding plan usage:
+    #   https://api.z.ai/api/coding/paas/v4
+    #
+    # Model:
+    #   GLM-5.1
+    #
+    # IMPORTANT:
+    # Do NOT use the generic endpoint for subscription:
+    #   https://api.z.ai/api/paas/v4
+    #
+    # - ZAI_API_KEY=secret
+    # - ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
+    # - ZAI_MODEL=GLM-5.1
+
+    # OpenAI-compatible aliases.
+    # Useful if Paperclip or an adapter expects OpenAI-compatible env names.
+    # - OPENAI_API_KEY=secret
+    # - OPENAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
+    # - OPENAI_MODEL=GLM-5.1
+
+    # -----------------------------------------------------------------------------
+    # OpenAI
+    # -----------------------------------------------------------------------------
+    - OPENAI_API_KEY=
+
+    # Optional Anthropic key, only if you also want Claude models.
+    # - ANTHROPIC_API_KEY=
+
+    # Optional OpenRouter fallback.
+    # - OPENROUTER_API_KEY=
+    # - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+    # =============================================================================
+    # Bundled agent CLIs
+    # =============================================================================
+    #
+    # Shipped by the upstream image: claude, codex, opencode.
+    # Add more CLIs at runtime if you need them, e.g.:
+    #   docker exec -it <container> npm install -g @google/gemini-cli
+
+    # =============================================================================
+    # Timezone
+    # =============================================================================
+
+    - TZ=America/Sao_Paulo
+
+    # =============================================================================
+    # Database / Storage
+    # =============================================================================
+
+    # By default Paperclip can use its embedded storage under PAPERCLIP_HOME.
+    # For production at scale, prefer external PostgreSQL if your Paperclip build supports it.
+    #
+    # Example:
+    # - DATABASE_URL=postgresql://paperclip:secret@postgres:5432/paperclip
+
+    # =============================================================================
+    # Logging
+    # =============================================================================
+
+    - LOG_LEVEL=info
+
+  deploy: &paperclip-deploy
+    mode: replicated
+    replicas: 1
+    placement:
+      constraints:
+        - node.role == manager
+    update_config:
+      parallelism: 1
+      delay: 30s
+      order: stop-first
+      failure_action: rollback
+    restart_policy:
+      condition: on-failure
+      delay: 10s
+      max_attempts: 5
+      window: 120s
+
+services:
+  paperclip:
+    <<: *paperclip-common
+    volumes:
+      - paperclip-data:/paperclip
+    # Swarm healthcheck omitted — paperclip's boot bundles a Python venv
+    # warmup that occasionally exceeds the probe window. The Dockerfile
+    # still ships a HEALTHCHECK so `docker run` standalone gets one;
+    # Swarm just won't enforce it.
+    deploy:
+      <<: *paperclip-deploy
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.paperclip.rule=Host(`${PAPERCLIP_HOST}`)
+        - traefik.http.routers.paperclip.entrypoints=websecure
+        - traefik.http.routers.paperclip.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.paperclip.priority=2
+        - traefik.http.routers.paperclip.service=paperclip
+        - traefik.http.services.paperclip.loadbalancer.server.port=3100
+        - traefik.http.services.paperclip.loadbalancer.passHostHeader=true
+        - traefik.http.routers.paperclip.middlewares=paperclip-headers
+        - traefik.http.middlewares.paperclip-headers.headers.stsSeconds=31536000
+        - traefik.http.middlewares.paperclip-headers.headers.stsIncludeSubdomains=true
+        - traefik.http.middlewares.paperclip-headers.headers.stsPreload=true
+        - traefik.http.middlewares.paperclip-headers.headers.contentTypeNosniff=true
+        - traefik.http.middlewares.paperclip-headers.headers.browserXssFilter=true
+        - traefik.http.middlewares.paperclip-headers.headers.referrerPolicy=no-referrer-when-downgrade
+
+networks:
+  network_public:
+    name: network_public
+    external: true
+
+volumes:
+  paperclip-data:
+    driver: local

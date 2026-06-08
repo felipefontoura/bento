@@ -1,0 +1,117 @@
+# =============================================================================
+# Openclaw — chat-channel → LLM gateway with OpenAI-compatible API
+# =============================================================================
+#
+# Overlay-only TOTAL. There is no Traefik route and no host port — both:
+#
+#   - Port 18789 (Control UI + /healthz + opt-in /v1/chat/completions)
+#   - Bundled SQLite, OAuth secrets, channel adapters
+#
+# live entirely on `network_public` and can only be reached by other
+# overlay containers. The companion bridge service (next bento batch) speaks
+# OpenAI-compatible chat completions against `http://openclaw:18789/v1/...`,
+# exactly the same shape it uses against Hermes.
+#
+# One-time operator setup happens via either:
+#
+#   docker exec -it $(docker ps -q -f name=openclaw_openclaw) sh
+#
+# for in-container config, or a temporary SSH tunnel for the Control UI:
+#
+#   ssh -L 18789:127.0.0.1:18789 user@vps
+#
+# The OpenAI-compatible /v1/* endpoint is OFF until install.sh writes the
+# 5-line JSON5 config and forces a service restart — there is no upstream
+# env var equivalent.
+#
+# Gotcha: `host.docker.internal` is broken under Swarm overlay. If you point
+# Openclaw at a local LM Studio / Ollama, use the VPS host's private IP or a
+# Tailscale endpoint instead.
+# =============================================================================
+
+services:
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    networks:
+      - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      # Three separate volumes — OAuth secret dir MUST live outside the
+      # data dir per upstream guidance (different encryption lifecycle).
+      - openclaw-config:/home/node/.openclaw
+      - openclaw-workspace:/home/node/.openclaw/workspace
+      - openclaw-oauth:/home/node/.config/openclaw
+    environment:
+      # =============================================================================
+      # Core
+      # =============================================================================
+
+      # Bearer token for both the Control UI and (once enabled) /v1/chat/completions.
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+
+      # Bind on the LAN inside the container so the overlay can reach it.
+      # `loopback` would shadow the service from sibling containers.
+      - OPENCLAW_GATEWAY_BIND=lan
+
+      # Where the gateway stores SQLite + JSON5 config + workspace.
+      - OPENCLAW_CONFIG_DIR=/home/node/.openclaw
+      - OPENCLAW_WORKSPACE_DIR=/home/node/.openclaw/workspace
+      - OPENCLAW_AUTH_PROFILE_SECRET_DIR=/home/node/.config/openclaw
+
+      # =============================================================================
+      # LLM providers (commented — uncomment at least one to actually serve)
+      # =============================================================================
+
+      # - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+
+      # =============================================================================
+      # Chat channels (commented — bring your own tokens)
+      # =============================================================================
+
+      # - TELEGRAM_BOT_TOKEN=
+      # - SLACK_BOT_TOKEN=
+      # - SLACK_APP_TOKEN=
+      # - DISCORD_BOT_TOKEN=
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+volumes:
+  openclaw-config:
+    driver: local
+  openclaw-workspace:
+    driver: local
+  openclaw-oauth:
+    driver: local
+
+networks:
+  network_public:
+    external: true
+    name: network_public
