@@ -33,6 +33,19 @@ deps_check_apt() {
 }
 
 deps_install_base() {
+    # Idempotent skip — every Step 1 already pulled these in (curl + git
+    # are required for boot.sh to even reach us), and re-running
+    # `apt-get update` on every install.sh source costs a noticeable
+    # round-trip to the mirror. If every binary is on $PATH we skip the
+    # whole apt block.
+    if command -v curl     >/dev/null 2>&1 \
+       && command -v jq       >/dev/null 2>&1 \
+       && command -v envsubst >/dev/null 2>&1 \
+       && command -v gpg      >/dev/null 2>&1 \
+       && command -v git      >/dev/null 2>&1; then
+        return 0
+    fi
+
     _d_step "Installing core packages (curl, jq, envsubst, gpg)…"
     if sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get update -qq \
             >>"$BENTO_DEPS_LOG" 2>&1 \
