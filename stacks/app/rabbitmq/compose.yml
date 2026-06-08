@@ -73,6 +73,9 @@ services:
         - traefik.http.routers.rabbitmq.service=rabbitmq
         - traefik.http.services.rabbitmq.loadbalancer.server.port=15672
         - traefik.http.services.rabbitmq.loadbalancer.passHostHeader=true
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=rabbitmq
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 networks:
   network_public:
     name: network_public

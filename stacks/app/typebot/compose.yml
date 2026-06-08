@@ -161,6 +161,9 @@ services:
         - traefik.http.services.typebot_viewer.loadbalancer.server.port=3000
         - traefik.http.services.typebot_viewer.loadbalancer.passHostHeader=true
         - traefik.http.routers.typebot_viewer.service=typebot_viewer
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=typebot
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:
   network_public:

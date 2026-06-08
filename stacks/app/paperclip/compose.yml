@@ -236,9 +236,6 @@ services:
           # edge. Observed in production 2026-06-08: 4 hermes wakes in parallel
           # OOM-killed by the kernel at 1 GB. 2 GB has comfortable headroom.
           memory: 2048M
-        reservations:
-          cpus: "0.25"
-          memory: 256M
       labels:
         - traefik.enable=true
         - traefik.http.routers.paperclip.rule=Host(`${PAPERCLIP_HOST}`)
@@ -255,6 +252,9 @@ services:
         - traefik.http.middlewares.paperclip-headers.headers.contentTypeNosniff=true
         - traefik.http.middlewares.paperclip-headers.headers.browserXssFilter=true
         - traefik.http.middlewares.paperclip-headers.headers.referrerPolicy=no-referrer-when-downgrade
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=paperclip
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:
   network_public:

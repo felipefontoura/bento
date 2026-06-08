@@ -175,6 +175,9 @@ services:
         - traefik.http.routers.evolution.service=evolution
         - traefik.http.services.evolution.loadbalancer.server.port=8080
         - traefik.http.services.evolution.loadbalancer.passHostHeader=true
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=evolution-api
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 volumes:
   evolution_instances:
     driver: local

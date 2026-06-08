@@ -168,9 +168,6 @@ x-chatwoot-common: &chatwoot-common
       limits:
         cpus: "1"
         memory: 1024M
-      reservations:
-        cpus: "0.5"
-        memory: 512M
     update_config:
       parallelism: 1
       delay: 30s
@@ -225,6 +222,9 @@ services:
         # SSL Headers Middleware
         - traefik.http.middlewares.chatwoot-sslheader.headers.customrequestheaders.X-Forwarded-Proto=https
         - traefik.http.routers.chatwoot_web.middlewares=chatwoot-sslheader@docker
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=chatwoot
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
   # Background Job Processor
   chatwoot_sidekiq:

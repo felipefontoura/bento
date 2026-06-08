@@ -119,9 +119,12 @@ Helm + kubectl or Terraform + the cloud console.
 | Day-to-day ops (logs, restart, scale, exec) | redirect | owner |
 | Stacks added directly in Portainer (no `BENTO_MANAGED` label) | ignored | full owner |
 
-The discriminator is the **`BENTO_MANAGED=true`** env var that `lib/stacks.sh`
-injects on every `create_stack_from_git` call. Anything without it is
-invisible to bento updates. Anything with it is bento's to reconcile.
+The discriminator is **`BENTO_MANAGED=true`**, set in two places:
+
+1. As a **stack-level env var** on every `create_stack_from_git` call (Portainer keeps it on the stack record — that's what `update_redeploy_stacks` and Portainer's stack filter use).
+2. As a **Docker service label** declared in every shipped `compose.yml` under `services.<name>.deploy.labels` (Swarm carries it on the running service spec — that's what `docker service ls --filter label=BENTO_MANAGED=true` and `auth_propagate_state_providers` use).
+
+Both surfaces stay aligned because the CI job `BENTO_MANAGED labels` (`.github/workflows/lint.yml`) fails the PR if any stack `compose.yml` is missing the three labels (`BENTO_MANAGED`, `BENTO_STACK_KEY=<key>`, `BENTO_DEPLOYED_REF`). Anything without those is invisible to bento — Portainer/Swarm own it directly.
 
 ---
 
@@ -279,9 +282,10 @@ benchmark. Concretely:
 | Env vars | All deployment-variable values use `${VAR}` | Grouped into commented categories with a one-line WHY per variable, mirroring upstream's docs |
 | Hostnames | At least the primary hostname is parametrized | All public surfaces (editor + webhook + builder + viewer if applicable) |
 | Healthcheck | DBs only (`pg_isready`, `redis-cli ping`, `rabbitmq-diagnostics ping`) — cheap, meaningful, never wedge boot | Same |
-| Deploy block | `replicas`, `placement`, `update_config`, `restart_policy` (start-first stateless / stop-first stateful) | Same + `resources.limits` + `resources.reservations` |
+| Deploy block | `replicas`, `placement`, `update_config`, `restart_policy` (start-first stateless / stop-first stateful) | Same + `resources.limits` |
+| BENTO labels | **Mandatory.** `deploy.labels` includes `BENTO_MANAGED=true`, `BENTO_STACK_KEY=<key>`, `BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}`. Enforced by the `BENTO_MANAGED labels` CI job. | Same |
 | Logging | `json-file` + `max-size: 10m` + `max-file: 3` | Same |
-| Resources | None acceptable only for genuinely tiny services | `limits` + `reservations` for CPU and memory |
+| Resources | None acceptable only for genuinely tiny services. **Avoid `reservations` — Swarm guarantees them at placement time and they bin-pack worse than limits-only on small VPS.** | `limits` only for CPU and memory; calibrate from `docker stats` of a warm instance |
 | Network | `network_public` only | Same — apps connect via service name |
 | Volumes | `driver: local` for anything app-private | Same; no `external: true` outside `network_public` |
 | Secrets | Generated via manifest, never literal `secret` | Same |
@@ -396,6 +400,16 @@ are cheap, instantaneous, and meaningful.
 - traefik.http.services.<key>.loadbalancer.server.port=<container-port>
 - traefik.http.services.<key>.loadbalancer.passHostHeader=true
 ```
+
+**`BENTO_MANAGED` labels** (mandatory — paste at the end of every `deploy.labels` block):
+
+```yaml
+- BENTO_MANAGED=true
+- BENTO_STACK_KEY=<key>
+- BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
+```
+
+These three surfaces are how everything bento-aware finds your stack at runtime: `docker service ls --filter label=BENTO_MANAGED=true` lists them, `auth_propagate_state_providers` propagates ambient AI-provider tokens to them, future reconciliation tooling matches `BENTO_STACK_KEY` against `state.stacks.<key>` to detect orphans. The CI job `BENTO_MANAGED labels` fails the PR if any of the three is missing. `${BENTO_DEPLOYED_REF:-unknown}` is a stack-level env that `lib/stacks.sh::stacks_build_env_payload` injects with the current git SHA on deploy; the fallback `:-unknown` keeps `docker compose config` quiet during local lint runs.
 
 ### 5. Write `manifest.json`
 
@@ -637,6 +651,27 @@ Every `curl` issued by `lib/portainer.sh` is logged to stderr.
 Read with `state_get '.bootstrap.base_domain'`, write with
 `state_set '.foundation.swarm' "active"`. Always go through `lib/state.sh`
 so the schema migration runs.
+
+**State reconciliation.** `state.stacks.*` is bento's cached view of
+"what's deployed." Operators are encouraged to manage day-2 ops via
+the Portainer UI (per the ownership table above), so that cache will
+drift whenever someone deletes a stack outside of bento. To prevent
+the orphan entries from short-circuiting future Step 3 deploys (e.g.
+a re-deploy of `paperclip` would silently skip `postgres` if the
+operator deleted postgres via Portainer but it still appears in
+state.stacks), `stacks_reconcile_state_with_portainer` runs on entry
+to every code path that reads `state.stacks.*.stack_id`:
+
+- `stacks_step3_menu` (interactive Step 3)
+- `unattended_step3` (`BENTO_UNATTENDED=1` path)
+- `update_redeploy_stacks` (Update → Re-deploy stacks)
+
+The reconcile is one HTTP call to Portainer's `/api/stacks`. Entries
+whose `stack_id` is not in Portainer's live list, OR whose live entry
+doesn't carry `BENTO_MANAGED=true` in its env, are dropped from state.
+If Portainer is unreachable, the reconcile is skipped with a visible
+warning (`ui_warn "Portainer not reachable — using cached state…"`)
+rather than mutating state on bad data.
 
 ---
 
