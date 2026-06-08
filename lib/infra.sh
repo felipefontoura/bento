@@ -75,11 +75,20 @@ infra_deploy_stack_file() {
 }
 
 infra_deploy_traefik_and_portainer() {
-    # Export everything envsubst needs.
-    export TRAEFIK_ACME_EMAIL
-    export PORTAINER_HOST
-    TRAEFIK_ACME_EMAIL="$(state_get '.bootstrap.admin_email')"
-    PORTAINER_HOST="portainer.$(state_get '.bootstrap.base_domain')"
+    local admin_email base_domain
+    admin_email="$(state_get '.bootstrap.admin_email')"
+    base_domain="$(state_get '.bootstrap.base_domain')"
+    # Defensive: if bootstrap never ran (state file edited by hand, schema
+    # migration failure, …) base_domain is empty and we'd publish a
+    # Traefik rule for Host(`portainer.`) — accepted by Traefik but
+    # never resolves. Bail with a useful error instead.
+    if [[ -z "$admin_email" || -z "$base_domain" ]]; then
+        ui_error "Bootstrap state is incomplete (admin_email='$admin_email' base_domain='$base_domain')."
+        ui_error "Re-run the menu from scratch so bootstrap_prompt_once can fill them in."
+        return 1
+    fi
+    export TRAEFIK_ACME_EMAIL="$admin_email"
+    export PORTAINER_HOST="portainer.${base_domain}"
 
     state_set '.bootstrap.portainer_host' "$PORTAINER_HOST"
     state_set '.bootstrap.portainer_url' "http://127.0.0.1:9000"
@@ -193,9 +202,10 @@ infra_ensure_dns() {
 
     if [[ "${BENTO_UNATTENDED:-0}" == "1" ]]; then
         ui_info "Unattended: polling portainer.${base} (expecting ${advertise})…"
-        local elapsed=0 resolved
+        local elapsed=0 resolved last_resolved="<empty>"
         while (( elapsed < 120 )); do
             resolved=$(dig +short A "portainer.${base}" @1.1.1.1 2>/dev/null | tail -1)
+            [[ -n "$resolved" ]] && last_resolved="$resolved"
             if [[ "$resolved" == "$advertise" ]]; then
                 ui_success "DNS OK: portainer.${base} → ${advertise}"
                 return 0
@@ -203,7 +213,11 @@ infra_ensure_dns() {
             sleep 5
             elapsed=$((elapsed + 5))
         done
+        # Surface what dig actually saw — the old form just said "did
+        # not resolve" without telling the operator if it resolved
+        # to the wrong IP, returned NXDOMAIN, or hit a network issue.
         ui_error "portainer.${base} did not resolve to ${advertise} within 120s."
+        ui_error "Last dig answer: ${last_resolved}"
         ui_error "Let's Encrypt would HTTP-01 fail next. Aborting Step 2."
         ui_error "Fix your DNS A record for *.${base} → ${advertise} and re-run."
         return 1
