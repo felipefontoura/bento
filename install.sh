@@ -269,6 +269,27 @@ step2_run() {
         ui_warn "Run Step 1 first."
         return 0
     fi
+    # Step 2 is already 'done' in state — skip by default. Re-running
+    # silently re-prompts DNS, kicks a rolling-update on Traefik +
+    # Portainer (brief downtime), and prints 'admin already initialized'
+    # instead of the credentials box the operator was probably hoping
+    # for. Offer the re-run explicitly so it stays available for the
+    # legitimate case (compose file edited locally, image bumped).
+    if infra_is_done; then
+        ui_info "Step 2 is already complete (Traefik + Portainer deployed)."
+        ui_format_md <<EOF
+**Re-running** will:
+- re-prompt the DNS confirmation
+- redeploy \`stacks/infra/{traefik,portainer}/compose.yml\` via Swarm rolling-update (brief Portainer downtime)
+- skip the Portainer admin init (credentials are persisted at \`${BENTO_PORTAINER_CREDS}\`)
+
+**For Portainer credentials**, run "Report" from the main menu instead —
+it prints the same box without touching the deploy.
+EOF
+        if ! ui_confirm "Re-run Step 2 anyway?"; then
+            return 0
+        fi
+    fi
     infra_run_step2
 }
 
