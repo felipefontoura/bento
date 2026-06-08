@@ -212,8 +212,16 @@ stacks_resolve_env() {
 
     # 3. generate — run the shell snippet once, persist the output.
     if [[ -n "$generate_cmd" ]]; then
-        local generated
-        generated=$(bash -c "$generate_cmd")
+        local generated rc=0
+        generated=$(bash -c "$generate_cmd") || rc=$?
+        # Bail loudly: a silently empty secret (failed openssl, missing
+        # /dev/urandom, typo in the manifest snippet) used to be persisted
+        # as "" and Portainer would accept the resulting JWT_SECRET=''.
+        if (( rc != 0 )) || [[ -z "$generated" ]]; then
+            ui_error "generate snippet for $stack_key.$var_name failed or produced empty output:"
+            ui_error "  cmd: $generate_cmd"
+            return 1
+        fi
         _stacks_persist_env "$stack_key" "$var_name" "$generated"
         return 0
     fi
@@ -258,6 +266,16 @@ stacks_build_env_payload() {
     env_entries+=("$(jq -n --arg v "$git_sha"        '{name: "BENTO_DEPLOYED_REF", value: $v}')")
     env_entries+=("$(jq -n --arg v "$stack_key"      '{name: "BENTO_STACK_KEY",    value: $v}')")
 
+    # Refuse to build an empty env array. With our three tracking labels
+    # appended above, env_entries must always have at least 3 entries —
+    # zero means stacks_resolve_env returned 1 silently somewhere AND
+    # something went wrong with the BENTO_* appends. Defensive: never
+    # let Portainer accept "{}" as the env payload.
+    if (( ${#env_entries[@]} == 0 )); then
+        ui_error "$stack_key: env payload is empty — refusing to deploy."
+        return 1
+    fi
+
     # `jq -s '.'` slurps the stream of JSON objects into a single array
     # — safer than concatenating with printf when values can contain
     # commas, quotes, or newlines.
@@ -282,8 +300,13 @@ stacks_memory_budget_check() {
         manifest=$(stacks_manifest_for_key "$app")
         [[ -z "$manifest" ]] && continue
         compose="${BENTO_REPO_ROOT}/$(stacks_compose_path_for_manifest "$manifest")"
-        [[ -f "$compose" ]] || continue
-        # Sum every `memory:` value. Convert `Ng`/`Gg` → MB.
+        if [[ ! -f "$compose" ]]; then
+            ui_warn "Memory budget: compose file missing for $app ($compose)"
+            continue
+        fi
+        # Sum every `memory:` value. Convert `Ng`/`Gg` → MB. The `|| echo 0`
+        # at the end is intentional — awk failures here are budget
+        # estimation noise, not deploy blockers.
         stack_mb=$(awk '
             /^[[:space:]]*memory:[[:space:]]*[0-9]+[MmGg]?/ {
                 v = $2
@@ -293,6 +316,9 @@ stacks_memory_budget_check() {
             }
             END { print int(sum) }
         ' "$compose" 2>/dev/null || echo 0)
+        # Guard against awk emitting non-numeric output (corrupt YAML
+        # with binary bytes). $((+ string)) errors out under set -e.
+        [[ "$stack_mb" =~ ^[0-9]+$ ]] || stack_mb=0
         sum_mb=$((sum_mb + stack_mb))
     done
 
@@ -328,9 +354,16 @@ stacks_deploy() {
     # and try to pull the image. Build it locally first so the resulting
     # image is in the host daemon when Portainer's stack create runs.
     local full_compose="${BENTO_REPO_ROOT}/${compose_path}"
-    if grep -qE '^[[:space:]]+build:' "$full_compose" 2>/dev/null; then
+    if [[ ! -f "$full_compose" ]]; then
+        ui_error "Compose file missing: $full_compose"
+        return 1
+    fi
+    if grep -qE '^[[:space:]]+build:' "$full_compose"; then
         ui_info "Compose declares a build target — building image locally first"
-        local build_log=/tmp/bento-build-${stack_key}.log
+        # Logs land in BENTO_LOG_DIR with a timestamp so a reboot or
+        # /tmp clean doesn't wipe the evidence operators need to debug
+        # a failed build days later.
+        local build_log="${BENTO_LOG_DIR}/build-${stack_key}-$(date +%Y%m%d-%H%M%S).log"
         : > "$build_log"
         if (cd "$(dirname "$full_compose")" \
             && sudo docker compose -f "$(basename "$full_compose")" build --pull \
@@ -388,8 +421,14 @@ stacks_deploy() {
     local url_tpl resolved_url
     url_tpl=$(jq -r '.post_deploy_url // empty' "$manifest_path")
     if [[ -n "$url_tpl" ]]; then
-        resolved_url="$(stacks_substitute_template_with_stack_envs "$stack_key" "$url_tpl")"
-        ui_boxed_success "$stack_key is ready at: $resolved_url"
+        if resolved_url="$(stacks_substitute_template_with_stack_envs "$stack_key" "$url_tpl" 2>&1)"; then
+            ui_boxed_success "$stack_key is ready at: $resolved_url"
+        else
+            # Don't fail the deploy over a broken URL template — but DO
+            # tell the operator. The previous form '… || true' hid both
+            # the failure and the half-substituted output.
+            ui_warn "$stack_key deployed, but post_deploy_url template failed: $resolved_url"
+        fi
     fi
 }
 
