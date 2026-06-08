@@ -356,27 +356,6 @@ systemctl restart docker || {
 print_message "${YELLOW}" "Verifying Docker configuration..."
 docker info | grep -E "Cgroup Driver|Storage Driver|Logging Driver"
 
-# --- User Setup ---
-print_message "${YELLOW}" "Creating docker user..."
-if ! id -u docker >/dev/null 2>&1; then
-  adduser --system --group --shell /bin/bash --home /home/docker --disabled-password docker
-fi
-usermod -aG docker docker
-
-# --- SSH Configuration ---
-print_message "${YELLOW}" "Configuring SSH..."
-mkdir -p /home/docker/.ssh
-chown -R docker:docker /home/docker
-chmod 755 /home/docker
-
-# Copy root's authorized keys to docker user if they exist
-if [ -f /root/.ssh/authorized_keys ]; then
-  cp /root/.ssh/authorized_keys /home/docker/.ssh/authorized_keys
-  chown -R docker:docker /home/docker/.ssh
-  chmod 700 /home/docker/.ssh
-  chmod 600 /home/docker/.ssh/authorized_keys
-fi
-
 # --- Firewall Configuration ---
 print_message "${YELLOW}" "Configuring firewall..."
 ufw --force reset
@@ -506,9 +485,8 @@ date -Iseconds > "$BENTO_REBOOT_SENTINEL"
 
 print_success "Setup complete! System hardening successful."
 print_message "${YELLOW}" "Important next steps:"
-print_message "${YELLOW}" "1. Add your SSH public key to /home/docker/.ssh/authorized_keys"
-print_message "${YELLOW}" "2. REBOOT THE SYSTEM to apply all security settings"
-print_message "${YELLOW}" "3. After reboot, re-run bento to continue with infra setup"
+print_message "${YELLOW}" "1. REBOOT THE SYSTEM to apply all security settings"
+print_message "${YELLOW}" "2. After reboot, re-run bento to continue with infra setup"
 
 # Additional verification info
 print_message "${GREEN}" "System Information:"
