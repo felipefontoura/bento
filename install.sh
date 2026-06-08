@@ -427,16 +427,18 @@ main_menu() {
         ui_divider
 
         # Pre-select the next actionable step so a single enter advances
-        # the operator through the flow without arrow keys.
+        # the operator through the flow without arrow keys. Once Step 1
+        # and Step 2 are both done, stay on Step 3 indefinitely — the most
+        # common reason to re-open the menu after a successful install is
+        # to add more applications, which Step 3 covers (it's a per-app
+        # checklist, re-runnable without ever 'completing' in a final sense).
         local next_step
         if [[ "$(step1_status)" != "done" ]]; then
             next_step="Step 1 — Harden the system"
         elif [[ "$(step2_status)" != "done" ]]; then
             next_step="Step 2 — Install infrastructure"
-        elif [[ "$(step3_status)" != "done" ]]; then
-            next_step="Step 3 — Install applications"
         else
-            next_step="Status"
+            next_step="Step 3 — Install applications"
         fi
 
         local choice
