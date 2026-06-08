@@ -226,7 +226,16 @@ services:
       resources:
         limits:
           cpus: "1"
-          memory: 1024M
+          # 2 GB so concurrent local-CLI subprocesses (codex, claude, opencode,
+          # hermes via the hermes-bin volume) can warm their venvs without
+          # the cgroup OOM killer reaping them. Each modern agent CLI runs a
+          # Python interpreter + model SDKs (~150-300 MB RSS) in addition to
+          # the node server's own footprint. 1 GB used to be enough back when
+          # paperclip only spawned `claude` (a single CLI); with hermes_local
+          # added on top, three concurrent heartbeats put the cgroup over the
+          # edge. Observed in production 2026-06-08: 4 hermes wakes in parallel
+          # OOM-killed by the kernel at 1 GB. 2 GB has comfortable headroom.
+          memory: 2048M
         reservations:
           cpus: "0.25"
           memory: 256M
