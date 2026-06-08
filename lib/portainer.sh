@@ -107,10 +107,18 @@ portainer_login() {
 
     if [[ "$http_code" != "200" ]]; then
         echo "Portainer auth failed (HTTP $http_code)." >&2
+        cat /tmp/bento-portainer-auth.json >&2 2>/dev/null || true
         return 1
     fi
 
-    jq -r '.jwt' /tmp/bento-portainer-auth.json
+    local jwt
+    jwt=$(jq -r '.jwt // empty' /tmp/bento-portainer-auth.json)
+    if [[ -z "$jwt" || "$jwt" == "null" ]]; then
+        echo "Portainer auth returned no JWT — response was:" >&2
+        cat /tmp/bento-portainer-auth.json >&2 2>/dev/null || true
+        return 1
+    fi
+    printf '%s' "$jwt"
 }
 
 # Auth header builder — caches the JWT in BENTO_PORTAINER_JWT for the
@@ -159,13 +167,24 @@ portainer_endpoint_id() {
         printf '%s' "$BENTO_PORTAINER_ENDPOINT_ID"
         return 0
     fi
-    local base auth
+    local base auth raw id
     base="$(portainer_local_url)"
-    auth="$(portainer_auth_header)"
+    auth="$(portainer_auth_header)" || return 1
 
-    BENTO_PORTAINER_ENDPOINT_ID=$(portainer_curl -fsS "${base}/api/endpoints" \
-        -H "$auth" \
-        | jq -r '.[0].Id')
+    # Split the curl + jq pair so a failure in either surfaces. The
+    # previous form `curl | jq -r '.[0].Id'` swallowed both: curl errors
+    # produced nothing, jq returned the string "null" on empty arrays,
+    # and downstream calls hit cryptic 404s with id="null" in the path.
+    raw=$(portainer_curl -fsS "${base}/api/endpoints" -H "$auth") || {
+        echo "Portainer /api/endpoints request failed." >&2
+        return 1
+    }
+    id=$(jq -r '.[0].Id // empty' <<< "$raw")
+    if [[ -z "$id" ]]; then
+        echo "Portainer returned no endpoints (response: $raw)" >&2
+        return 1
+    fi
+    BENTO_PORTAINER_ENDPOINT_ID="$id"
     export BENTO_PORTAINER_ENDPOINT_ID
     printf '%s' "$BENTO_PORTAINER_ENDPOINT_ID"
 }
@@ -176,14 +195,22 @@ portainer_swarm_id() {
         printf '%s' "$BENTO_PORTAINER_SWARM_ID"
         return 0
     fi
-    local base auth endpoint_id
+    local base auth endpoint_id raw id
     base="$(portainer_local_url)"
-    auth="$(portainer_auth_header)"
-    endpoint_id="$(portainer_endpoint_id)"
+    auth="$(portainer_auth_header)" || return 1
+    endpoint_id="$(portainer_endpoint_id)" || return 1
 
-    BENTO_PORTAINER_SWARM_ID=$(portainer_curl -fsS "${base}/api/endpoints/${endpoint_id}/docker/swarm" \
-        -H "$auth" \
-        | jq -r '.ID')
+    raw=$(portainer_curl -fsS "${base}/api/endpoints/${endpoint_id}/docker/swarm" \
+        -H "$auth") || {
+        echo "Portainer /docker/swarm request failed (endpoint ${endpoint_id})." >&2
+        return 1
+    }
+    id=$(jq -r '.ID // empty' <<< "$raw")
+    if [[ -z "$id" ]]; then
+        echo "Portainer returned no Swarm ID (response: $raw)" >&2
+        return 1
+    fi
+    BENTO_PORTAINER_SWARM_ID="$id"
     export BENTO_PORTAINER_SWARM_ID
     printf '%s' "$BENTO_PORTAINER_SWARM_ID"
 }
@@ -204,9 +231,9 @@ portainer_create_stack_from_git() {
 
     local base auth endpoint_id swarm_id body http_code
     base="$(portainer_local_url)"
-    auth="$(portainer_auth_header)"
-    endpoint_id="$(portainer_endpoint_id)"
-    swarm_id="$(portainer_swarm_id)"
+    auth="$(portainer_auth_header)" || return 1
+    endpoint_id="$(portainer_endpoint_id)" || return 1
+    swarm_id="$(portainer_swarm_id)" || return 1
 
     body=$(jq -n \
         --arg name "$stack_name" \
@@ -254,7 +281,17 @@ portainer_create_stack_from_git() {
         return 1
     fi
 
-    jq -r '.Id' "$resp"
+    # Insist on a non-empty numeric Id. Portainer can return 200 with an
+    # error body on edge cases (auth race + repo unreachable); jq then
+    # produces "null", and the caller would persist a bogus stack_id.
+    local new_id
+    new_id=$(jq -r '.Id // empty' "$resp")
+    if [[ -z "$new_id" ]]; then
+        echo "Portainer create returned 200 but no .Id field. Body:" >&2
+        cat "$resp" >&2 || true
+        return 1
+    fi
+    printf '%s' "$new_id"
 }
 
 # List all stacks.
@@ -280,8 +317,8 @@ portainer_redeploy_stack() {
     local env_json="${2:-[]}"
     local base auth endpoint_id body http_code
     base="$(portainer_local_url)"
-    auth="$(portainer_auth_header)"
-    endpoint_id="$(portainer_endpoint_id)"
+    auth="$(portainer_auth_header)" || return 1
+    endpoint_id="$(portainer_endpoint_id)" || return 1
 
     body=$(jq -n --argjson env "$env_json" \
         '{env: $env, prune: false, pullImage: true}')
