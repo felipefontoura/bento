@@ -8,12 +8,12 @@
   "env": [
     {
       "name": "TYPEBOT_BUILDER_HOST",
-      "default": "typebot-builder.${BASE_DOMAIN}",
+      "default": "builder-typebot.${BASE_DOMAIN}",
       "prompt": "Typebot builder hostname"
     },
     {
       "name": "TYPEBOT_VIEWER_HOST",
-      "default": "typebot.${BASE_DOMAIN}",
+      "default": "viewer-typebot.${BASE_DOMAIN}",
       "prompt": "Typebot viewer hostname"
     },
     {
