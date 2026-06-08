@@ -147,9 +147,21 @@ Portainer is ready.
   Username:  admin
   Password:  $password
 
-This password is shown only once. Store it now.
+Credentials are also persisted at:
+  ${BENTO_PORTAINER_CREDS}
+
+If you lose this screen, recover with:
+  jq . ${BENTO_PORTAINER_CREDS}
 EOF
     )"
+
+    # In interactive mode, force a pause so the operator can read the
+    # box and store the password. Skip in unattended where there's no
+    # human in the loop to acknowledge it — the handoff HTML carries the
+    # same data for batch runs.
+    if [[ "${BENTO_UNATTENDED:-0}" != "1" ]]; then
+        ui_pause
+    fi
 }
 
 infra_run_step1_tail() {
