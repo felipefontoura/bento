@@ -251,11 +251,11 @@ step3_run() {
     fi
     local rc=0
     stacks_step3_menu || rc=$?
-    if stacks_is_apps_done; then
-        report_run "auto"
-    elif (( rc != 0 )); then
-        ui_warn "Re-run Step 3 to retry the failed stacks."
-    fi
+    case "$rc" in
+        0) report_run "auto" ;;                                  # work succeeded
+        1) ui_warn "Re-run Step 3 to retry the failed stacks." ;; # at least one failure
+        2) : ;;                                                  # cancelled / nothing to do
+    esac
 }
 
 # -----------------------------------------------------------------------------

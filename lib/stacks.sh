@@ -408,7 +408,7 @@ stacks_step3_menu() {
 
     if (( ${#manifests[@]} == 0 )); then
         ui_warn "No app stack manifests found yet."
-        return 0
+        return 2
     fi
 
     # Build "name — description" labels for gum choose.
@@ -421,7 +421,11 @@ stacks_step3_menu() {
 
     local picks
     picks="$(printf '%s\n' "${labels[@]}" | ui_choose_multi)"
-    [[ -z "$picks" ]] && return 0
+    # Distinct exit code so step3_run can tell "user cancelled / nothing
+    # to do" from "work succeeded" (0) and "work failed" (1). Without
+    # this split, an empty pick would re-trigger report generation
+    # whenever .steps.apps was already done from an earlier run.
+    [[ -z "$picks" ]] && return 2
 
     # Surface a memory budget for the chosen apps before the first deploy.
     local picks_csv=""
