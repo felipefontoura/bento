@@ -97,10 +97,17 @@ x-paperclip-common: &paperclip-common
     # Paperclip's server doesn't call LLMs itself — it spawns CLIs that
     # do. The env vars below are what those CLIs read:
     #
-    #   OPENAI_API_KEY      -> codex CLI (bundled in image)
-    #   ANTHROPIC_API_KEY   -> claude CLI (bundled in image)
-    #   OPENROUTER_API_KEY  -> opencode CLI multi-provider (bundled in image)
+    #   OPENAI_API_KEY      -> codex CLI (bundled in image), hermes CLI (via hermes-bin volume)
+    #   ANTHROPIC_API_KEY   -> claude CLI (bundled in image), hermes CLI
+    #   OPENROUTER_API_KEY  -> opencode CLI multi-provider (bundled in image), hermes CLI
     #   GEMINI_API_KEY      -> gemini CLI (requires `docker exec npm install -g @google/gemini-cli`)
+    #
+    # The bundled `hermes-paperclip-adapter` (in node_modules) wires the
+    # `hermes_local` adapter, which exec's the Hermes CLI. We mount that CLI
+    # below via the `hermes-bin` named volume seeded by the `hermes` stack.
+    - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
     #
     # -----------------------------------------------------------------------------
     # OpenAI-compatible base URL override (Z.ai, Groq, DeepSeek, …)
@@ -135,22 +142,17 @@ x-paperclip-common: &paperclip-common
     # Bento-native overlay integrations
     # -----------------------------------------------------------------------------
     #
-    # Paperclip's `http` adapter and `openclaw_gateway` adapter take their
-    # URL from per-agent UI config — there's nothing to set here. If you
-    # have these companion stacks deployed on the same Swarm, the URLs to
-    # paste into Paperclip's UI when creating an agent are:
-    #
-    #   paperclip-runs (recommended bridge — queue + retry + backpressure):
-    #     adapter: http
-    #     URL:     http://paperclip_runs_api:8787/paperclip/execute
-    #     token:   jq -r '.envs."paperclip-runs".BRIDGE_TOKEN' ~/.config/bento/state.json
+    # Paperclip's `openclaw_gateway` adapter takes its URL from per-agent UI
+    # config — nothing to set here. If you have the companion stack deployed:
     #
     #   openclaw (direct, no queue):
     #     adapter: openclaw_gateway
     #     URL:     ws://openclaw:18789
     #
-    #   hermes (requires the npm adapter installed inside paperclip):
-    #     docker exec -it <paperclip-container> npm install -g hermes-paperclip-adapter
+    # The `hermes_local` adapter exec's the Hermes CLI locally inside this
+    # container. The CLI is provided by the `hermes` stack (binary-provider
+    # mode) via the `hermes-bin` named volume mounted below at /opt/hermes.
+    # Per-agent UI: set Command = /opt/hermes/bin/hermes.
 
   deploy: &paperclip-deploy
     mode: replicated
@@ -209,6 +211,12 @@ services:
         exec node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js
     volumes:
       - paperclip-data:/paperclip
+      # Read-only mount of the Hermes Agent install seeded by the `hermes`
+      # stack. Provides /opt/hermes/bin/hermes (a self-contained venv at
+      # /opt/hermes/.venv/) so the bundled hermes_local adapter can spawn
+      # the CLI as a subprocess. The volume is `external` because it's
+      # created and seeded by another stack — see stacks/app/hermes/.
+      - hermes-bin:/opt/hermes:ro
     # Swarm healthcheck omitted — paperclip's boot bundles a Python venv
     # warmup that occasionally exceeds the probe window. The Dockerfile
     # still ships a HEALTHCHECK so `docker run` standalone gets one;
@@ -247,3 +255,9 @@ networks:
 volumes:
   paperclip-data:
     driver: local
+  hermes-bin:
+    external: true
+    # Created and seeded by `stacks/app/hermes/`. The stack name there
+    # composes to `hermes_hermes-bin` under Swarm. Override here so we
+    # don't end up looking for `paperclip_hermes-bin`.
+    name: hermes_hermes-bin

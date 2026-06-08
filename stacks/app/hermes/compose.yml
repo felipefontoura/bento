@@ -1,40 +1,35 @@
 # =============================================================================
-# Hermes — NousResearch hermes-agent as an OpenAI-compatible LLM gateway
+# Hermes — local-binary provider sidecar
 # =============================================================================
 #
-# Overlay-only by design. There is no Traefik route and no host port — apps
-# on `network_public` reach Hermes as `http://hermes:8642`. The companion
-# Paperclip → Hermes bridge (next bento batch) lives on the same overlay and
-# calls this stack's OpenAI-compatible endpoints:
+# OVERLAY-ONLY. No Traefik route, no host port, no HTTP gateway. The container
+# exists solely to seed the `hermes-bin` named volume with the `/opt/hermes`
+# tree from the upstream `nousresearch/hermes-agent` image, so peer containers
+# (typically paperclip) can mount that volume read-only and invoke the Hermes
+# CLI as a local subprocess via Paperclip's `hermes_local` adapter.
 #
-#   POST http://hermes:8642/v1/chat/completions
-#   POST http://hermes:8642/v1/responses
-#   GET  http://hermes:8642/v1/models
+# How the seeding works:
+#   - On the FIRST start, Docker copies the contents of `/opt/hermes` from
+#     the image into the empty `hermes-bin` named volume (named-volume
+#     seeding behaviour).
+#   - The container then sleeps forever — it does NOT run the Hermes gateway.
+#     We only need the bytes on disk, not a long-lived process.
+#   - To upgrade Hermes: `docker volume rm <stack>_hermes-bin` then redeploy.
+#     This forces a fresh seed from the (now-pulled) newer image.
 #
-# Auth uses Bearer ${HERMES_API_KEY}. Upstream calls this variable
-# `API_SERVER_KEY`; bento exposes it under the friendlier `HERMES_API_KEY`
-# name and maps it across below.
-#
-# Do NOT override the image's `entrypoint:`. The upstream image runs s6-overlay
-# as PID 1 via `/init`, which chowns volumes and reconciles the operator
-# profile before launching the gateway. Override `command:` only.
-#
-# At least one LLM provider key must be set for Hermes to actually serve a
-# model — `OPENROUTER_API_KEY` is the default surface, others are commented
-# below.
+# `/opt/hermes/.venv/bin/python3` is the embedded Python interpreter, so the
+# tree is self-contained — the peer container does NOT need Python or any
+# Hermes deps installed; it just needs the volume mounted.
 # =============================================================================
 
 services:
   hermes:
     image: nousresearch/hermes-agent:latest
-    # The image's main-wrapper.sh, when invoked with no args, runs
-    # `hermes` (the TUI). In a non-TTY container that immediately reads
-    # EOF on stdin and exits with "Goodbye!" — Swarm sees an exit-0,
-    # restarts in a loop, and the API never serves a request.
-    # `gateway run` is the canonical "start the supervised long-lived
-    # gateway runtime" subcommand; combined with API_SERVER_ENABLED=true
-    # below it exposes the OpenAI-compatible /v1/* endpoints on 8642.
-    command: ["gateway", "run"]
+    # Override the image entrypoint completely. The default s6-overlay /init
+    # would try to start the gateway, write to /opt/hermes (mutating the
+    # volume), and run as the `hermes` user. We need none of that — pure
+    # binary provider, idle process.
+    entrypoint: ["sleep", "infinity"]
     networks:
       - network_public
     logging:
@@ -43,53 +38,10 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
-      - hermes-data:/opt/data
-    environment:
-      # =============================================================================
-      # API Server (OpenAI-compatible)
-      # =============================================================================
-
-      # Turns on the /v1/* endpoints. Off by default upstream.
-      - API_SERVER_ENABLED=true
-
-      # Bind on all interfaces inside the container so the overlay can reach it.
-      # The container is overlay-only — nothing on the host can hit it.
-      - API_SERVER_HOST=0.0.0.0
-
-      # Bearer token required on every /v1/* request.
-      - API_SERVER_KEY=${HERMES_API_KEY}
-
-      # Allow any origin — overlay-only, so CORS is moot, but some clients
-      # short-circuit when the header is missing.
-      - API_SERVER_CORS_ORIGINS=*
-
-      # =============================================================================
-      # Runtime user
-      # =============================================================================
-
-      # s6 cont-init chowns /opt/data to this uid/gid on first boot. Match the
-      # default the upstream image expects.
-      - HERMES_UID=10000
-      - HERMES_GID=10000
-
-      # =============================================================================
-      # LLM Providers
-      # =============================================================================
-      #
-      # Hermes is a gateway — it proxies your prompt to an upstream LLM provider.
-      # Provide at least one of the following or /v1/chat/completions will 500.
-
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-
-      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      # - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-
-      # =============================================================================
-      # Dashboard (off — requires an auth provider, not yet wired)
-      # =============================================================================
-
-      # - HERMES_DASHBOARD=1
+      # Named-volume seeding: on first mount the image's /opt/hermes tree is
+      # copied into this empty volume. Subsequent boots reuse the volume as-is
+      # (so upgrades require an explicit volume wipe + redeploy).
+      - hermes-bin:/opt/hermes
     deploy:
       mode: replicated
       replicas: 1
@@ -98,24 +50,23 @@ services:
           - node.role == manager
       update_config:
         parallelism: 1
-        delay: 30s
         order: start-first
         failure_action: rollback
       restart_policy:
         condition: any
         delay: 10s
         max_attempts: 5
-        window: 120s
+        window: 60s
       resources:
         limits:
-          cpus: "1.5"
-          memory: 2048M
+          cpus: "0.1"
+          memory: 128M
         reservations:
-          cpus: "0.5"
-          memory: 512M
+          cpus: "0.05"
+          memory: 32M
 
 volumes:
-  hermes-data:
+  hermes-bin:
     driver: local
 
 networks:
