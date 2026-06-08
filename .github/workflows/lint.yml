@@ -11,7 +11,7 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install shellcheck
         run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
@@ -46,7 +46,7 @@ jobs:
     name: bash -n
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Parse every shell file
         run: |
           set -e
@@ -62,7 +62,7 @@ jobs:
     name: jq manifests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate every manifest.json
         run: |
           set -e
@@ -80,7 +80,7 @@ jobs:
     name: docker compose config
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate every compose.yml
         env:
           BASE_DOMAIN: example.test
