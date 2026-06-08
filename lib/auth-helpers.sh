@@ -138,7 +138,117 @@ auth_is_supported_provider() {
 }
 
 # -----------------------------------------------------------------------------
-# Env-var injection for Hermes
+# state.providers — ambient propagation
+# -----------------------------------------------------------------------------
+
+# Persist a (env_var_name, token) pair into ~/.config/bento/state.json so
+# every future stack deploy inherits it via stacks_build_env_payload.
+# Idempotent: writing the same value twice is a no-op.
+auth_state_providers_set() {
+    local var="$1"
+    local token="$2"
+    # state.sh defines state_set_json; load it lazily so this file stays
+    # callable from scripts that don't bootstrap the full install env.
+    if ! type state_set_json >/dev/null 2>&1; then
+        # shellcheck disable=SC1091
+        source "${BENTO_REPO_ROOT}/lib/state.sh"
+        state_init
+    fi
+    # Ensure .providers exists so the assignment below doesn't error on
+    # an old state.json that pre-dates this feature.
+    if ! state_has '.providers'; then
+        state_set_json '.providers' '{}'
+    fi
+    state_set ".providers.\"${var}\"" "$token"
+}
+
+# Remove a key from state.providers — used when the operator switches
+# from OAuth to API-key (or vice versa) for the same provider, to avoid
+# the dual-header trap (PR #20).
+auth_state_providers_unset() {
+    local var="$1"
+    if ! type state_set_json >/dev/null 2>&1; then
+        # shellcheck disable=SC1091
+        source "${BENTO_REPO_ROOT}/lib/state.sh"
+        state_init
+    fi
+    if state_has ".providers.\"${var}\""; then
+        local tmp
+        tmp=$(mktemp "${BENTO_STATE_FILE}.XXXXXX")
+        jq "del(.providers.\"${var}\")" "$BENTO_STATE_FILE" > "$tmp"
+        mv "$tmp" "$BENTO_STATE_FILE"
+        chmod 600 "$BENTO_STATE_FILE"
+    fi
+}
+
+# Propagate every state.providers entry into every running BENTO_MANAGED
+# service. Idempotent — Docker drops env-add that's already present at
+# the same value, and replaces it when the value changed.
+#
+# Each --env-add triggers a task replacement (~30s of downtime per
+# stack). We accept that cost as the price of refresh propagation; the
+# alternative is forcing every stack to read the credentials JSON on
+# every request, which not every stack supports.
+#
+# Optional second arg: env var name to --env-rm BEFORE the adds. Used
+# when the operator switches between OAuth (CLAUDE_CODE_OAUTH_TOKEN) and
+# API key (ANTHROPIC_API_KEY) for the same provider — the old var has
+# to go AWAY before the new one lands or Hermes hits the dual-header
+# trap during the brief overlap.
+auth_propagate_state_providers() {
+    local also_remove="${1:-}"
+    local services
+    services=$(sudo docker service ls \
+        --filter label=BENTO_MANAGED=true \
+        --format '{{.Name}}' 2>/dev/null) || return 0
+    if [[ -z "$services" ]]; then
+        return 0
+    fi
+
+    local add_args=()
+    while IFS=$'\t' read -r provider_var provider_val; do
+        [[ -z "$provider_var" ]] && continue
+        add_args+=(--env-add "${provider_var}=${provider_val}")
+    done < <(jq -r '.providers // {} | to_entries[] | "\(.key)\t\(.value)"' "$BENTO_STATE_FILE")
+
+    if [[ ${#add_args[@]} -eq 0 && -z "$also_remove" ]]; then
+        return 0
+    fi
+
+    local svc
+    while IFS= read -r svc; do
+        [[ -z "$svc" ]] && continue
+        # Note: we don't yet know whether this service has BENTO_MANAGED
+        # set as an *env* (it does, see stacks_build_env_payload) or as a
+        # *label* — `docker service ls --filter label=…` checks the label
+        # form, and not every bento stack emits that label today. Filter
+        # again on the env to be safe.
+        local has_label
+        has_label=$(sudo docker service inspect "$svc" \
+            --format '{{index .Spec.Labels "BENTO_MANAGED"}}' 2>/dev/null)
+        if [[ "$has_label" != "true" ]]; then
+            # Maybe set as task-template env instead.
+            local has_env
+            has_env=$(sudo docker service inspect "$svc" \
+                --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' 2>/dev/null \
+                | grep -E '^BENTO_MANAGED=true$' || true)
+            [[ -z "$has_env" ]] && continue
+        fi
+
+        local remove_args=()
+        if [[ -n "$also_remove" ]]; then
+            remove_args+=(--env-rm "$also_remove")
+        fi
+        sudo docker service update \
+            "${remove_args[@]}" \
+            "${add_args[@]}" \
+            "$svc" >/dev/null 2>&1 || true
+    done <<< "$services"
+}
+
+# -----------------------------------------------------------------------------
+# Env-var injection for Hermes (single-stack — legacy entry, kept for
+# back-compat with bento-auth callers that don't yet route through state)
 # -----------------------------------------------------------------------------
 
 # Wire CLAUDE_CODE_OAUTH_TOKEN into the paperclip service's runtime env so
