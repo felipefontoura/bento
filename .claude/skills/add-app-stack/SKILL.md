@@ -98,9 +98,12 @@ parametrization quality** — copy its env-block layout (commented
 categories, one-line WHY per var) unless the app is genuinely simpler.
 
 - **Gold standard / categorized env block / multi-service**: `stacks/app/n8n/`.
-- **Custom-built image**: `stacks/app/paperclip/`.
 - **Rails-style with DB migrations**: `stacks/app/chatwoot/`.
 - **Genuinely tiny (no meaningful knobs)**: `stacks/app/cli-proxy-api/`.
+
+(No stack ships a `build:` directive today — bento prefers upstream images
+to keep first-boot fast and the host's disk pressure low on small VPS.
+If you genuinely need to build, `lib/stacks.sh` still picks it up.)
 
 Mirror the patterns exactly. Do not invent new structure or naming.
 
@@ -184,7 +187,7 @@ Validate with `jq -e .` before moving on.
 
 Decide:
 - **No install.sh** if the app self-bootstraps on first browser visit
-  (n8n, plunk, paperclip, typebot pattern).
+  (n8n, plunk, typebot pattern).
 - **Yes install.sh** if you need to: create a Postgres DB, run migrations,
   seed initial data, bootstrap an admin user via internal CLI/exec.
 

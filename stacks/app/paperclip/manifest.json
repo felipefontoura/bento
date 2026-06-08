@@ -2,11 +2,11 @@
   "name": "paperclip",
   "category": "app",
   "description": "AI agent orchestration (Claude Code / Codex / OpenCode)",
-  "depends_on": [],
+  "depends_on": ["postgres"],
   "env": [
     { "name": "PAPERCLIP_HOST",     "default": "paperclip.${BASE_DOMAIN}", "prompt": "Paperclip hostname" },
-    { "name": "BETTER_AUTH_SECRET", "generate": "openssl rand -hex 32",     "hide": true },
-    { "name": "OPENAI_API_KEY",     "prompt": "OpenAI API key (optional)", "hide": true }
+    { "name": "BETTER_AUTH_SECRET", "generate": "openssl rand -hex 32",    "hide": true },
+    { "name": "POSTGRES_PASSWORD",  "from_state": "POSTGRES_PASSWORD" }
   ],
   "post_deploy_url": "https://${PAPERCLIP_HOST}"
 }

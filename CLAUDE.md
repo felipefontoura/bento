@@ -160,7 +160,7 @@ bento/
         ├── hermes/{compose.yml, manifest.json}
         ├── n8n/{compose.yml, manifest.json, install.sh}
         ├── openclaw/{compose.yml, manifest.json, install.sh}
-        ├── paperclip/{compose.yml, manifest.json}
+        ├── paperclip/{compose.yml, manifest.json, install.sh}
         ├── paperclip-runs/{compose.yml, manifest.json}
         └── …
 ```
@@ -429,7 +429,7 @@ Validate: `jq -e . stacks/app/<your-key>/manifest.json`.
 first login: DB creation, migrations, seed data, admin user via API.
 
 **Skip it if** the app self-bootstraps on first browser visit (n8n, plunk,
-paperclip, typebot).
+typebot).
 
 Template (Postgres database + done):
 
