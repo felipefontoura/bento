@@ -284,6 +284,17 @@ ssh root@<host> "\
     paperclip_paperclip"
 ```
 
+## Ambient state.providers — bento propagates automatically
+
+Starting with the shared-state work, `bento-auth` writes every token to `~/.config/bento/state.json` under `providers.<ENV_VAR_NAME>` and immediately propagates it via `docker service update --env-add` to every running BENTO_MANAGED stack. Future deploys of any stack also inherit those vars automatically.
+
+Operator implications you should surface in the report-back:
+
+- **Run `bento-auth claude` once, every stack benefits.** No per-stack login.
+- **Refresh works the same way.** Re-run `bento-auth claude` when the token expires (~10 days); state and every running stack pick up the new value.
+- **Cosmetic warning.** Stacks like postgres / redis will show provider env vars in `docker service inspect`. Expected, no impact.
+- **Manifest envs still win.** A stack that declares its own `OPENAI_API_KEY` in its manifest (with the env prompt) gets that value, not the ambient one. `BENTO_ENV_<STACK>_<VAR>` overrides continue to work the same way.
+
 # Report back to the operator
 
 Final message (always include):
