@@ -426,8 +426,21 @@ main_menu() {
         render_menu_line "Step 3 — Install applications"   "$(step3_status)"
         ui_divider
 
+        # Pre-select the next actionable step so a single enter advances
+        # the operator through the flow without arrow keys.
+        local next_step
+        if [[ "$(step1_status)" != "done" ]]; then
+            next_step="Step 1 — Harden the system"
+        elif [[ "$(step2_status)" != "done" ]]; then
+            next_step="Step 2 — Install infrastructure"
+        elif [[ "$(step3_status)" != "done" ]]; then
+            next_step="Step 3 — Install applications"
+        else
+            next_step="Status"
+        fi
+
         local choice
-        choice="$(ui_choose \
+        choice="$(ui_choose --selected="$next_step" \
             "Step 1 — Harden the system" \
             "Step 2 — Install infrastructure" \
             "Step 3 — Install applications" \
