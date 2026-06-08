@@ -169,8 +169,17 @@ EOF
     log_file="${BENTO_LOG_DIR}/hardening-$(date +%Y%m%d-%H%M%S).log"
     ui_info "Streaming output to $log_file"
 
+    # `</dev/null` is load-bearing — without it, apt-get reproducibly enters
+    # the T (stopped) state at "Processing triggers for install-info" on
+    # Ubuntu 26.04. Something in the post-trigger phase (likely needrestart
+    # or a snapd postinst hook) probes the controlling tty and trips the
+    # kernel into sending SIGTTIN/SIGTSTP to apt-get, which has no handler
+    # and just stops. Disconnecting stdin from the tty closes that path:
+    # any process that tries to read sees EOF instead of receiving a
+    # job-control signal.
     if sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive \
-            bash "${BENTO_REPO_ROOT}/lib/hardening.sh" 2>&1 | tee "$log_file"; then
+            bash "${BENTO_REPO_ROOT}/lib/hardening.sh" </dev/null 2>&1 \
+            | tee "$log_file"; then
         state_set '.steps.hardening' "done"
     else
         state_set '.steps.hardening' "failed"
