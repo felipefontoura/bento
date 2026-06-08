@@ -22,6 +22,8 @@ bash <(curl -sSL https://raw.githubusercontent.com/felipefontoura/bento/stable/b
 
 Paste that on a fresh Ubuntu/Debian VPS, answer three questions (domain, admin email, public IP), and ~15 minutes later you have a hardened host, Traefik + Portainer with TLS, the apps you picked, and an HTML handoff report. Already know bento? Copy and go. Want context? Keep reading.
 
+> **For consultants / agencies setting up bento for a client:** if you use Claude Code, this repo ships a `install-bento` skill at [`.claude/skills/install-bento/SKILL.md`](.claude/skills/install-bento/SKILL.md). Hand Claude an SSH-reachable VPS + a domain + an app list, and it drives the whole install end-to-end via `BENTO_UNATTENDED=1` (no TUI), recovers from the failure modes documented in the skill, and reports back with credentials + URLs. Useful when you want a one-prompt install instead of babysitting the terminal.
+
 <details>
 <summary><strong>Table of contents</strong></summary>
 

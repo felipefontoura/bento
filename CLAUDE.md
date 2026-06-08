@@ -134,7 +134,9 @@ bento/
 ├── CLAUDE.md                     # this file
 ├── .claude/
 │   └── skills/                   # task-specific playbooks for AI agents
-│       └── add-app-stack/
+│       ├── add-app-stack/
+│       │   └── SKILL.md
+│       └── install-bento/
 │           └── SKILL.md
 ├── lib/
 │   ├── banner.sh
@@ -635,6 +637,11 @@ so the schema migration runs.
 - `.claude/skills/<name>/SKILL.md` — task-specific playbooks Claude Code
   loads as slash commands when working in this repo. Currently:
   - `add-app-stack` — scaffolds a new stack following the convention above.
+  - `install-bento` — drives a complete bento install end-to-end on a
+    fresh VPS via SSH using `BENTO_UNATTENDED=1` (no TUI). Owns the
+    watch-output → match-pattern → run-recovery loop the operator used
+    to walk manually; reports back with credentials, per-app URLs,
+    bootstrap invite links, and the handoff HTML path.
 
 Skills are optional sugar — every step is also written out in plain prose
 above. A human can follow the recipe without Claude.
