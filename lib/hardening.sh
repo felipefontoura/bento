@@ -151,10 +151,20 @@ verify_security_settings() {
     failed=1
   fi
 
-  # Check Chrony sync
-  if ! chronyc tracking &>/dev/null; then
-    print_error "Chrony is not syncing time"
+  # Check Chrony sync. Run once, distinguish "binary missing" from
+  # "binary works but no reference selected yet". The previous &>/dev/null
+  # form treated both as "not syncing" — but a missing chronyc is a
+  # broken install (much more serious than a slow first sync).
+  if ! command -v chronyc >/dev/null 2>&1; then
+    print_error "chronyc binary missing — Chrony apt install did not land."
     failed=1
+  else
+    chrony_out=$(chronyc tracking 2>&1) || true
+    if ! grep -q "Reference ID" <<< "$chrony_out"; then
+      print_error "Chrony is not syncing time. chronyc said:"
+      echo "$chrony_out" | sed 's/^/    /'
+      failed=1
+    fi
   fi
 
   # Additional security checks
@@ -347,13 +357,19 @@ cat <<EOF >/etc/docker/daemon.json
 }
 EOF
 
-# After Docker daemon.json configuration
+# After Docker daemon.json configuration. Capture the full docker info
+# output once so we can both detect daemon failure AND grep for the
+# config keys without running the command twice (and without piping
+# blind — if docker dies between the two calls the second one prints
+# nothing and the operator never knows).
 print_message "${YELLOW}" "Testing Docker configuration..."
-if ! docker info &>/dev/null; then
-  print_error "Docker failed to start. Checking configuration..."
+docker_info_out=$(docker info 2>&1) || {
+  print_error "Docker failed to start. docker info said:"
+  echo "$docker_info_out" | sed 's/^/    /'
+  print_error "Daemon logs:"
   journalctl -u docker.service --no-pager | tail -n 50
   exit 1
-fi
+}
 
 systemctl enable docker
 systemctl restart docker || {
@@ -362,9 +378,16 @@ systemctl restart docker || {
   exit 1
 }
 
-# Verify Docker configuration
+# Verify Docker configuration. Re-capture after the restart so we read
+# the post-restart config rather than the pre-restart one.
 print_message "${YELLOW}" "Verifying Docker configuration..."
-docker info | grep -E "Cgroup Driver|Storage Driver|Logging Driver"
+docker_info_out=$(docker info 2>&1) || {
+  print_error "docker info failed after restart:"
+  echo "$docker_info_out" | sed 's/^/    /'
+  exit 1
+}
+echo "$docker_info_out" | grep -E "Cgroup Driver|Storage Driver|Logging Driver" || \
+  print_message "${YELLOW}" "(no Cgroup/Storage/Logging Driver lines in docker info — daemon may be partially configured)"
 
 # --- Firewall Configuration ---
 print_message "${YELLOW}" "Configuring firewall..."
