@@ -107,10 +107,34 @@ EOF
 # Idempotent on re-deploy: CLI returns non-zero with "admin already
 # exists" once first claim happened. `|| true` keeps us from
 # tripping set -e.
-invite_output=$(sudo docker exec "$cid" sh -c "
-    cd /app && node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts \\
-        auth bootstrap-ceo --config ${config_path} --expires-hours 24
-" 2>&1 || true)
+# wait_for_service returns when Swarm sees the container running.
+# That fires BEFORE paperclip's node process has finished migrating
+# the shared postgres schema (instance_user_roles, invites, etc. —
+# the very tables bootstrap-ceo writes to). Without this loop, the
+# CLI bombs with:
+#
+#   Could not create bootstrap invite: Failed query: select … from
+#   "instance_user_roles" … "If using embedded-postgres, start the
+#   Paperclip server and run this command again."
+#
+# Migrations take 20-60s on a CX22. Retry every 3s for 3 minutes;
+# stop early on either success (URL produced) or 'admin already
+# exists' (idempotent re-deploy).
+echo "Waiting for paperclip migrations to settle before minting bootstrap-ceo invite…"
+invite_output=""
+attempts=0
+while (( attempts < 60 )); do
+    invite_output=$(sudo docker exec "$cid" sh -c "
+        cd /app && node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts \\
+            auth bootstrap-ceo --config ${config_path} --expires-hours 24
+    " 2>&1 || true)
+    if printf '%s' "$invite_output" \
+        | grep -qE 'pcp_bootstrap_|admin already exists|already claim'; then
+        break
+    fi
+    sleep 3
+    attempts=$((attempts + 1))
+done
 
 # Strip ANSI colour codes before grep — bootstrap-ceo output wraps
 # the URL in clack/prompt styling (\\e[36m … \\e[39m) which can
