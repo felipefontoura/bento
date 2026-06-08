@@ -411,12 +411,31 @@ stacks_step3_menu() {
         return 2
     fi
 
-    # Build "name — description" labels for gum choose.
-    local labels=() label name desc
+    # Read the set of stacks bento has already deployed (have stack_id in
+    # state) once, up-front. We use it twice: to annotate labels with
+    # "[installed]" so the operator sees current state at a glance, and
+    # below to seed `seen` so _deploy_with_deps short-circuits if those
+    # stacks get picked again.
+    local installed_keys=()
+    while IFS= read -r _existing; do
+        [[ -n "$_existing" ]] && installed_keys+=("$_existing")
+    done < <(jq -r '.stacks // {} | to_entries[] | select(.value.stack_id) | .key' \
+        "$BENTO_STATE_FILE" 2>/dev/null)
+
+    # Build "name — description [installed]" labels for gum choose.
+    local labels=() label name desc tag
     for m in "${manifests[@]}"; do
         name=$(jq -r '.name' "$m")
         desc=$(jq -r '.description // ""' "$m")
-        labels+=("${name} — ${desc}")
+        tag=""
+        local k
+        for k in "${installed_keys[@]}"; do
+            if [[ "$k" == "$name" ]]; then
+                tag="  [installed]"
+                break
+            fi
+        done
+        labels+=("${name} — ${desc}${tag}")
     done
 
     local picks
@@ -435,15 +454,11 @@ stacks_step3_menu() {
     done <<< "$picks"
     stacks_memory_budget_check "${picks_csv%,}"
 
-    # Pre-populate `seen` with stacks bento already deployed so the
-    # depends_on walk below doesn't re-deploy postgres/redis on every
-    # checklist run.
-    local seen=()
+    # Seed `seen` with stacks bento already deployed so the depends_on
+    # walk below doesn't re-deploy postgres/redis on every checklist run,
+    # and so picking an "[installed]" item is a silent no-op.
+    local seen=("${installed_keys[@]}")
     local failures=()
-    while IFS= read -r _existing; do
-        [[ -n "$_existing" ]] && seen+=("$_existing")
-    done < <(jq -r '.stacks // {} | to_entries[] | select(.value.stack_id) | .key' \
-        "$BENTO_STATE_FILE" 2>/dev/null)
 
     while IFS= read -r picked; do
         local picked_name
