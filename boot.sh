@@ -119,6 +119,12 @@ fi
 # Clone (or re-clone) the bento repo.
 # -----------------------------------------------------------------------------
 _step "Fetching bento ($BENTO_REF)…"
+# Hop out of $BENTO_HOME before we delete it. `bash <(curl …)` inherits
+# the launching shell's CWD; if the operator was sitting inside the
+# previous clone, the rm -rf below unlinks the directory the running
+# process is anchored to. git's getcwd() then returns ENOENT and the
+# clone aborts — historically mis-reported as "branch may not exist".
+cd / >/dev/null 2>&1 || true
 if [[ -d "$BENTO_HOME" ]]; then
     rm -rf "$BENTO_HOME"
 fi
@@ -127,7 +133,13 @@ if git clone --quiet --depth 1 --branch "$BENTO_REF" \
        "$BENTO_REPO_URL" "$BENTO_HOME" 2>>"$BENTO_DEPS_LOG"; then
     _ok "Cloned to $BENTO_HOME"
 else
-    _fail "git clone failed — branch '$BENTO_REF' may not exist on $BENTO_REPO_URL"
+    _fail "git clone failed for '$BENTO_REF' on $BENTO_REPO_URL"
+    # Surface git's actual stderr — "branch may not exist" was wrong as
+    # often as it was right (CWD gone, network blip, disk full, …).
+    if [[ -s "$BENTO_DEPS_LOG" ]]; then
+        printf '\n  git said:\n' >&2
+        tail -5 "$BENTO_DEPS_LOG" | sed 's/^/    /' >&2
+    fi
 fi
 
 printf '\n'
