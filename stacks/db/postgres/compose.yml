@@ -56,6 +56,10 @@ services:
         limits:
           cpus: "0.5"
           memory: 256M
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=postgres
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:
   network_public:

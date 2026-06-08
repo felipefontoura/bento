@@ -51,6 +51,10 @@ services:
         limits:
           cpus: "0.5"
           memory: 256M
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=cli-proxy-api
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 volumes:
   cli_proxy_api_config:
     driver: local

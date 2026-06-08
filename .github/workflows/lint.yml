@@ -76,6 +76,44 @@ jobs:
             echo "ok  $f"
           done
 
+  bento-managed-labels:
+    name: BENTO_MANAGED labels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Every stack compose declares BENTO_MANAGED labels
+        run: |
+          # Each stacks/*/*/compose.yml must expose three labels under
+          # deploy.labels so introspection tooling (auth_propagate_state_providers
+          # in lib/auth-helpers.sh, scripts/bento-auth list, future
+          # reconciliation logic) can find bento-managed services via
+          # `docker service ls --filter label=BENTO_MANAGED=true`.
+          #
+          # Without these labels the filter returns empty and the live-update
+          # paths silently no-op even when bento stacks are running. See
+          # GH-23 for the discovery trail.
+          set -e
+          mapfile -t files < <(find stacks -name compose.yml)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No compose files found."
+            exit 0
+          fi
+          rc=0
+          for f in "${files[@]}"; do
+            key=$(basename "$(dirname "$f")")
+            missing=()
+            grep -q "BENTO_MANAGED=true"  "$f" || missing+=("BENTO_MANAGED=true")
+            grep -q "BENTO_STACK_KEY=${key}" "$f" || missing+=("BENTO_STACK_KEY=${key}")
+            grep -q "BENTO_DEPLOYED_REF="  "$f" || missing+=("BENTO_DEPLOYED_REF=\${BENTO_DEPLOYED_REF…}")
+            if [[ ${#missing[@]} -gt 0 ]]; then
+              echo "::error file=$f::missing required deploy.labels: ${missing[*]}"
+              rc=1
+            else
+              echo "ok  $f"
+            fi
+          done
+          exit "$rc"
+
   compose:
     name: docker compose config
     runs-on: ubuntu-latest
