@@ -12,17 +12,20 @@ _Your VPS, served on a tray._
 
 ---
 
-## TL;DR
+## Quickstart
 
 ```bash
 bash <(curl -sSL https://raw.githubusercontent.com/felipefontoura/bento/stable/boot.sh)
 ```
+
+## TL;DR
 
 Paste that on a fresh Ubuntu/Debian VPS, answer three questions (domain, admin email, public IP), and ~15 minutes later you have a hardened host, Traefik + Portainer with TLS, the apps you picked, and an HTML handoff report. Already know bento? Copy and go. Want context? Keep reading.
 
 <details>
 <summary><strong>Table of contents</strong></summary>
 
+- [Quickstart](#quickstart)
 - [What is bento](#what-is-bento)
 - [How it works](#how-it-works)
 - [Stacks](#stacks)

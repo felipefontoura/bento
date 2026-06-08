@@ -351,10 +351,11 @@ stacks_deploy() {
 
     ui_section "Deploying $stack_key"
 
-    # If the compose declares a `build:` directive (paperclip is the only
-    # stack like this today), Swarm's `docker stack deploy` will ignore it
-    # and try to pull the image. Build it locally first so the resulting
-    # image is in the host daemon when Portainer's stack create runs.
+    # If the compose declares a `build:` directive, Swarm's `docker stack
+    # deploy` will ignore it and try to pull the image. Build it locally
+    # first so the resulting image is in the host daemon when Portainer's
+    # stack create runs. No stack ships a `build:` today, but this path
+    # stays so a future stack can opt in without further wiring.
     local full_compose="${BENTO_REPO_ROOT}/${compose_path}"
     if [[ ! -f "$full_compose" ]]; then
         ui_error "Compose file missing: $full_compose"
