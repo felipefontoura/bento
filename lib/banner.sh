@@ -29,15 +29,7 @@ EOF
         --border="rounded" \
         --border-foreground="$BENTO_COLOR_SALMON" \
         --padding="1 2" \
-        --margin="1 0 0 0" \
+        --margin="1 0 1 0" \
         --foreground="$BENTO_COLOR_RICE" \
         "$body"
-
-    gum style \
-        --foreground="$BENTO_COLOR_MUTED" \
-        --italic \
-        --margin="0 0 1 0" \
-        --align="center" \
-        --width=80 \
-        "Your VPS, served on a tray."
 }

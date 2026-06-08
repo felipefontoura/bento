@@ -99,18 +99,20 @@ bootstrap_prompt_once() {
     local EMAIL_REGEX='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
     local IP_REGEX='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
 
-    local base_domain admin_email advertise_addr detected
+    # Placeholders only — no pre-filled values. The operator types the real
+    # domain, email, and IP explicitly so a stray enter never persists a
+    # guess (derived email, auto-detected ifconfig.me IP, etc).
+    local base_domain admin_email advertise_addr
     base_domain=$(ui_input_validated \
-        "Base domain (e.g. mydomain.com)" "mydomain.com" \
+        "Base domain" "mydomain.com" "" \
         "$DOMAIN_REGEX" "That doesn't look like a domain. Try again.")
 
     admin_email=$(ui_input_validated \
-        "Admin email (Let's Encrypt + alerts)" "admin@${base_domain}" \
+        "Admin email (Let's Encrypt + alerts)" "admin@yourdomain.com" "" \
         "$EMAIL_REGEX" "That doesn't look like an email. Try again.")
 
-    detected="$(curl -fsSL --max-time 5 https://ifconfig.me 2>/dev/null || true)"
     advertise_addr=$(ui_input_validated \
-        "VPS public IP" "$detected" \
+        "VPS public IP" "198.51.100.42" "" \
         "$IP_REGEX" "That doesn't look like an IPv4 address. Try again.")
 
     ui_format_md <<EOF

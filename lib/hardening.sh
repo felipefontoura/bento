@@ -27,7 +27,7 @@ BENTO_REBOOT_SENTINEL=/var/lib/bento/reboot-required
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-ICON='\xF0\x9F\x8C\x80'
+ICON='\xF0\x9F\x8D\xB1'   # 🍱 bento box (replacement for ubinkaze's 🌀)
 NC='\033[0m'
 
 # --- Functions ---

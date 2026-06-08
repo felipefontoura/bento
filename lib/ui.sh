@@ -122,15 +122,23 @@ ui_input() {
 }
 
 # Re-prompt until the answer matches <regex>, then echo it.
-# The 4th argument is the error message shown on a bad answer.
+#
+#   ui_input_validated <prompt> <placeholder> <default> <regex> <error>
+#
+# - placeholder: ghost text shown when the input is empty. Use this for
+#   "for example mydomain.com" hints without pre-filling the field.
+# - default: pre-filled value. Pass "" to leave the field empty so the
+#   operator has to type something explicit (avoids accidentally accepting
+#   an auto-detected or auto-derived value via a stray enter).
 ui_input_validated() {
     local prompt="$1"
-    local default="$2"
-    local regex="$3"
-    local error="$4"
+    local placeholder="$2"
+    local default="$3"
+    local regex="$4"
+    local error="$5"
     local answer
     while true; do
-        answer="$(ui_input "$prompt" "$default" "$default")"
+        answer="$(ui_input "$prompt" "$placeholder" "$default")"
         if [[ "$answer" =~ $regex ]]; then
             printf '%s' "$answer"
             return 0
