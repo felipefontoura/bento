@@ -138,6 +138,9 @@ bento/
 │       │   └── SKILL.md
 │       └── install-bento/
 │           └── SKILL.md
+├── docs/
+│   └── architecture/
+│       └── cross-stack-volume-graft.md  # pattern: producer→consumer via shared volume
 ├── lib/
 │   ├── banner.sh
 │   ├── deps.sh
