@@ -311,7 +311,23 @@ step3_run() {
     local rc=0
     stacks_step3_menu || rc=$?
     case "$rc" in
-        0) report_run "auto" ;;                                  # work succeeded
+        0)
+            # Offer AI-provider auth right after a successful Step 3 — most
+            # operators land here ready to wire their LLM keys, and the
+            # paperclip container is guaranteed up at this point. Skipped
+            # under unattended (no interactive stdin) and skipped silently
+            # when paperclip was not in the deploy set (the prompt would
+            # just confuse those operators).
+            if [[ "${BENTO_UNATTENDED:-0}" != "1" ]] \
+               && [[ -x "${BENTO_REPO_ROOT}/scripts/bento-auth" ]] \
+               && sudo docker service inspect paperclip_paperclip >/dev/null 2>&1
+            then
+                if ui_confirm "Authenticate AI providers now?"; then
+                    auth_run
+                fi
+            fi
+            report_run "auto"
+            ;;
         1) ui_warn "Re-run Step 3 to retry the failed stacks." ;; # at least one failure
         2) : ;;                                                  # cancelled / nothing to do
     esac
@@ -394,6 +410,44 @@ EOF
     if [[ "${BENTO_UNATTENDED:-0}" != "1" ]]; then
         ui_pause
     fi
+}
+
+# -----------------------------------------------------------------------------
+# Authenticate AI providers
+# -----------------------------------------------------------------------------
+# Thin gum-styled wrapper around scripts/bento-auth so the operator never
+# has to remember the path. The script itself works fine from a bare
+# shell — this menu just makes it discoverable from the main bento flow.
+#
+# Skipped under BENTO_UNATTENDED: device-flow OAuth is, by design, an
+# interactive step (the user has to paste a code from their browser).
+# We still print a hint so unattended runs surface the suggestion in
+# their resume log.
+auth_run() {
+    if [[ "${BENTO_UNATTENDED:-0}" == "1" ]]; then
+        ui_info "Skipping AI provider auth — run 'bento-auth' on the host post-install."
+        return 0
+    fi
+    local script="${BENTO_REPO_ROOT}/scripts/bento-auth"
+    if [[ ! -x "$script" ]]; then
+        ui_error "bento-auth script not found at ${script}. Run 'Update' first."
+        ui_pause
+        return 1
+    fi
+    ui_section "Authenticate AI providers"
+    local choice
+    choice="$(ui_choose \
+        "Claude  (Anthropic, Pro/Max)" \
+        "OpenAI Codex  (ChatGPT Plus)" \
+        "List authenticated providers" \
+        "Back")"
+    case "$choice" in
+        "Claude"*)        "$script" claude ;;
+        "OpenAI Codex"*)  "$script" openai-codex ;;
+        "List"*)          "$script" list ;;
+        "Back"|*)         return 0 ;;
+    esac
+    ui_pause
 }
 
 update_run() {
@@ -539,6 +593,7 @@ main_menu() {
             "Step 1 — Harden the system" \
             "Step 2 — Install infrastructure" \
             "Step 3 — Install applications" \
+            "Authenticate AI providers" \
             "Settings" \
             "Status" \
             "Report — handoff HTML" \
@@ -546,14 +601,15 @@ main_menu() {
             "Exit")"
 
         case "$choice" in
-            "Step 1"*) step1_run ;;
-            "Step 2"*) step2_run ;;
-            "Step 3"*) step3_run ;;
-            "Settings") settings_run ;;
-            "Status")   status_run ;;
-            "Report"*)  report_run "manual" ;;
-            "Update")   update_run ;;
-            "Exit")     exit 0 ;;
+            "Step 1"*)              step1_run ;;
+            "Step 2"*)              step2_run ;;
+            "Step 3"*)              step3_run ;;
+            "Authenticate AI"*)     auth_run ;;
+            "Settings")             settings_run ;;
+            "Status")               status_run ;;
+            "Report"*)              report_run "manual" ;;
+            "Update")               update_run ;;
+            "Exit")                 exit 0 ;;
         esac
     done
 }
