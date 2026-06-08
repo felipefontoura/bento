@@ -151,6 +151,41 @@ x-paperclip-common: &paperclip-common
 services:
   paperclip:
     <<: *paperclip-common
+    # Wait for postgres to accept TCP before launching the node server.
+    # Swarm does NOT honor the `depends_on: condition: service_healthy`
+    # form that the upstream docker-compose.yml uses — only the basic
+    # list form, which guarantees start order but not readiness. Without
+    # this wrapper, paperclip races against postgres on stack create
+    # and crashes with `getaddrinfo ENOTFOUND postgres` (Swarm DNS not
+    # propagated yet) or `ECONNREFUSED` (postgres still in initdb).
+    # restart_policy below would eventually pull it back up, but the
+    # operator sees a 10-30s gap of Failed→Running in the task history
+    # and a crash log on first deploy.
+    #
+    # Bash's `/dev/tcp/host/port` built-in opens an actual TCP socket
+    # without needing `nc` or `pg_isready` installed in the image. The
+    # `command:` here REPLACES the image's CMD, then exec's the same
+    # `node …` invocation the upstream Dockerfile shipped — verified
+    # via `docker inspect` against ghcr.io/paperclipai/paperclip:latest.
+    # `entrypoint:` stays untouched so the image's docker-entrypoint.sh
+    # still runs (UID/GID remap + chown + drop to the node user via
+    # gosu); this command becomes `gosu node bash -c '…'`.
+    command:
+      - bash
+      - -c
+      - |
+        elapsed=0
+        until echo > /dev/tcp/postgres/5432 2>/dev/null; do
+          if (( elapsed >= 60 )); then
+            echo "[bento] postgres unreachable at postgres:5432 after 60s — exiting so Swarm can restart" >&2
+            exit 1
+          fi
+          echo "[bento] waiting for postgres tcp 5432..."
+          sleep 2
+          elapsed=$((elapsed + 2))
+        done
+        echo "[bento] postgres reachable, launching paperclip"
+        exec node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js
     volumes:
       - paperclip-data:/paperclip
     # Swarm healthcheck omitted — paperclip's boot bundles a Python venv
