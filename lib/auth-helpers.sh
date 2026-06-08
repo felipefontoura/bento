@@ -23,18 +23,15 @@
 # Anthropic ChatGPT-Plus-style OAuth: the access token lives at
 # claudeAiOauth.accessToken inside the Claude Code credentials file. The
 # `claude` CLI refreshes this on demand, so the JSON is the source of truth.
+# shellcheck disable=SC2034  # consumed by scripts/bento-auth
 AUTH_CLAUDE_CREDENTIALS_PATH_IN_CONTAINER="/paperclip/.claude/.credentials.json"
 
 # Codex / openai-codex OAuth: opencode persists the access + refresh tokens
 # at this path inside the container after `opencode auth login anthropic`
 # (the CLI is reused as a convenience wrapper that runs the same OAuth
 # device flow Anthropic publishes for Claude Code).
+# shellcheck disable=SC2034  # consumed by scripts/bento-auth
 AUTH_OPENCODE_PATH_IN_CONTAINER="/paperclip/.local/share/opencode/auth.json"
-
-# Hermes-managed credentials (set via `hermes auth add ...` inside the
-# container). We read this to surface "which providers are wired into
-# Hermes" in `bento-auth list`.
-AUTH_HERMES_AUTH_PATH_IN_CONTAINER="/paperclip/.hermes/auth.json"
 
 # Paperclip container service name — set once by stacks/app/paperclip.
 AUTH_PAPERCLIP_SERVICE="paperclip_paperclip"
