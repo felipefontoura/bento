@@ -71,6 +71,8 @@ Pick from a checklist. For each stack, bento:
 3. **Runs an optional `install.sh`** for post-deploy bootstrap (DB creation, migrations).
 4. **Prints the URL** — you open and log in.
 
+When Paperclip is in the deploy set, Step 3 offers an optional **Authenticate AI providers** step right after a successful deploy so the agent runtime can immediately call out to Claude / OpenAI Codex. The same menu is available any time from the main menu, or directly as `bento-auth` on the host. Full details in [docs/reference/bento-auth.md](docs/reference/bento-auth.md).
+
 ---
 
 ## Stacks
