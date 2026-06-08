@@ -146,7 +146,21 @@ HTML
 # Renders one card per deployed bento-managed stack.
 _section_apps() {
     local stack_keys
-    stack_keys=$(jq -r '.stacks // {} | keys[]?' "$BENTO_STATE_FILE")
+    # Distinguish "state file is fine but no stacks yet" from "jq blew
+    # up trying to read state". The previous form swallowed the jq exit
+    # code, so a corrupt state.json silently produced an empty applist
+    # in the handoff HTML — looked clean to the operator, but the
+    # state was broken.
+    if ! stack_keys=$(jq -r '.stacks // {} | keys[]?' "$BENTO_STATE_FILE" 2>&1); then
+        cat <<HTML
+<section class="card error">
+  <header><h2>Applications</h2></header>
+  <p class="empty">State file unreadable — jq said:</p>
+  <pre>$(_html_escape "$stack_keys")</pre>
+</section>
+HTML
+        return
+    fi
 
     if [[ -z "$stack_keys" ]]; then
         cat <<HTML
