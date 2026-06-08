@@ -493,14 +493,32 @@ EOF
 NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get autoremove -y
 apt-get clean
 
-# Drop reboot sentinel so the parent install.sh can detect.
+# Only signal "reboot needed" to install.sh when Ubuntu's own apt
+# machinery decided one is required — i.e. a kernel, glibc, or openssl
+# upgrade landed in this run that cannot be applied without rebooting.
+# Service restarts that DO apply at runtime (UFW, fail2ban, AppArmor,
+# Docker daemon.json, sysctl) handled themselves via systemctl in the
+# blocks above. If `/var/run/reboot-required` is absent, the running
+# kernel and libraries already match what's on disk and a reboot would
+# just be ceremony.
 mkdir -p "$(dirname "$BENTO_REBOOT_SENTINEL")"
-date -Iseconds > "$BENTO_REBOOT_SENTINEL"
+if [ -f /var/run/reboot-required ]; then
+    date -Iseconds > "$BENTO_REBOOT_SENTINEL"
+    print_message "${YELLOW}" "Kernel or core lib was upgraded — reboot will be needed."
+else
+    # Make sure no stale sentinel from a previous failed run survives.
+    rm -f "$BENTO_REBOOT_SENTINEL"
+    print_message "${GREEN}" "No kernel/lib upgrade pending — reboot can be skipped."
+fi
 
 print_success "Setup complete! System hardening successful."
 print_message "${YELLOW}" "Important next steps:"
-print_message "${YELLOW}" "1. REBOOT THE SYSTEM to apply all security settings"
-print_message "${YELLOW}" "2. After reboot, re-run bento to continue with infra setup"
+if [ -f "$BENTO_REBOOT_SENTINEL" ]; then
+    print_message "${YELLOW}" "1. REBOOT THE SYSTEM to apply the new kernel/libs"
+    print_message "${YELLOW}" "2. After reboot, re-run bento to continue with infra setup"
+else
+    print_message "${YELLOW}" "1. Continue with Step 2 — no reboot needed this time"
+fi
 
 # Additional verification info
 print_message "${GREEN}" "System Information:"
