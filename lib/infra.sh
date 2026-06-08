@@ -78,25 +78,8 @@ infra_deploy_traefik_and_portainer() {
     # Export everything envsubst needs.
     export TRAEFIK_ACME_EMAIL
     export PORTAINER_HOST
-    export TRAEFIK_ACME_CHALLENGE_FLAG_1
-    export TRAEFIK_ACME_CHALLENGE_FLAG_2
-    export CF_DNS_API_TOKEN
     TRAEFIK_ACME_EMAIL="$(state_get '.bootstrap.admin_email')"
     PORTAINER_HOST="portainer.$(state_get '.bootstrap.base_domain')"
-
-    # ACME challenge selection.
-    #   - CF_DNS_API_TOKEN set → DNS-01 via Cloudflare (works behind the
-    #     Cloudflare proxy and on VPS where port 80 is closed).
-    #   - otherwise → HTTP-01 over the existing :80 entrypoint.
-    if [[ -n "${CF_DNS_API_TOKEN:-}" ]]; then
-        TRAEFIK_ACME_CHALLENGE_FLAG_1="--certificatesresolvers.letsencryptresolver.acme.dnschallenge=true"
-        TRAEFIK_ACME_CHALLENGE_FLAG_2="--certificatesresolvers.letsencryptresolver.acme.dnschallenge.provider=cloudflare"
-        ui_info "ACME challenge: DNS-01 via Cloudflare (CF_DNS_API_TOKEN detected)"
-    else
-        TRAEFIK_ACME_CHALLENGE_FLAG_1="--certificatesresolvers.letsencryptresolver.acme.httpchallenge=true"
-        TRAEFIK_ACME_CHALLENGE_FLAG_2="--certificatesresolvers.letsencryptresolver.acme.httpchallenge.entrypoint=web"
-        ui_info "ACME challenge: HTTP-01 (port 80 must be reachable)"
-    fi
 
     state_set '.bootstrap.portainer_host' "$PORTAINER_HOST"
     state_set '.bootstrap.portainer_url' "http://127.0.0.1:9000"

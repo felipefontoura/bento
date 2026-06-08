@@ -51,13 +51,6 @@ bootstrap_from_env() {
     local e="${BENTO_ADMIN_EMAIL:-}"
     local a="${BENTO_ADVERTISE_ADDR:-}"
 
-    # Optional: when set, Traefik uses Cloudflare DNS-01 instead of HTTP-01.
-    # Lets users keep the Cloudflare orange-cloud proxy on, and works on
-    # VPS where port 80 is closed by a cloud firewall.
-    if [[ -n "${BENTO_CF_DNS_API_TOKEN:-}" ]]; then
-        export CF_DNS_API_TOKEN="$BENTO_CF_DNS_API_TOKEN"
-    fi
-
     if [[ -z "$d" ]]; then
         ui_error "BENTO_UNATTENDED requires BENTO_BASE_DOMAIN"
         exit 1

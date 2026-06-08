@@ -1,12 +1,9 @@
 services:
   traefik:
     image: traefik:v2.11
-    # ACME challenge is selected at deploy time by lib/infra.sh:
-    #   - default → HTTP-01 (needs port 80 reachable on the VPS)
-    #   - CF_DNS_API_TOKEN set → DNS-01 via Cloudflare (works through
-    #     the orange-cloud proxy and on private VPS where 80/443 are
-    #     restricted). lib/infra.sh swaps the challenge flags via
-    #     ${TRAEFIK_ACME_CHALLENGE_*} placeholders below.
+    # Let's Encrypt uses HTTP-01 — port 80 must be reachable on the VPS
+    # for the ACME challenge to resolve. Cloudflare wildcards therefore
+    # need to be set to "DNS only" (gray cloud), not "Proxied" (orange).
     command:
       - "--api.dashboard=true"
       - "--providers.docker.swarmMode=true"
@@ -18,8 +15,8 @@ services:
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
       - "--entrypoints.websecure.address=:443"
-      - "${TRAEFIK_ACME_CHALLENGE_FLAG_1}"
-      - "${TRAEFIK_ACME_CHALLENGE_FLAG_2}"
+      - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge.entrypoint=web"
       - "--certificatesresolvers.letsencryptresolver.acme.email=${TRAEFIK_ACME_EMAIL}"
       - "--certificatesresolvers.letsencryptresolver.acme.storage=/etc/traefik/letsencrypt/acme.json"
       - "--log.level=DEBUG"
@@ -28,9 +25,6 @@ services:
       - "--accesslog=true"
       - "--accesslog.filepath=/var/log/traefik/access-log"
       - "--ping=true"
-    environment:
-      # Empty when HTTP-01 is in use; bento exports it before envsubst.
-      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:-}
     healthcheck:
       test:
         [
