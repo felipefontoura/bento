@@ -9,6 +9,13 @@
 #     Mint, Pop!_OS, etc.) instead of the strict upstream Ubuntu LTS check.
 #   - Drops a reboot sentinel at /var/lib/bento/reboot-required so the
 #     parent install.sh can detect and prompt cleanly.
+#   - /etc/docker/daemon.json omits "userland-proxy": false. Upstream sets it
+#     for a small RAM/security gain, but on single-public-IP hosts (Hetzner,
+#     DO, etc.) it breaks hairpin NAT: a container that resolves its own
+#     public hostname egresses to the public iface and never loops back, so
+#     any agent calling its sibling stack via the public URL hangs. Docker's
+#     default (true) keeps docker-proxy alive per published port and DNATs
+#     correctly. See bento#31.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -334,7 +341,6 @@ cat <<EOF >/etc/docker/daemon.json
     },
     "icc": true,
     "live-restore": false,
-    "userland-proxy": false,
     "no-new-privileges": true,
     "default-ulimits": {
         "nofile": {
