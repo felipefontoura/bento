@@ -83,25 +83,48 @@ _print_anthropic_warning() {
 ═══════════════════════════════════════════════════════════════
 
  This logs your Claude Pro/Max subscription into the paperclip
- container so the Hermes runtime can call Claude models for
- your agents.
+ container so the bundled `claude` CLI (and anything else that
+ spawns it as a subprocess, e.g. paperclip's `claude_local`
+ agent adapter) runs against your plan.
 
- IMPORTANT — billing reality (verified 2026-06-08):
+ ─── Anthropic third-party policy (verified 2026-06-08) ───
 
-   Anthropic moved third-party apps OFF the Pro/Max quota.
-   When Hermes (or any non-Claude-Code app) calls /v1/messages
-   with this OAuth token, it consumes "extra usage" credits,
-   NOT your monthly Pro/Max allowance.
+ The restriction below applies to HERMES ONLY. Paperclip's native
+ `claude_local` adapter is unaffected and runs against your plan.
+ Openclaw is unverified — assume same fate as Hermes until tested.
 
-   Inference will fail with HTTP 400 until you load credits:
-     -> https://claude.ai/settings/usage
+   ✓ COVERED by your Pro/Max plan:
+     • the `claude` CLI itself (interactive or `claude -p ...`)
+     • paperclip's `claude_local` adapter
+       — spawns `claude` as a subprocess; Anthropic sees the
+         native CLI fingerprint, the request stays on-plan
+       — this is the recommended path for Claude-driven agents
+         on a bento deployment today
 
-   Cost is the same per-token rate as the public API. Your
-   Pro/Max plan still covers the `claude` CLI itself when
-   invoked directly — only third-party callers like Hermes
-   are routed to extra usage.
+   ✗ NOT COVERED — drawn from "extra usage" (pay-as-you-go) at
+     the public per-token rate:
+     • Hermes Agent's `--provider anthropic`
+       — Hermes spoofs user-agent and anthropic-beta headers but
+         Anthropic still distinguishes it from native Claude Code
+     • any other third-party HTTP client against api.anthropic.com
+       (Continue, Aider, Cursor extensions, …)
+     • openclaw  (unverified — likely off-plan like Hermes,
+                  please open an issue if you confirm)
 
-   Your call. This script wires the token either way.
+ Symptom when an off-plan call fires with no credit loaded:
+     HTTP 400 — "Third-party apps now draw from your extra usage,
+     not your plan limits. Add more at claude.ai/settings/usage
+     and keep going."
+
+ If you want Hermes-driven agents on Claude: load credits at
+ https://claude.ai/settings/usage. Otherwise, route Claude work
+ through paperclip's `claude_local` adapter — it works today.
+
+ This is an Anthropic policy decision, not a bento bug. If/when
+ the policy changes the warning will be updated. Filed as a
+ temporary external limitation in docs/reference/bento-auth.md.
+
+ Your call. This script wires the token either way.
 
 WARN
 }

@@ -56,31 +56,42 @@ for the planned enhancement.
 
 ---
 
-## Commercial reality (Anthropic)
+## Anthropic third-party policy (as of 2026-06-08)
 
-`bento-auth claude` prints this warning before launching the OAuth flow.
-The intent is honesty up front, not paternalism — you read, you decide,
-the script wires the token either way:
+Anthropic currently splits requests against `api.anthropic.com/v1/messages` into two billing buckets based on the **caller fingerprint**, not on the token. The OAuth token is the same in both cases, but the regime applied to the request is different:
 
-> Anthropic moved third-party apps OFF the Pro/Max quota. When Hermes
-> (or any non-Claude-Code app) calls `/v1/messages` with this OAuth
-> token, it consumes "extra usage" credits, NOT your monthly Pro/Max
-> allowance.
->
-> Inference will fail with HTTP 400 until you load credits:
-> https://claude.ai/settings/usage
->
-> Cost is the same per-token rate as the public API. Your Pro/Max plan
-> still covers the `claude` CLI itself when invoked directly — only
-> third-party callers like Hermes are routed to extra usage.
+| Caller | Fingerprint Anthropic sees | Billing |
+|---|---|---|
+| `claude` CLI itself (interactive or `claude -p ...`) | Native Claude Code | **On-plan** (Pro/Max covers) |
+| Paperclip's `claude_local` adapter | Native Claude Code (spawns `claude` as a subprocess) | **On-plan** |
+| Hermes Agent `--provider anthropic` | Third-party HTTP client (Hermes spoofs the `user-agent` and `anthropic-beta` headers, but Anthropic still distinguishes it) | **Extra usage** (pay-as-you-go, public per-token rate) |
+| Any other third-party client (Continue, Aider, Cursor extensions, …) | Third-party HTTP client | **Extra usage** |
 
-If you've already accepted this in writing for your deployment, set
-`BENTO_AUTH_ASSUME_YES=1` to skip the confirm prompt. The warning still
-prints — telemetry visibility matters more than friction.
+Off-plan requests fail with `HTTP 400` and the literal text:
 
-OpenAI Codex via ChatGPT Plus does **not** have an analogous regime as
-of 2026-06-08: Plus subscription rate limits apply uniformly to native
-and third-party callers.
+> Third-party apps now draw from your extra usage, not your plan limits. Add more at claude.ai/settings/usage and keep going.
+
+Auth succeeded — the request just got routed off-plan. Load credits at https://claude.ai/settings/usage to unblock the third-party path, or drive your agents through paperclip's `claude_local` adapter to stay on-plan.
+
+### Why bento-auth still wires the token unconditionally
+
+The token is useful regardless of which path you choose:
+
+- **On-plan paths** (the `claude` CLI itself, `claude_local` adapter): the token in `~/.claude/.credentials.json` is what those subprocess invocations consume directly. `bento-auth claude` writes it there.
+- **Off-plan paths** (Hermes `anthropic` provider, etc.): the token in `state.providers.CLAUDE_CODE_OAUTH_TOKEN` is what bento propagates as an env var so those callers can use it the moment you load credits.
+
+`bento-auth claude` prints the warning verbatim before launching the device flow and asks for explicit y/N confirmation. Set `BENTO_AUTH_ASSUME_YES=1` to skip the prompt — the warning still prints, because the rule is "no surprise bills," not "no friction."
+
+### Practical guidance for Base25-style agent fleets
+
+- **Default driver**: OpenAI Codex via ChatGPT Plus subscription (`--provider openai-codex --model gpt-5.4`). Plus covers third-party callers uniformly; no off-plan trap. Recommended primary path for agents until/unless this changes.
+- **When you specifically need Claude**: either load some "extra usage" credit at https://claude.ai/settings/usage and use Hermes `--provider anthropic`, OR route that single agent through paperclip's `claude_local` adapter (stays on-plan but bypasses Hermes — no MCP, no sub-agent delegation, etc., for that agent).
+
+### This is an Anthropic policy, not a bento bug
+
+This document tracks the policy as of 2026-06-08. If Anthropic changes it (e.g. opens Pro/Max to all OAuth callers, or differentiates by app registration), the warning in `bento-auth claude` and this section will be updated to match. Open an issue with a fresh `HTTP 400` body if you observe a change.
+
+OpenAI Codex via ChatGPT Plus does **not** have an analogous regime as of 2026-06-08: Plus rate limits apply uniformly to native and third-party callers.
 
 ---
 
