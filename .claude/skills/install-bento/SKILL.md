@@ -260,13 +260,24 @@ Suggested wording (paste verbatim):
 >
 > You'll be offered a picker (Claude / OpenAI Codex / list). Each provider opens a URL — paste the code from your browser back into the SSH session and you're done. Tokens last ~10 days; re-run when expired.
 
-## The Anthropic commercial gotcha you must surface
+## The Anthropic third-party policy you must surface
 
-Anthropic moved third-party apps OFF the Pro/Max quota. When Hermes calls `/v1/messages` with the OAuth token, it consumes **"extra usage" credits**, NOT the Pro/Max subscription. Inference returns HTTP 400 `"Third-party apps now draw from your extra usage…"` until the user loads credits at `https://claude.ai/settings/usage`.
+**Restriction applies to Hermes-driven Claude calls only.** Paperclip's own `claude_local` adapter (which spawns the `claude` CLI as a subprocess) is on-plan and unaffected. Openclaw is unverified — treat like Hermes (off-plan) until someone tests.
 
-`bento-auth claude` prints this warning before the device flow and prompts y/N. Operators who pre-accepted this in writing can set `BENTO_AUTH_ASSUME_YES=1` to skip the confirm prompt — the warning still prints.
+What goes off-plan and lands in "extra usage" (pay-as-you-go):
 
-Mention this commercial reality in your report-back. Do not silently let the user discover it after they've configured agents and bewildered why nothing works.
+- Hermes Agent `--provider anthropic` against `api.anthropic.com` — even with the OAuth token, Anthropic distinguishes the third-party fingerprint and routes off-plan. HTTP 400 with the literal message: `"Third-party apps now draw from your extra usage, not your plan limits. Add more at claude.ai/settings/usage and keep going."`
+
+What stays on-plan with the same OAuth token:
+
+- The `claude` CLI itself (interactive or `claude -p ...`).
+- Paperclip agents using `adapter_type: claude_local` (recommended path for Claude-driven Base25 agents today).
+
+`bento-auth claude` prints the full matrix before the device flow. `BENTO_AUTH_ASSUME_YES=1` skips the confirm but the warning still prints. The full reference doc lives at `docs/reference/bento-auth.md` ("Anthropic third-party policy (as of 2026-06-08)").
+
+When reporting back to the operator: if Hermes is the planned driver and Claude is the planned provider, **say this matrix out loud**. Recommend OpenAI Codex via ChatGPT Plus (`--provider openai-codex --model gpt-5.4`) as the default Hermes path until/unless the operator has loaded extra-usage credits; or recommend `claude_local` if they want Claude specifically and are OK losing Hermes features (MCP, sub-agent delegation) for that one agent.
+
+This is an Anthropic policy decision, not a bento bug. If you see the policy change (HTTP 400 body different / on-plan path widened), open an issue with the fresh response body so the docs catch up.
 
 OpenAI Codex via ChatGPT Plus does **not** have an analogous regime as of 2026-06-08 — Plus rate limits apply uniformly to native and third-party callers.
 
