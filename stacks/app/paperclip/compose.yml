@@ -208,15 +208,33 @@ services:
           elapsed=$$((elapsed + 2))
         done
         echo "[bento] postgres reachable, launching paperclip"
+        # Install hermes-paperclip wrapper (workaround for hermes-paperclip-adapter@0.2.0 bug
+        # where Object.assign(env, userEnv) passes config.env objects {type:plain,value:...}
+        # raw instead of extracting .value — Hermes child receives HERMES_HOME='[object Object]'
+        # and crashes on os.mkdir). PAPERCLIP_COMPANY_ID + PAPERCLIP_AGENT_ID are injected by
+        # buildPaperclipEnv (adapter-utils) as plain strings, so they pass through cleanly.
+        # When the upstream PR fixing the env extraction lands, this wrapper can be removed
+        # and HERMES_HOME set via adapter_config.env directly.
+        cat > /usr/local/bin/hermes-paperclip <<'WRAPPER'
+        #!/bin/sh
+        if [ -n "$PAPERCLIP_COMPANY_ID" ] && [ -n "$PAPERCLIP_AGENT_ID" ]; then
+            export HERMES_HOME="/paperclip/instances/production/companies/$PAPERCLIP_COMPANY_ID/agents/$PAPERCLIP_AGENT_ID/instructions"
+        fi
+        exec /opt/hermes/bin/hermes "$@"
+        WRAPPER
+        chmod +x /usr/local/bin/hermes-paperclip
+        echo "[bento] hermes-paperclip wrapper installed at /usr/local/bin/hermes-paperclip"
         exec node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js
     volumes:
       - paperclip-data:/paperclip
-      # Note: when the optional `hermes` stack is also deployed on this Swarm
-      # it grafts a `/opt/hermes:ro` mount onto this service via
-      # `docker service update --mount-add` (see stacks/app/hermes/install.sh).
-      # We do NOT declare that mount here — keeping paperclip's compose free
-      # of cross-stack volumes so paperclip runs identically on hosts that
-      # don't deploy hermes.
+      # When the `hermes` stack is deployed, it seeds `hermes_hermes-bin` with the
+      # Hermes CLI at `/opt/hermes/bin/hermes`. Declared external + optional so the
+      # mount survives `docker daemon restart` and `docker stack rm/redeploy` —
+      # runtime `docker service update --mount-add` mutations are lost on daemon
+      # restart (witnessed 2026-06-09 after hairpin NAT fix required a full Docker
+      # daemon restart). Operators without the `hermes` stack deployed must
+      # comment this line or the stack will fail to start (volume doesn't exist).
+      - hermes-bin:/opt/hermes:ro
     # Swarm healthcheck omitted — paperclip's boot bundles a Python venv
     # warmup that occasionally exceeds the probe window. The Dockerfile
     # still ships a HEALTHCHECK so `docker run` standalone gets one;
@@ -264,3 +282,10 @@ networks:
 volumes:
   paperclip-data:
     driver: local
+  # External volume seeded by the `hermes` stack — contains the Hermes CLI
+  # binary at /opt/hermes/bin/hermes. Required for the `hermes_local` adapter
+  # to spawn Hermes subprocess. If you don't deploy hermes, comment this and
+  # the matching mount line in the `paperclip` service above.
+  hermes-bin:
+    external: true
+    name: hermes_hermes-bin
