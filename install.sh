@@ -552,33 +552,68 @@ backup_run() {
             cat <<MSG
 
 To restore snapshot ${short_id}, run these commands ON THE HOST
-(NOT inside this menu). Restore is destructive — review each step before
-hitting enter.
+(NOT inside this menu). Restore is destructive — review each step
+before hitting enter. STOP each app stack ('docker stack rm <name>')
+BEFORE running step 4 — restoring on top of a running container
+corrupts whatever is in flight.
 
-  # 1. Restore postgres dumps + bento state into a staging dir.
+  # 1. Restore the staging dir (postgres dumps + bento state) into the
+  #    backup container's filesystem at /backup-state/restore.
   sudo docker exec ${cid} restic restore ${short_id} \\
       --target /backup-state/restore --include /var/lib/restic/staging
 
-  # 2. (postgres) Pipe each dump into the postgres container. Order matters:
-  #    globals first, then per-DB.
-  sudo docker exec -i \$(sudo docker ps -q -f name=postgres_postgres) \\
-      psql -U postgres < /backup-state/restore/var/lib/restic/staging/postgres/globals.sql
+  # 2. (postgres) Pipe each dump into the postgres container. Order
+  #    matters: globals first (roles, tablespaces), then per-DB.
+  pg=\$(sudo docker ps -q -f name=postgres_postgres)
+  sudo docker exec -i "\$pg" psql -U postgres \\
+      < /backup-state/restore/var/lib/restic/staging/postgres/globals.sql
   for db in chatwoot paperclip n8n typebot plunk evolution-api; do
-      sudo docker exec -i \$(sudo docker ps -q -f name=postgres_postgres) \\
-          psql -U postgres -d \$db < /backup-state/restore/var/lib/restic/staging/postgres/\$db.sql
+      sql=/backup-state/restore/var/lib/restic/staging/postgres/\${db}.sql
+      [ -f "\$sql" ] || continue
+      sudo docker exec -i "\$pg" psql -U postgres -d "\$db" < "\$sql"
   done
 
-  # 3. (bento state) Copy back into ~/.config/bento/. Make sure no bento
-  #    menu is running while you do this.
-  sudo cp -aL /backup-state/restore/var/lib/restic/staging/bento/. ~/.config/bento/
+  # 3. (bento state) Copy back into ~/.config/bento/. Make sure no
+  #    bento menu is running while you do this.
+  sudo cp -aL /backup-state/restore/var/lib/restic/staging/bento/. \\
+      ~/.config/bento/
 
-  # 4. (app volumes) For each app volume — example: paperclip-data.
-  #    docker volume create <vol-name>
-  #    restic restore ${short_id} --target /tmp/restore --include /backup/volumes/<name>
-  #    docker run --rm -v <vol-name>:/dst -v /tmp/restore/backup/volumes/<name>:/src \\
-  #        alpine sh -c 'cp -a /src/. /dst/'
-  #
-  # Full doc: docs/reference/backup.md
+  # 4. (app volumes) Each pair is "swarm-volume-name:backup-readable-name".
+  #    The loop restores each volume from B2 into a fresh Docker volume.
+  #    Comment out any line you don't want to restore. Lines for stacks
+  #    you never deployed will fail to copy (no source dir) and be
+  #    skipped — safe to leave them in.
+  for pair in \\
+      paperclip_paperclip-data:paperclip-data \\
+      n8n_n8n-data:n8n-data \\
+      chatwoot_chatwoot_data:chatwoot-data \\
+      evolution-api_evolution_instances:evolution-instances \\
+      evolution-api_evolution_store:evolution-store \\
+      openclaw_openclaw-config:openclaw-config \\
+      openclaw_openclaw-workspace:openclaw-workspace \\
+      openclaw_openclaw-oauth:openclaw-oauth \\
+      rabbitmq_rabbitmq-data:rabbitmq-data \\
+      n8n-mcp_n8n-mcp-data:n8n-mcp-data \\
+  ; do
+      swarm="\${pair%%:*}"
+      readable="\${pair##*:}"
+      sudo docker exec ${cid} restic restore ${short_id} \\
+          --target /backup-state/restore --include /backup/volumes/"\$readable"
+      src=/var/lib/docker/volumes/backup_backup-state/_data/restore/backup/volumes/"\$readable"
+      [ -d "\$src" ] || { echo "skip \$swarm (no source)"; continue; }
+      sudo docker volume create "\$swarm" >/dev/null
+      sudo docker run --rm \\
+          -v "\$swarm":/dst \\
+          -v "\$src":/src:ro \\
+          alpine sh -c 'cp -a /src/. /dst/'
+  done
+
+  # 5. Re-deploy the bento stacks against the restored state + volumes.
+  bash ~/.local/share/bento/install.sh
+  #    -> Step 3 -> pick the apps you want -> they come up against the
+  #       restored DBs and volumes.
+
+  # Full procedure + sanity-check drill: docs/reference/backup.md
 
 MSG
             ;;
