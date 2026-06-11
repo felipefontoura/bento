@@ -123,13 +123,17 @@ x-paperclip-common: &paperclip-common
     #     URL:     ws://openclaw:18789
     #
     # Hermes runs as its own stack with an OpenAI-compatible HTTP gateway.
-    # Paperclip talks to it via the `hermes_gateway` adapter (installed at
-    # deploy time by this stack's install.sh, package
-    # @felipefontoura/paperclip-adapter-hermes-gateway). Per-agent UI: set
-    #   Hermes URL          = http://hermes:8642/v1
-    #   API key             = ${HERMES_API_KEY}    (from state)
-    #   Skills bridge URL   = http://paperclip-skills-bridge:8080
-    #   Skills bridge token = ${BRIDGE_AUTH_TOKEN} (from state)
+    # The `hermes_gateway` adapter (npm package
+    # @felipefontoura/paperclip-adapter-hermes-gateway, registered at deploy
+    # time by this stack's install.sh) reads its endpoint + credentials from
+    # the four env vars below before falling back to per-agent UI fields,
+    # so an operator who deploys `hermes` + `paperclip-skills-bridge` can
+    # create a Hermes Gateway agent with EVERY adapter field left blank and
+    # it just works.
+    - HERMES_URL=http://hermes:8642/v1
+    - HERMES_API_KEY=${HERMES_API_KEY:-}
+    - SKILLS_BRIDGE_URL=http://paperclip-skills-bridge:8080
+    - SKILLS_BRIDGE_TOKEN=${BRIDGE_AUTH_TOKEN:-}
 
   deploy: &paperclip-deploy
     mode: replicated
