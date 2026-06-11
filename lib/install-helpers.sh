@@ -156,3 +156,51 @@ wait_for_service() {
     return 1
 }
 
+# -----------------------------------------------------------------------------
+# Cross-stack volume grafting
+# -----------------------------------------------------------------------------
+# Mount a named volume from one stack into a running service in another, at
+# runtime, via `docker service update --mount-add`. Used by stacks that ship
+# binary trees / cached state for peers to consume without coupling either
+# stack's compose.yml to the other.
+#
+# graft_external_volume_to_service <peer-service> <volume> <target-path> [readonly|rw]
+#
+# Behaviour:
+#   - silent no-op when peer service does not exist (peer not deployed yet)
+#   - silent no-op when volume does not exist (producer stack not deployed yet)
+#   - silent no-op when the target path is already mounted on the service
+#   - otherwise, fires a rolling update that adds the mount; logs the action
+#
+# Symmetric: producer stack's install.sh calls this to push to the peer;
+# consumer stack's install.sh calls the same function to pull. Whichever
+# stack deploys last wires the mount. Either side rerunning is idempotent.
+graft_external_volume_to_service() {
+    local peer_service="$1"
+    local volume_name="$2"
+    local mount_target="$3"
+    local mode="${4:-readonly}"
+
+    # Both sides must exist. Soft skip in either direction.
+    if ! sudo docker service inspect "$peer_service" >/dev/null 2>&1; then
+        return 0
+    fi
+    if ! sudo docker volume inspect "$volume_name" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Already grafted? Idempotent no-op.
+    local already
+    already=$(sudo docker service inspect "$peer_service" \
+        --format '{{range .Spec.TaskTemplate.ContainerSpec.Mounts}}{{.Target}}{{println}}{{end}}' \
+        2>/dev/null | grep -Fx "$mount_target" || true)
+    if [[ -n "$already" ]]; then
+        echo "[graft] ${peer_service} already mounts ${mount_target} — no change"
+        return 0
+    fi
+
+    echo "[graft] ${volume_name} → ${peer_service}:${mount_target}:${mode}"
+    sudo docker service update \
+        --mount-add "type=volume,source=${volume_name},target=${mount_target},${mode}" \
+        "$peer_service" >/dev/null
+}
