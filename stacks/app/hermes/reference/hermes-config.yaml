@@ -1,0 +1,95 @@
+# Hermes Agent — gateway configuration.
+#
+# This file is bind-mounted read-only into /opt/data/config.yaml.
+# install.sh materializes it from this template, interpolating provider
+# keys from state.providers (env vars). Hermes silently ignores any
+# provider whose api_key is empty, so you can leave unused ones blank.
+#
+# Add or remove `custom_providers` entries to taste. To switch the
+# default model the gateway answers with, change `model.default` and
+# (if needed) `model.provider`.
+
+# -----------------------------------------------------------------------------
+# Built-in providers — recognised natively by Hermes without further config.
+# -----------------------------------------------------------------------------
+
+openai:
+  api_key: "${OPENAI_API_KEY}"
+
+anthropic:
+  api_key: "${ANTHROPIC_API_KEY}"
+
+openrouter:
+  api_key: "${OPENROUTER_API_KEY}"
+
+google:
+  api_key: "${GOOGLE_API_KEY}"
+
+# -----------------------------------------------------------------------------
+# Custom providers — any OpenAI-compatible HTTP endpoint plugs in here.
+# Hermes drops entries whose api_key is empty, so this template ships every
+# one of the popular options uncommented. Set the env var on the stack and
+# it lights up; leave it unset and it's a no-op.
+# -----------------------------------------------------------------------------
+
+custom_providers:
+  # Z.AI — GLM-5.1 / GLM-4.6 via the Z.AI coding plan subscription.
+  - name: zai-coding-plan
+    provider_key: zai-coding-plan
+    base_url: https://api.z.ai/api/coding/paas/v4
+    api_key: "${ZAI_API_KEY}"
+    model: glm-5.1
+
+  # Groq — Llama 3.x / Kimi / Qwen-3-coder hosted on Groq's LPU stack
+  # (~200 tok/s, generous free tier).
+  - name: groq
+    provider_key: groq
+    base_url: https://api.groq.com/openai/v1
+    api_key: "${GROQ_API_KEY}"
+    model: llama-3.3-70b-versatile
+
+  # DeepSeek — deepseek-r1 / deepseek-v3, very cheap reasoning.
+  - name: deepseek
+    provider_key: deepseek
+    base_url: https://api.deepseek.com/v1
+    api_key: "${DEEPSEEK_API_KEY}"
+    model: deepseek-v3
+
+  # Mistral — codestral-latest (fill-in-the-middle) and mistral-large-2.
+  - name: mistral
+    provider_key: mistral
+    base_url: https://api.mistral.ai/v1
+    api_key: "${MISTRAL_API_KEY}"
+    model: codestral-latest
+
+  # xAI — grok-4 / grok-3-mini, useful if you already pay for X Premium+.
+  - name: xai
+    provider_key: xai
+    base_url: https://api.x.ai/v1
+    api_key: "${XAI_API_KEY}"
+    model: grok-4
+
+  # Cerebras — Llama / Qwen on Cerebras wafer-scale (2000+ tok/s).
+  - name: cerebras
+    provider_key: cerebras
+    base_url: https://api.cerebras.ai/v1
+    api_key: "${CEREBRAS_API_KEY}"
+    model: llama-3.3-70b
+
+# -----------------------------------------------------------------------------
+# Gateway default — what `/v1/chat/completions` answers with when the request
+# doesn't pick a specific model. Override per-agent in the Paperclip UI.
+# -----------------------------------------------------------------------------
+
+model:
+  default: glm-5.1
+  provider: zai-coding-plan
+
+# -----------------------------------------------------------------------------
+# Skills — left empty here on purpose. The Paperclip adapter injects each
+# skill's URL into the system prompt at wake time (see the companion stack
+# `paperclip-skills-bridge`), so Hermes' own well-known scanner stays off.
+# -----------------------------------------------------------------------------
+
+skills:
+  template_vars: true
