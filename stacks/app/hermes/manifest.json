@@ -8,16 +8,16 @@
     { "name": "HERMES_API_KEY",     "generate": "openssl rand -hex 24", "hide": true },
     { "name": "HERMES_MODEL_NAME",  "default": "hermes-agent" },
     { "name": "HERMES_IMAGE_TAG",   "default": "latest" },
-    { "name": "OPENAI_API_KEY",     "from_state": "OPENAI_API_KEY",     "hide": true, "default": "" },
-    { "name": "ANTHROPIC_API_KEY",  "from_state": "ANTHROPIC_API_KEY",  "hide": true, "default": "" },
-    { "name": "OPENROUTER_API_KEY", "from_state": "OPENROUTER_API_KEY", "hide": true, "default": "" },
-    { "name": "GOOGLE_API_KEY",     "from_state": "GOOGLE_API_KEY",     "hide": true, "default": "" },
-    { "name": "ZAI_API_KEY",        "from_state": "ZAI_API_KEY",        "hide": true, "default": "" },
-    { "name": "GROQ_API_KEY",       "from_state": "GROQ_API_KEY",       "hide": true, "default": "" },
-    { "name": "DEEPSEEK_API_KEY",   "from_state": "DEEPSEEK_API_KEY",   "hide": true, "default": "" },
-    { "name": "MISTRAL_API_KEY",    "from_state": "MISTRAL_API_KEY",    "hide": true, "default": "" },
-    { "name": "XAI_API_KEY",        "from_state": "XAI_API_KEY",        "hide": true, "default": "" },
-    { "name": "CEREBRAS_API_KEY",   "from_state": "CEREBRAS_API_KEY",   "hide": true, "default": "" }
+    { "name": "OPENAI_API_KEY",     "from_state": "OPENAI_API_KEY",     "prompt": "OpenAI API key (optional)",      "hide": true, "default": "" },
+    { "name": "ANTHROPIC_API_KEY",  "from_state": "ANTHROPIC_API_KEY",  "prompt": "Anthropic API key (optional)",   "hide": true, "default": "" },
+    { "name": "OPENROUTER_API_KEY", "from_state": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (optional)", "hide": true, "default": "" },
+    { "name": "GOOGLE_API_KEY",     "from_state": "GOOGLE_API_KEY",     "prompt": "Google AI API key (optional)",   "hide": true, "default": "" },
+    { "name": "ZAI_API_KEY",        "from_state": "ZAI_API_KEY",        "prompt": "Z.AI API key (optional)",        "hide": true, "default": "" },
+    { "name": "GROQ_API_KEY",       "from_state": "GROQ_API_KEY",       "prompt": "Groq API key (optional)",        "hide": true, "default": "" },
+    { "name": "DEEPSEEK_API_KEY",   "from_state": "DEEPSEEK_API_KEY",   "prompt": "DeepSeek API key (optional)",    "hide": true, "default": "" },
+    { "name": "MISTRAL_API_KEY",    "from_state": "MISTRAL_API_KEY",    "prompt": "Mistral API key (optional)",     "hide": true, "default": "" },
+    { "name": "XAI_API_KEY",        "from_state": "XAI_API_KEY",        "prompt": "xAI API key (optional)",         "hide": true, "default": "" },
+    { "name": "CEREBRAS_API_KEY",   "from_state": "CEREBRAS_API_KEY",   "prompt": "Cerebras API key (optional)",    "hide": true, "default": "" }
   ],
   "post_deploy_url": "https://${HERMES_HOST}/v1/models"
 }

@@ -6,8 +6,8 @@
   "env": [
     { "name": "BRIDGE_HOST",                "default": "skills.${BASE_DOMAIN}",   "prompt": "Skills bridge hostname" },
     { "name": "BRIDGE_AUTH_TOKEN",          "generate": "openssl rand -hex 24",   "hide": true },
-    { "name": "PAPERCLIP_COMPANY_ID",       "from_state": "PAPERCLIP_COMPANY_ID" },
-    { "name": "PAPERCLIP_API_KEY",          "from_state": "PAPERCLIP_API_KEY",    "hide": true },
+    { "name": "PAPERCLIP_COMPANY_ID",       "from_state": "PAPERCLIP_COMPANY_ID", "prompt": "Paperclip company UUID (set after first signup)", "default": "" },
+    { "name": "PAPERCLIP_API_KEY",          "from_state": "PAPERCLIP_API_KEY",    "prompt": "Paperclip machine bearer (set after first signup)", "hide": true, "default": "" },
     { "name": "PAPERCLIP_URL",              "default": "http://paperclip:3100" },
     { "name": "BRIDGE_IMAGE_TAG",           "default": "0.1.0" },
     { "name": "PAPERCLIP_FETCH_TIMEOUT_MS", "default": "5000" },
