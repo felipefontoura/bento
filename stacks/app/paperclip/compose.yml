@@ -1,7 +1,13 @@
 x-paperclip-common: &paperclip-common
   # Stock upstream image. CLIs already shipped: claude, codex, opencode.
-  # To add hermes / gemini / pi / grok, do it inside the running container
-  # with `docker exec`, or fork this stack to extend the image.
+  # To add gemini / pi / grok, do it inside the running container with
+  # `docker exec`, or fork this stack to extend the image.
+  #
+  # Hermes is NOT a local CLI here — it's a separate stack (`hermes`)
+  # exposing an OpenAI-compatible HTTP gateway. Paperclip talks to it
+  # via the npm plugin `@felipefontoura/paperclip-adapter-hermes-gateway`
+  # which install.sh registers at deploy time. Skills are served to
+  # Hermes by the companion stack `paperclip-skills-bridge`.
   image: ghcr.io/paperclipai/paperclip:latest
   networks:
     - network_public
@@ -97,46 +103,13 @@ x-paperclip-common: &paperclip-common
     # Paperclip's server doesn't call LLMs itself — it spawns CLIs that
     # do. The env vars below are what those CLIs read:
     #
-    #   OPENAI_API_KEY      -> codex CLI (bundled in image), hermes CLI (via hermes-bin volume)
-    #   ANTHROPIC_API_KEY   -> claude CLI (bundled in image), hermes CLI
-    #   OPENROUTER_API_KEY  -> opencode CLI multi-provider (bundled in image), hermes CLI
+    #   OPENAI_API_KEY      -> codex CLI (bundled in image)
+    #   ANTHROPIC_API_KEY   -> claude CLI (bundled in image)
+    #   OPENROUTER_API_KEY  -> opencode CLI (bundled in image)
     #   GEMINI_API_KEY      -> gemini CLI (requires `docker exec npm install -g @google/gemini-cli`)
-    #
-    # The bundled `hermes-paperclip-adapter` (in node_modules) wires the
-    # `hermes_local` adapter, which exec's the Hermes CLI. We mount that CLI
-    # below via the `hermes-bin` named volume seeded by the `hermes` stack.
     - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-    #
-    # -----------------------------------------------------------------------------
-    # OpenAI-compatible base URL override (Z.ai, Groq, DeepSeek, …)
-    # -----------------------------------------------------------------------------
-    #
-    # Paperclip's bundled `codex` CLI is OpenAI-compatible. Override the
-    # base URL to point at any provider that speaks OpenAI's API. Only one
-    # at a time — codex has a single OPENAI_BASE_URL slot.
-    #
-    # Z.ai / GLM — cheap subscription with the GLM-4.6 coding model.
-    #   Use the subscription/coding endpoint:
-    #     https://api.z.ai/api/coding/paas/v4
-    #   Do NOT use the generic endpoint:
-    #     https://api.z.ai/api/paas/v4
-    #
-    #   OPENAI_API_KEY=<your z.ai key>
-    #   OPENAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
-    #
-    # Groq — Llama 3 / Mixtral, ultra-fast, generous free tier.
-    #   OPENAI_API_KEY=<your groq key>
-    #   OPENAI_BASE_URL=https://api.groq.com/openai/v1
-    #
-    # DeepSeek — DeepSeek-V3 / R1, very cheap per token.
-    #   OPENAI_API_KEY=<your deepseek key>
-    #   OPENAI_BASE_URL=https://api.deepseek.com/v1
-    #
-    # xAI Grok.
-    #   OPENAI_API_KEY=<your xai key>
-    #   OPENAI_BASE_URL=https://api.x.ai/v1
     #
     # -----------------------------------------------------------------------------
     # Bento-native overlay integrations
@@ -149,10 +122,14 @@ x-paperclip-common: &paperclip-common
     #     adapter: openclaw_gateway
     #     URL:     ws://openclaw:18789
     #
-    # The `hermes_local` adapter exec's the Hermes CLI locally inside this
-    # container. The CLI is provided by the `hermes` stack (binary-provider
-    # mode) via the `hermes-bin` named volume mounted below at /opt/hermes.
-    # Per-agent UI: set Command = /opt/hermes/bin/hermes.
+    # Hermes runs as its own stack with an OpenAI-compatible HTTP gateway.
+    # Paperclip talks to it via the `hermes_gateway` adapter (installed at
+    # deploy time by this stack's install.sh, package
+    # @felipefontoura/paperclip-adapter-hermes-gateway). Per-agent UI: set
+    #   Hermes URL          = http://hermes:8642/v1
+    #   API key             = ${HERMES_API_KEY}    (from state)
+    #   Skills bridge URL   = http://paperclip-skills-bridge:8080
+    #   Skills bridge token = ${BRIDGE_AUTH_TOKEN} (from state)
 
   deploy: &paperclip-deploy
     mode: replicated
@@ -211,12 +188,6 @@ services:
         exec node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js
     volumes:
       - paperclip-data:/paperclip
-      # Note: when the optional `hermes` stack is also deployed on this Swarm
-      # it grafts a `/opt/hermes:ro` mount onto this service via
-      # `docker service update --mount-add` (see stacks/app/hermes/install.sh).
-      # We do NOT declare that mount here — keeping paperclip's compose free
-      # of cross-stack volumes so paperclip runs identically on hosts that
-      # don't deploy hermes.
     # Swarm healthcheck omitted — paperclip's boot bundles a Python venv
     # warmup that occasionally exceeds the probe window. The Dockerfile
     # still ships a HEALTHCHECK so `docker run` standalone gets one;
@@ -226,16 +197,14 @@ services:
       resources:
         limits:
           cpus: "1"
-          # 2 GB so concurrent local-CLI subprocesses (codex, claude, opencode,
-          # hermes via the hermes-bin volume) can warm their venvs without
-          # the cgroup OOM killer reaping them. Each modern agent CLI runs a
-          # Python interpreter + model SDKs (~150-300 MB RSS) in addition to
-          # the node server's own footprint. 1 GB used to be enough back when
-          # paperclip only spawned `claude` (a single CLI); with hermes_local
-          # added on top, three concurrent heartbeats put the cgroup over the
-          # edge. Observed in production 2026-06-08: 4 hermes wakes in parallel
-          # OOM-killed by the kernel at 1 GB. 2 GB has comfortable headroom.
-          memory: 2048M
+          # 1.5 GB headroom for concurrent local-CLI subprocesses (codex,
+          # claude, opencode) — each modern agent CLI runs a Python interpreter
+          # + model SDKs (~150-300 MB RSS) on top of the node server's own
+          # footprint. Hermes used to be a local CLI mounted via the
+          # `hermes-bin` volume and pushed the cgroup past 1 GB; now that
+          # Hermes lives in its own HTTP-only stack, paperclip's footprint
+          # is back to "node + 3 bundled CLIs" so we can shave 512 MB.
+          memory: 1536M
       labels:
         - traefik.enable=true
         - traefik.http.routers.paperclip.rule=Host(`${PAPERCLIP_HOST}`)

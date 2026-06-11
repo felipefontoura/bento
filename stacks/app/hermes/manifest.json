@@ -1,7 +1,23 @@
 {
   "name": "hermes",
   "category": "app",
-  "description": "Seeds a shared named volume with the upstream Hermes Agent /opt/hermes tree so peer containers (paperclip) can mount it and call the CLI via Paperclip's hermes_local adapter (overlay-only, idle sleep, no gateway)",
+  "description": "Hermes Agent as an OpenAI-compatible HTTP gateway (gateway run + API_SERVER_*). Consumed by Paperclip via the npm package @felipefontoura/paperclip-adapter-hermes-gateway. Skills exposed through the paperclip-skills-bridge stack.",
   "depends_on": [],
-  "env": []
+  "env": [
+    { "name": "HERMES_HOST",        "default": "hermes.${BASE_DOMAIN}", "prompt": "Hermes gateway hostname" },
+    { "name": "HERMES_API_KEY",     "generate": "openssl rand -hex 24", "hide": true },
+    { "name": "HERMES_MODEL_NAME",  "default": "hermes-agent" },
+    { "name": "HERMES_IMAGE_TAG",   "default": "latest" },
+    { "name": "OPENAI_API_KEY",     "from_state": "OPENAI_API_KEY",     "hide": true, "default": "" },
+    { "name": "ANTHROPIC_API_KEY",  "from_state": "ANTHROPIC_API_KEY",  "hide": true, "default": "" },
+    { "name": "OPENROUTER_API_KEY", "from_state": "OPENROUTER_API_KEY", "hide": true, "default": "" },
+    { "name": "GOOGLE_API_KEY",     "from_state": "GOOGLE_API_KEY",     "hide": true, "default": "" },
+    { "name": "ZAI_API_KEY",        "from_state": "ZAI_API_KEY",        "hide": true, "default": "" },
+    { "name": "GROQ_API_KEY",       "from_state": "GROQ_API_KEY",       "hide": true, "default": "" },
+    { "name": "DEEPSEEK_API_KEY",   "from_state": "DEEPSEEK_API_KEY",   "hide": true, "default": "" },
+    { "name": "MISTRAL_API_KEY",    "from_state": "MISTRAL_API_KEY",    "hide": true, "default": "" },
+    { "name": "XAI_API_KEY",        "from_state": "XAI_API_KEY",        "hide": true, "default": "" },
+    { "name": "CEREBRAS_API_KEY",   "from_state": "CEREBRAS_API_KEY",   "hide": true, "default": "" }
+  ],
+  "post_deploy_url": "https://${HERMES_HOST}/v1/models"
 }

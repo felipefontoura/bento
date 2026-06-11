@@ -201,47 +201,81 @@ else
     fi
 fi
 
-# Cross-stack: if hermes is deployed, mount its binary tree at /opt/hermes
-# so `hermes_local` agents can exec /opt/hermes/bin/hermes. Symmetric to
-# stacks/app/hermes/install.sh — whichever stack deploys last wires it up.
-graft_external_volume_to_service paperclip_paperclip hermes_hermes-bin /opt/hermes
+# -----------------------------------------------------------------------------
+# Register the Hermes Gateway adapter inside Paperclip — zero-touch, no UI.
+# -----------------------------------------------------------------------------
+#
+# Paperclip's adapter store is a flat JSON at /paperclip/adapter-plugins.json
+# plus an extracted plugin directory under /paperclip/adapter-plugins/<dir>/.
+# We populate both directly inside the volume from the published npm package
+# (`@felipefontoura/paperclip-adapter-hermes-gateway`), then restart paperclip
+# so the runtime picks the new adapter on next boot.
+#
+# Idempotent on re-deploy: re-extracts under a versioned directory and
+# replaces the registry entry of the same `type`.
 
-# Make Paperclip's bundled skills discoverable to the Hermes CLI.
+adapter_pkg="@felipefontoura/paperclip-adapter-hermes-gateway"
+adapter_version="0.1.0"
+adapter_dir="/paperclip/adapter-plugins/hermes-gateway-${adapter_version}"
+adapter_registry="/paperclip/adapter-plugins.json"
+
+echo "Installing Paperclip adapter ${adapter_pkg}@${adapter_version}…"
+sudo docker exec -u node "$cid" sh -c "
+    set -e
+    mkdir -p '${adapter_dir}'
+    cd '${adapter_dir}'
+    # npm pack drops the published tarball as a sibling file; extract and tidy.
+    npm pack '${adapter_pkg}@${adapter_version}' >/dev/null
+    tar xzf felipefontoura-paperclip-adapter-hermes-gateway-${adapter_version}.tgz \\
+        --strip-components=1
+    rm -f felipefontoura-paperclip-adapter-hermes-gateway-${adapter_version}.tgz
+" || {
+    echo "[paperclip] adapter npm pack failed — register manually via the UI later." >&2
+}
+
+# Update the registry. node is in $PATH inside the image, so we let the
+# heredoc do the JSON-safe merge instead of shelling out to jq.
+sudo docker exec -u node -i "$cid" node - <<NODEJS || true
+const fs = require('fs');
+const path = '${adapter_registry}';
+const entry = {
+  packageName: '${adapter_dir}',
+  localPath:   '${adapter_dir}',
+  version:     '${adapter_version}',
+  type:        'hermes_gateway',
+  installedAt: new Date().toISOString()
+};
+let current = [];
+try {
+  current = JSON.parse(fs.readFileSync(path, 'utf8'));
+  if (!Array.isArray(current)) current = [];
+} catch (_) { current = []; }
+const next = current.filter(p => p && p.type !== entry.type).concat(entry);
+fs.writeFileSync(path, JSON.stringify(next, null, 2));
+console.log('[paperclip] adapter-plugins.json updated with ' + entry.type);
+NODEJS
+
+# Force a service restart so paperclip's plugin loader sees the new entry.
+# `service update --force` is idempotent and respects the rolling update
+# config from the compose (start-first + rollback on failure).
+sudo docker service update --force paperclip_paperclip >/dev/null 2>&1 || true
+
+# -----------------------------------------------------------------------------
+# Operator follow-up — wire the per-agent adapterConfig after first signup.
+# -----------------------------------------------------------------------------
 #
-# The upstream paperclip image ships its agent skills (paperclip,
-# paperclip-create-agent, para-memory-files, …) under /app/skills/. The
-# hermes-paperclip-adapter v0.2.x walks two relative candidate paths
-# (`../../skills` and `../../../../../skills` resolved from its own dist/
-# directory) when trying to enumerate Paperclip-managed skills, and neither
-# candidate resolves to /app/skills/ inside the upstream image. The skills
-# end up invisible to `skill_view`, `skills_list`, and the adapter's
-# listSkills snapshot — so the agent has no way to load them at runtime.
+# The adapter is registered, but each agent still needs its `adapterConfig`
+# pointed at the local hermes-gateway + skills-bridge endpoints. We can't do
+# that here because no agents exist yet — they're created by the operator
+# after completing the bootstrap-ceo invite above.
 #
-# Workaround: symlink each /app/skills/<name> into the Hermes skills home
-# (HOME=/paperclip, so ~/.hermes/skills/). Hermes's own skill scanner picks
-# up symlinks just like real directories and registers each one. After this
-# the agent can call `skill_view name=paperclip` and load the canonical
-# Paperclip control-plane skill.
+# Once you've created your first company + agent, set on each agent (UI or
+# via PATCH /api/agents/<id>):
 #
-# Idempotent (only creates missing links) and a soft no-op when paperclip
-# is not yet up. The hermes stack does not need to be deployed for this to
-# work — paperclip ships these skills standalone.
-if cid=$(_find_container 'paperclip_paperclip' 2>/dev/null); then
-    sudo docker exec --user node "$cid" sh -c '
-        set -e
-        skills_src=/app/skills
-        skills_dst=$HOME/.hermes/skills
-        if [ ! -d "$skills_src" ]; then
-            exit 0
-        fi
-        mkdir -p "$skills_dst"
-        for src in "$skills_src"/*/; do
-            name=$(basename "$src")
-            link="$skills_dst/$name"
-            if [ ! -e "$link" ]; then
-                ln -s "$src" "$link"
-                echo "[skills-graft] linked $name"
-            fi
-        done
-    '
-fi
+#   adapter type:        Hermes (gateway)
+#   Environment variable HERMES_URL            = http://hermes:8642/v1
+#   Environment variable HERMES_API_KEY        = ${HERMES_API_KEY}
+#   Environment variable SKILLS_BRIDGE_URL     = http://paperclip-skills-bridge:8080
+#   Environment variable SKILLS_BRIDGE_TOKEN   = ${BRIDGE_AUTH_TOKEN}
+#
+# Both keys are in state.providers (printed by `bento status`).

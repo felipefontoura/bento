@@ -1,0 +1,18 @@
+{
+  "name": "paperclip-skills-bridge",
+  "category": "app",
+  "description": "Stateless HTTP bridge that exposes Paperclip skills (catalog + files, ETag passthrough, inventory allowlist) to the Hermes Agent via the .well-known/skills protocol. Companion to the paperclip-adapter-hermes-gateway adapter, deployed by the paperclip stack's install.sh.",
+  "depends_on": ["paperclip"],
+  "env": [
+    { "name": "BRIDGE_HOST",                "default": "skills.${BASE_DOMAIN}",   "prompt": "Skills bridge hostname" },
+    { "name": "BRIDGE_AUTH_TOKEN",          "generate": "openssl rand -hex 24",   "hide": true },
+    { "name": "PAPERCLIP_COMPANY_ID",       "from_state": "PAPERCLIP_COMPANY_ID" },
+    { "name": "PAPERCLIP_API_KEY",          "from_state": "PAPERCLIP_API_KEY",    "hide": true },
+    { "name": "PAPERCLIP_URL",              "default": "http://paperclip:3100" },
+    { "name": "BRIDGE_IMAGE_TAG",           "default": "0.1.0" },
+    { "name": "PAPERCLIP_FETCH_TIMEOUT_MS", "default": "5000" },
+    { "name": "BRIDGE_RATE_LIMIT_MAX",      "default": "100" },
+    { "name": "BRIDGE_RATE_LIMIT_WINDOW_MS","default": "60000" }
+  ],
+  "post_deploy_url": "https://${BRIDGE_HOST}/health"
+}
