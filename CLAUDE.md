@@ -143,8 +143,6 @@ bento/
 │       └── install-bento/
 │           └── SKILL.md
 ├── docs/
-│   ├── architecture/
-│   │   └── cross-stack-volume-graft.md  # pattern: producer→consumer via shared volume
 │   └── reference/
 │       └── bento-auth.md         # AI provider OAuth login (bento-auth script)
 ├── lib/

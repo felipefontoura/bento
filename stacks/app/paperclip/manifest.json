@@ -1,15 +1,17 @@
 {
   "name": "paperclip",
   "category": "app",
-  "description": "AI agent orchestration (Claude Code / Codex / OpenCode / Hermes via hermes-bin volume)",
+  "description": "AI agent orchestration (Claude Code / Codex / OpenCode). Talks to Hermes over HTTP via @felipefontoura/paperclip-adapter-hermes-gateway, registered automatically at deploy time by this stack's install.sh.",
   "depends_on": ["postgres"],
   "env": [
     { "name": "PAPERCLIP_HOST",     "default": "paperclip.${BASE_DOMAIN}", "prompt": "Paperclip hostname" },
     { "name": "BETTER_AUTH_SECRET", "generate": "openssl rand -hex 32",    "hide": true },
     { "name": "POSTGRES_PASSWORD",  "from_state": "POSTGRES_PASSWORD" },
-    { "name": "OPENAI_API_KEY",     "prompt": "OpenAI API key (used by codex CLI and hermes provider=openai-codex) — optional", "hide": true, "default": "" },
-    { "name": "ANTHROPIC_API_KEY",  "prompt": "Anthropic API key (used by claude CLI and hermes provider=anthropic) — optional", "hide": true, "default": "" },
-    { "name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (used by opencode CLI and hermes provider=openrouter) — optional", "hide": true, "default": "" }
+    { "name": "OPENAI_API_KEY",     "prompt": "OpenAI API key (used by codex CLI) — optional",          "hide": true, "default": "" },
+    { "name": "ANTHROPIC_API_KEY",  "prompt": "Anthropic API key (used by claude CLI) — optional",      "hide": true, "default": "" },
+    { "name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (used by opencode CLI) — optional",   "hide": true, "default": "" },
+    { "name": "HERMES_API_KEY",     "from_state": "HERMES_API_KEY",    "hide": true, "default": "" },
+    { "name": "BRIDGE_AUTH_TOKEN",  "from_state": "BRIDGE_AUTH_TOKEN", "hide": true, "default": "" }
   ],
   "post_deploy_url": "https://${PAPERCLIP_HOST}"
 }
