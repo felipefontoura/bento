@@ -50,10 +50,15 @@ rendered=$(
         envsubst < "$template_path"
 )
 
+# Push the rendered file into the container. The image creates /opt/data
+# 700 hermes:hermes, which blocks paperclip's cross-stack RO mount from
+# traversing it. o+rx on the dir is the one-time fix and persists in the
+# named volume.
 sudo docker exec -i -u root "$cid" sh -c '
     mkdir -p /opt/data
     cat > /opt/data/config.yaml
     chown -R hermes:hermes /opt/data 2>/dev/null || true
+    chmod o+rx /opt/data
 ' <<< "$rendered"
 
 # Reload — Hermes' gateway reads config.yaml on SIGHUP. If that fails (older

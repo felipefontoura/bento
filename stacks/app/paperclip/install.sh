@@ -172,37 +172,39 @@ done
 # the paperclip-data volume and don't depend on the mounts existing at
 # install time; the mounts only matter at wake time.
 #
-# Only the binary volume is grafted. The paperclip-side hermes runs with
-# its OWN config at /paperclip/.hermes/ (in the paperclip-data volume) —
-# rendered on this stack's deploy from the same provider envs. Sharing
-# /opt/data with the hermes service was too fragile (perms reset by
-# upstream init on every restart).
-graft_external_volume_to_service \
-    paperclip_paperclip hermes_hermes-bin /opt/hermes readonly
+# Batched into ONE `docker service update` so the operator pays for a
+# single rolling restart instead of one per mount (~30s of `update_config
+# .delay` per extra graft on top of the actual restart).
+graft_external_volumes_to_service \
+    paperclip_paperclip \
+    hermes_hermes-bin:/opt/hermes:readonly \
+    hermes_hermes-data:/opt/hermes-shared:readonly
 
+# Wait for the service to settle after the graft before exec'ing again.
 wait_for_service paperclip_paperclip 120 || true
+
+# Re-locate the container (it may have a new ID after the rolling restart).
 cid=$(_find_container 'paperclip_paperclip')
 
-# Render paperclip-side ~/.hermes/config.yaml from the same template the
-# hermes stack uses. Idempotent — re-running just overwrites.
-hermes_template="${BENTO_REPO_ROOT}/stacks/app/hermes/reference/hermes-config.yaml"
-if [[ -n "$cid" && -f "$hermes_template" ]]; then
-    rendered=$(
-        OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
-        ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
-        OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}" \
-        GOOGLE_API_KEY="${GOOGLE_API_KEY:-}" \
-        ZAI_API_KEY="${ZAI_API_KEY:-}" \
-        GROQ_API_KEY="${GROQ_API_KEY:-}" \
-        DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-}" \
-        MISTRAL_API_KEY="${MISTRAL_API_KEY:-}" \
-        XAI_API_KEY="${XAI_API_KEY:-}" \
-        CEREBRAS_API_KEY="${CEREBRAS_API_KEY:-}" \
-            envsubst < "$hermes_template"
-    )
-    sudo docker exec -i -u node "$cid" sh -c '
+# Symlink config.yaml + auth.json from the hermes-shared mount.
+if [[ -n "$cid" ]]; then
+    sudo docker exec -u node "$cid" sh -c '
         mkdir -p /paperclip/.hermes
-        cat > /paperclip/.hermes/config.yaml
-    ' <<< "$rendered"
-    echo "[paperclip] hermes config.yaml rendered at /paperclip/.hermes/."
+        if [ -d /opt/hermes-shared ]; then
+            if [ -f /paperclip/.hermes/config.yaml ] && [ ! -L /paperclip/.hermes/config.yaml ]; then
+                mv /paperclip/.hermes/config.yaml "/paperclip/.hermes/config.yaml.local-backup-$(date +%s)"
+            fi
+            if [ -f /paperclip/.hermes/auth.json ] && [ ! -L /paperclip/.hermes/auth.json ]; then
+                mv /paperclip/.hermes/auth.json "/paperclip/.hermes/auth.json.local-backup-$(date +%s)"
+            fi
+            ln -sfn /opt/hermes-shared/config.yaml /paperclip/.hermes/config.yaml
+            ln -sfn /opt/hermes-shared/auth.json   /paperclip/.hermes/auth.json
+            echo "[paperclip] hermes config.yaml + auth.json symlinked to shared mount."
+        else
+            echo "[paperclip] hermes-shared mount not present yet."
+        fi
+    ' || echo "[paperclip] symlink step skipped — container not exec-ready." >&2
 fi
+
+# The graft rolled the service; its new container reads
+# adapter-plugins.json on boot. No extra force-restart needed.
