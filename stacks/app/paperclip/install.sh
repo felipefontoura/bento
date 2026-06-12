@@ -79,11 +79,13 @@ sudo docker exec -u node "$cid" sh -c "
 const fs = require('fs');
 const path = '/paperclip/adapter-plugins.json';
 const entry = { packageName: '${dir}', localPath: '${dir}', version: '${version}', type: 'hermes_local', installedAt: new Date().toISOString() };
-// Deprecated adapter types we actively remove from the registry on install.
-const REMOVE = new Set(['hermes_local', 'hermes_gateway']);
+// Strip stale entries before appending the fresh one:
+//   - hermes_local       — the prior plugin install (we replace with the new version)
+//   - hermes_gateway     — deprecated, leaks in from older installs
+const STALE = new Set(['hermes_local', 'hermes_gateway']);
 let current = [];
 try { current = JSON.parse(fs.readFileSync(path, 'utf8')); if (!Array.isArray(current)) current = []; } catch (_) {}
-fs.writeFileSync(path, JSON.stringify(current.filter(p => p && !REMOVE.has(p.type)).concat(entry), null, 2));
+fs.writeFileSync(path, JSON.stringify(current.filter(p => p && !STALE.has(p.type)).concat(entry), null, 2));
 console.log('[paperclip] adapter-plugins.json updated with ' + entry.type);
 NODEJS
 
