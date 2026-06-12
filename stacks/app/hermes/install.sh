@@ -67,3 +67,15 @@ if ! sudo docker exec "$cid" sh -c 'kill -HUP 1' 2>/dev/null; then
 fi
 
 echo "hermes config.yaml rendered and reloaded."
+
+# Cross-stack push: mirror of the pull in paperclip/install.sh. The pull
+# silently skips when hermes deploys after paperclip (the unattended order
+# `postgres,paperclip,hermes` does exactly this — paperclip's graft runs
+# before hermes_hermes-{bin,data} exist, so nothing mounts). Pushing from
+# this side covers that race: hermes runs last, so both paperclip_paperclip
+# and the hermes volumes exist now. The helper is idempotent and skips when
+# paperclip isn't deployed, so a hermes-only install stays a no-op.
+graft_external_volumes_to_service \
+    paperclip_paperclip \
+    hermes_hermes-bin:/opt/hermes:readonly \
+    hermes_hermes-data:/opt/hermes-shared:readonly
