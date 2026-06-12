@@ -318,10 +318,9 @@ sudo docker exec -u node "$cid" sh -c "
     set -e
     mkdir -p '${hermes_local_dir}'
     cd '${hermes_local_dir}'
-    npm pack '${hermes_local_pkg}@${hermes_local_version}' >/dev/null
-    tar xzf felipefontoura-paperclip-adapter-hermes-local-plus-${hermes_local_version}.tgz \\
-        --strip-components=1
-    rm -f felipefontoura-paperclip-adapter-hermes-local-plus-${hermes_local_version}.tgz
+    TARBALL=\$(npm pack '${hermes_local_pkg}@${hermes_local_version}' | tail -1)
+    tar xzf \"\$TARBALL\" --strip-components=1
+    rm -f \"\$TARBALL\"
 " || {
     echo "[paperclip] hermes-local-plus npm pack failed. The plugin is unpublished or" >&2
     echo "[paperclip] the in-container network can't reach the npm registry. Register" >&2
@@ -376,11 +375,9 @@ sudo docker exec -u node "$cid" sh -c "
     set -e
     mkdir -p '${adapter_dir}'
     cd '${adapter_dir}'
-    # npm pack drops the published tarball as a sibling file; extract and tidy.
-    npm pack '${adapter_pkg}@${adapter_version}' >/dev/null
-    tar xzf felipefontoura-paperclip-adapter-hermes-gateway-${adapter_version}.tgz \\
-        --strip-components=1
-    rm -f felipefontoura-paperclip-adapter-hermes-gateway-${adapter_version}.tgz
+    TARBALL=\$(npm pack '${adapter_pkg}@${adapter_version}' | tail -1)
+    tar xzf \"\$TARBALL\" --strip-components=1
+    rm -f \"\$TARBALL\"
 " || {
     echo "[paperclip] adapter npm pack failed — register manually via the UI later." >&2
 }
