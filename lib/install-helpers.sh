@@ -204,3 +204,51 @@ graft_external_volume_to_service() {
         --mount-add "type=volume,source=${volume_name},target=${mount_target},${mode}" \
         "$peer_service" >/dev/null
 }
+
+# Batch variant: graft several volumes onto a peer service in ONE
+# `docker service update`, so the operator pays for a single rolling
+# restart instead of one-per-mount.
+#
+# graft_external_volumes_to_service <peer-service> <spec> [<spec> …]
+#   <spec> = <volume>:<target>[:<mode>]   mode defaults to readonly
+#
+# Same soft-skip rules as the single-mount form: missing peer/volume
+# is silently dropped from the batch; if every spec is dropped or
+# already grafted, the function returns without firing an update.
+graft_external_volumes_to_service() {
+    local peer_service="$1"
+    shift
+
+    if ! sudo docker service inspect "$peer_service" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local existing
+    existing=$(sudo docker service inspect "$peer_service" \
+        --format '{{range .Spec.TaskTemplate.ContainerSpec.Mounts}}{{.Target}}{{println}}{{end}}' \
+        2>/dev/null || true)
+
+    local -a add_args=()
+    local spec volume_name mount_target mode
+    for spec in "$@"; do
+        IFS=':' read -r volume_name mount_target mode <<<"$spec"
+        mode="${mode:-readonly}"
+
+        if ! sudo docker volume inspect "$volume_name" >/dev/null 2>&1; then
+            continue
+        fi
+        if printf '%s' "$existing" | grep -Fxq "$mount_target"; then
+            echo "[graft] ${peer_service} already mounts ${mount_target} — no change"
+            continue
+        fi
+
+        echo "[graft] ${volume_name} → ${peer_service}:${mount_target}:${mode}"
+        add_args+=(--mount-add "type=volume,source=${volume_name},target=${mount_target},${mode}")
+    done
+
+    if (( ${#add_args[@]} == 0 )); then
+        return 0
+    fi
+
+    sudo docker service update "${add_args[@]}" "$peer_service" >/dev/null
+}
