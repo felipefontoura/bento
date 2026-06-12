@@ -202,6 +202,158 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# Cross-stack Hermes integration + register the hermes_local adapter
+# (subprocess-based, full Hermes capabilities).
+# -----------------------------------------------------------------------------
+#
+# Design (binary, no copies anywhere):
+#
+#   Scenario A — paperclip alone, no hermes stack
+#     The hermes_local plugin is registered in /paperclip/adapter-plugins.json
+#     so it's ready the day the operator decides to add the hermes stack.
+#     Without /opt/hermes mounted, the plugin's wrapper script (also
+#     installed by this block) silently fails to exec — no agent of type
+#     "Hermes Agent (local)" will succeed until the hermes stack is up.
+#     That's the expected and documented behaviour. Built-in adapters
+#     (claude_local, codex_local, opencode_local) are unaffected.
+#
+#   Scenario B — paperclip + hermes, both deployed
+#     `graft_external_volume_to_service` (from lib/install-helpers.sh)
+#     attaches the hermes stack's `hermes-bin` volume at /opt/hermes in
+#     the running paperclip service via `docker service update --mount-add`.
+#     Likewise it attaches `hermes-data` at /opt/hermes-shared so the
+#     paperclip-side subprocess shares the SAME config.yaml + auth.json
+#     the hermes daemon already renders from state.providers — single
+#     source of truth, zero duplication.
+#
+#     Symlinks at /paperclip/.hermes/{config.yaml,auth.json} point at
+#     the shared mount, so the Hermes subprocess Felipe spawns from
+#     inside the paperclip container reads exactly what the hermes
+#     daemon serves over HTTP.
+#
+#     Skills + sessions stay paperclip-local (/paperclip/.hermes/skills,
+#     /paperclip/.hermes/sessions) — those are state, not config, and
+#     plugin syncSkills writes into them per wake.
+#
+# Idempotent: graft is a no-op when the volume or peer service isn't
+# there yet. Re-running install.sh after the hermes stack lands wires
+# the mounts on a rolling update.
+
+graft_external_volume_to_service \
+    paperclip_paperclip \
+    hermes_hermes-bin \
+    /opt/hermes \
+    readonly
+
+graft_external_volume_to_service \
+    paperclip_paperclip \
+    hermes_hermes-data \
+    /opt/hermes-shared \
+    readonly
+
+# Install the wrapper script that exports HERMES_DOCKER_EXEC_AS_ROOT=1.
+# Hermes' shim refuses to run as root without that env, and the
+# paperclip container runs as root inside (then drops privileges to
+# node via entrypoint). The wrapper goes at /usr/local/bin so the
+# plugin's HERMES_CLI_DEFAULT picks it up without any UI field. The
+# wrapper exec's /opt/hermes/bin/hermes — which only exists when the
+# hermes_hermes-bin graft above succeeded. Without the graft, the
+# wrapper fails the moment the plugin tries to spawn `hermes chat`,
+# and the failure shows up on the Run page with a clear message.
+if ! sudo docker exec "$cid" test -x /usr/local/bin/hermes-paperclip; then
+    sudo docker exec -u root "$cid" sh -c '
+        cat > /usr/local/bin/hermes-paperclip <<'\''WRAPPER'\''
+#!/bin/bash
+# Installed by bento stacks/app/paperclip/install.sh — Sprint #191.
+# Spawns the Hermes CLI from the hermes-stack hermes-bin volume mounted
+# at /opt/hermes via graft_external_volume_to_service. Fails clearly
+# when the hermes stack is not deployed.
+export HERMES_DOCKER_EXEC_AS_ROOT=1
+if [ ! -x /opt/hermes/bin/hermes ]; then
+    echo "[hermes-paperclip] /opt/hermes/bin/hermes not found. Deploy the hermes stack and re-run \`bento install paperclip\` to wire the cross-stack mount." >&2
+    exit 127
+fi
+exec /opt/hermes/bin/hermes "$@"
+WRAPPER
+        chmod +x /usr/local/bin/hermes-paperclip
+        cp /usr/local/bin/hermes-paperclip /usr/local/bin/hermes
+        chmod +x /usr/local/bin/hermes
+    ' || {
+        echo "[paperclip] failed to install hermes wrapper — set Command in the UI manually." >&2
+    }
+fi
+
+# Symlink config.yaml + auth.json from the hermes-shared mount so the
+# paperclip-spawned Hermes subprocess reads the same files the hermes
+# daemon serves over HTTP. Idempotent: ln -sfn replaces the symlink
+# atomically; skips when the target mount isn't there yet.
+sudo docker exec -u node "$cid" sh -c '
+    mkdir -p /paperclip/.hermes
+    if [ -d /opt/hermes-shared ]; then
+        # Preserve any existing local config the operator may have hand-
+        # crafted before this graft landed.
+        if [ -f /paperclip/.hermes/config.yaml ] && [ ! -L /paperclip/.hermes/config.yaml ]; then
+            ts=$(date +%s)
+            mv /paperclip/.hermes/config.yaml "/paperclip/.hermes/config.yaml.local-backup-${ts}"
+        fi
+        if [ -f /paperclip/.hermes/auth.json ] && [ ! -L /paperclip/.hermes/auth.json ]; then
+            ts=$(date +%s)
+            mv /paperclip/.hermes/auth.json "/paperclip/.hermes/auth.json.local-backup-${ts}"
+        fi
+        ln -sfn /opt/hermes-shared/config.yaml /paperclip/.hermes/config.yaml
+        ln -sfn /opt/hermes-shared/auth.json   /paperclip/.hermes/auth.json
+        echo "[paperclip] hermes config.yaml + auth.json symlinked to shared mount."
+    else
+        echo "[paperclip] hermes-shared mount not present — paperclip will not see hermes config. Deploy the hermes stack and re-run \`bento install paperclip\`."
+    fi
+' || true
+
+# Install the hermes_local-plus plugin itself.
+hermes_local_pkg="@felipefontoura/paperclip-adapter-hermes-local-plus"
+hermes_local_version="${HERMES_LOCAL_PLUS_VERSION:-0.1.11}"
+hermes_local_dir="/paperclip/adapter-plugins/hermes-local-plus-${hermes_local_version}"
+
+echo "Installing Paperclip adapter ${hermes_local_pkg}@${hermes_local_version}…"
+sudo docker exec -u node "$cid" sh -c "
+    set -e
+    mkdir -p '${hermes_local_dir}'
+    cd '${hermes_local_dir}'
+    npm pack '${hermes_local_pkg}@${hermes_local_version}' >/dev/null
+    tar xzf felipefontoura-paperclip-adapter-hermes-local-plus-${hermes_local_version}.tgz \\
+        --strip-components=1
+    rm -f felipefontoura-paperclip-adapter-hermes-local-plus-${hermes_local_version}.tgz
+" || {
+    echo "[paperclip] hermes-local-plus npm pack failed. The plugin is unpublished or" >&2
+    echo "[paperclip] the in-container network can't reach the npm registry. Register" >&2
+    echo "[paperclip] manually via the Adapter manager UI later, or set" >&2
+    echo "[paperclip] HERMES_LOCAL_PLUS_VERSION to a version known on npm and re-run." >&2
+}
+
+# Register the plugin in adapter-plugins.json. We deliberately overwrite
+# any existing `hermes_local` entry — if the operator previously had a
+# different hermes_local registered (built-in or another fork), this
+# install path makes ours the active one.
+sudo docker exec -u node -i "$cid" node - <<NODEJS || true
+const fs = require('fs');
+const path = '${adapter_registry}';
+const entry = {
+  packageName: '${hermes_local_dir}',
+  localPath:   '${hermes_local_dir}',
+  version:     '${hermes_local_version}',
+  type:        'hermes_local',
+  installedAt: new Date().toISOString()
+};
+let current = [];
+try {
+  current = JSON.parse(fs.readFileSync(path, 'utf8'));
+  if (!Array.isArray(current)) current = [];
+} catch (_) { current = []; }
+const next = current.filter(p => p && p.type !== entry.type).concat(entry);
+fs.writeFileSync(path, JSON.stringify(next, null, 2));
+console.log('[paperclip] adapter-plugins.json updated with ' + entry.type);
+NODEJS
+
+# -----------------------------------------------------------------------------
 # Register the Hermes Gateway adapter inside Paperclip — zero-touch, no UI.
 # -----------------------------------------------------------------------------
 #
@@ -261,21 +413,26 @@ NODEJS
 sudo docker service update --force paperclip_paperclip >/dev/null 2>&1 || true
 
 # -----------------------------------------------------------------------------
-# Operator follow-up — wire the per-agent adapterConfig after first signup.
+# Operator follow-up
 # -----------------------------------------------------------------------------
 #
-# The adapter is registered, but each agent still needs its `adapterConfig`
-# pointed at the local hermes-gateway + skills-bridge endpoints. We can't do
-# that here because no agents exist yet — they're created by the operator
-# after completing the bootstrap-ceo invite above.
+# Two adapters are now registered in Paperclip:
 #
-# Once you've created your first company + agent, set on each agent (UI or
-# via PATCH /api/agents/<id>):
+#   hermes_local   — subprocess wrapper, full Hermes CLI capabilities
+#                    (sessions, memory, tool loop, skills materialised as
+#                    symlinks). Zero per-agent config required — the
+#                    plugin reads ~/.hermes/config.yaml for provider
+#                    routing and picks /usr/local/bin/hermes-paperclip
+#                    automatically. Create an agent of type
+#                    "Hermes Agent (local)" and Run Heartbeat — that's it.
 #
-#   adapter type:        Hermes (gateway)
-#   Environment variable HERMES_URL            = http://hermes:8642/v1
-#   Environment variable HERMES_API_KEY        = ${HERMES_API_KEY}
-#   Environment variable SKILLS_BRIDGE_URL     = http://paperclip-skills-bridge:8080
-#   Environment variable SKILLS_BRIDGE_TOKEN   = ${BRIDGE_AUTH_TOKEN}
+#   hermes_gateway — HTTP passthrough to the standalone `hermes` stack.
+#                    Use this for OpenAI-compatible workloads that
+#                    don't need the local subprocess. Each agent needs:
+#                      Environment variable HERMES_URL            = http://hermes:8642/v1
+#                      Environment variable HERMES_API_KEY        = ${HERMES_API_KEY}
+#                      Environment variable SKILLS_BRIDGE_URL     = http://paperclip-skills-bridge:8080
+#                      Environment variable SKILLS_BRIDGE_TOKEN   = ${BRIDGE_AUTH_TOKEN}
+#                    Both keys are in state.providers (printed by `bento status`).
 #
-# Both keys are in state.providers (printed by `bento status`).
+# Pick whichever fits the workload; nothing breaks if you only use one.

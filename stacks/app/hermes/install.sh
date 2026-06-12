@@ -23,6 +23,33 @@ if ! wait_for_service hermes_hermes 180; then
     exit 0
 fi
 
+# hermes-init is the one-shot service declared in compose.yml that copies
+# /opt/hermes from the Hermes image into the `hermes-bin` named volume,
+# so the paperclip stack (when also deployed) can mount that volume RO
+# and exec the binary. The service exits as soon as the copy completes
+# (`restart_policy: none`). We don't block on it here — Swarm has already
+# scheduled it during stack deploy, and the paperclip-side graft retries
+# until the volume exists. We DO surface its status so the operator sees
+# something useful in install logs if the copy failed (image pull error,
+# disk full, etc).
+init_status=$(sudo docker service ps hermes_hermes-init \
+    --filter desired-state=shutdown \
+    --format '{{.CurrentState}}' 2>/dev/null | head -1 || true)
+case "$init_status" in
+    Complete*)
+        echo "hermes-init: runtime copied to hermes-bin volume."
+        ;;
+    Failed*|Rejected*)
+        echo "hermes-init: ${init_status} — the hermes-bin volume may be empty." >&2
+        echo "             Paperclip's hermes_local adapter won't see Hermes." >&2
+        echo "             Inspect with: docker service logs hermes_hermes-init" >&2
+        ;;
+    *)
+        # Init still running, or service hasn't been scheduled yet. Soft-skip.
+        echo "hermes-init: status=${init_status:-pending} — first wake from paperclip may need a re-run after the copy finishes."
+        ;;
+esac
+
 cid=$(_find_container 'hermes_hermes')
 
 template_path="${BENTO_REPO_ROOT}/stacks/app/hermes/reference/hermes-config.yaml"
