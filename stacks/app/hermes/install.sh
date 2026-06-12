@@ -50,15 +50,13 @@ rendered=$(
         envsubst < "$template_path"
 )
 
-# umask 022 keeps config.yaml + future writes (auth.json from
-# `hermes auth login`) world-readable, so paperclip's cross-stack RO
-# mount can read them. /opt/data perms come from HERMES_HOME_MODE
-# (set in compose.yml) — no chmod here.
+# config.yaml needs world-read so paperclip's cross-stack RO mount can
+# read it. /opt/data perms come from HERMES_HOME_MODE (set in compose.yml).
 sudo docker exec -i -u root "$cid" sh -c '
-    umask 022
     mkdir -p /opt/data
     cat > /opt/data/config.yaml
     chown -R hermes:hermes /opt/data 2>/dev/null || true
+    chmod 644 /opt/data/config.yaml
 ' <<< "$rendered"
 
 # Reload — Hermes' gateway reads config.yaml on SIGHUP. If that fails (older
