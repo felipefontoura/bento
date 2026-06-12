@@ -11,7 +11,7 @@
     { "name": "ANTHROPIC_API_KEY",  "prompt": "Anthropic API key (used by claude CLI) — optional",      "hide": true, "default": "" },
     { "name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (used by opencode CLI) — optional",   "hide": true, "default": "" },
     { "name": "HERMES_API_KEY",     "from_state": "HERMES_API_KEY",    "prompt": "Hermes gateway bearer (deployed alongside the hermes stack)", "hide": true, "default": "" },
-    { "name": "HERMES_LOCAL_PLUS_VERSION", "default": "0.1.11", "prompt": "Version of @felipefontoura/paperclip-adapter-hermes-local-plus to install — leave blank to skip" }
+    { "name": "HERMES_LOCAL_PLUS_VERSION", "default": "latest", "prompt": "Version of @felipefontoura/paperclip-adapter-hermes-local-plus to install — leave blank to skip" }
   ],
   "post_deploy_url": "https://${PAPERCLIP_HOST}"
 }
