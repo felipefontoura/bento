@@ -120,21 +120,46 @@ EOF
 # Migrations take 20-60s on a CX22. Retry every 3s for 3 minutes;
 # stop early on either success (URL produced) or 'admin already
 # exists' (idempotent re-deploy).
-echo "Waiting for paperclip migrations to settle before minting bootstrap-ceo invite…"
+#
+# Fast path on re-deploy: ask postgres directly whether an instance_admin
+# row already exists. If yes, skip the retry loop entirely (saves up to
+# ~180s when bootstrap-ceo would have failed all 60 attempts on a
+# stale-table edge case where the CLI doesn't print the canonical
+# 'admin already exists' marker).
+#
+# psql_exec runs against the bento postgres superuser shell but defaults
+# to the `postgres` database, so we shell out directly with -d paperclip.
+# Soft fail (empty admin_exists) when the table doesn't exist yet — first
+# deploy hasn't run migrations, so the retry loop below is the right path.
+pg_cid=$(postgres_container 2>/dev/null || true)
+admin_exists=""
+if [[ -n "$pg_cid" ]]; then
+    admin_exists=$(sudo docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$pg_cid" \
+        psql -U postgres -d paperclip -tA \
+        -c "SELECT 1 FROM instance_user_roles WHERE role = 'instance_admin' LIMIT 1" \
+        2>/dev/null | tr -d '[:space:]' || true)
+fi
+
 invite_output=""
-attempts=0
-while (( attempts < 60 )); do
-    invite_output=$(sudo docker exec "$cid" sh -c "
-        cd /app && node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts \\
-            auth bootstrap-ceo --config ${config_path} --expires-hours 24
-    " 2>&1 || true)
-    if printf '%s' "$invite_output" \
-        | grep -qE 'pcp_bootstrap_|admin already exists|already claim'; then
-        break
-    fi
-    sleep 3
-    attempts=$((attempts + 1))
-done
+if [[ "$admin_exists" == "1" ]]; then
+    echo "Paperclip already has an instance_admin — skipping bootstrap-ceo retry loop."
+    invite_output="admin already exists"
+else
+    echo "Waiting for paperclip migrations to settle before minting bootstrap-ceo invite…"
+    attempts=0
+    while (( attempts < 60 )); do
+        invite_output=$(sudo docker exec "$cid" sh -c "
+            cd /app && node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts \\
+                auth bootstrap-ceo --config ${config_path} --expires-hours 24
+        " 2>&1 || true)
+        if printf '%s' "$invite_output" \
+            | grep -qE 'pcp_bootstrap_|admin already exists|already claim'; then
+            break
+        fi
+        sleep 3
+        attempts=$((attempts + 1))
+    done
+fi
 
 # Strip ANSI colour codes before grep — bootstrap-ceo output wraps
 # the URL in clack/prompt styling (\\e[36m … \\e[39m) which can
@@ -341,24 +366,21 @@ fs.writeFileSync(path, JSON.stringify(next, null, 2));
 console.log('[paperclip] adapter-plugins.json updated with ' + entry.type);
 NODEJS
 
-# Cross-stack mounts come AFTER plugin installs — each graft fires a
+# Cross-stack mounts come AFTER plugin installs — the graft fires a
 # rolling restart of paperclip_paperclip, and a `docker exec` racing
 # that restart returns "container is not running". Plugins write into
 # the paperclip-data volume and don't depend on the mounts existing at
 # install time; the mounts only matter at wake time.
-graft_external_volume_to_service \
+#
+# Batched into ONE `docker service update` so the operator pays for a
+# single rolling restart instead of one per mount (~30s of `update_config
+# .delay` per extra graft on top of the actual restart).
+graft_external_volumes_to_service \
     paperclip_paperclip \
-    hermes_hermes-bin \
-    /opt/hermes \
-    readonly
+    hermes_hermes-bin:/opt/hermes:readonly \
+    hermes_hermes-data:/opt/hermes-shared:readonly
 
-graft_external_volume_to_service \
-    paperclip_paperclip \
-    hermes_hermes-data \
-    /opt/hermes-shared \
-    readonly
-
-# Wait for the service to settle after the grafts before exec'ing again.
+# Wait for the service to settle after the graft before exec'ing again.
 wait_for_service paperclip_paperclip 120 || true
 
 # Re-locate the container (it may have a new ID after the rolling restart).
@@ -384,7 +406,10 @@ if [[ -n "$cid" ]]; then
     ' || echo "[paperclip] symlink step skipped — container not exec-ready." >&2
 fi
 
-# Final force restart so paperclip's plugin loader sees adapter-plugins.json.
-sudo docker service update --force paperclip_paperclip >/dev/null 2>&1 || true
-
+# No final force-restart needed: the graft above already rolled the
+# service, and the rolled-up container's plugin loader reads
+# adapter-plugins.json on boot. The previous extra `service update
+# --force` here added ~30s (update_config.delay) + container start time
+# for no behavior change.
+#
 # Two adapters registered: hermes_local (subprocess) + hermes_gateway (HTTP).
