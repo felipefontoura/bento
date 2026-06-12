@@ -50,15 +50,18 @@ rendered=$(
         envsubst < "$template_path"
 )
 
-# Push the rendered file into the container. The image creates /opt/data
-# 700 hermes:hermes, which blocks paperclip's cross-stack RO mount from
-# traversing it. o+rx on the dir is the one-time fix and persists in the
-# named volume.
+# Push the rendered file into the container. /opt/data is 700 hermes:hermes
+# in the image; o+rx + o+r on the two files lets paperclip's cross-stack
+# RO mount traverse and read them. umask 022 keeps subsequent writes
+# (auth.json from `hermes auth login`, etc.) world-readable.
 sudo docker exec -i -u root "$cid" sh -c '
+    umask 022
     mkdir -p /opt/data
     cat > /opt/data/config.yaml
     chown -R hermes:hermes /opt/data 2>/dev/null || true
     chmod o+rx /opt/data
+    chmod o+r  /opt/data/config.yaml
+    [ -f /opt/data/auth.json ] && chmod o+r /opt/data/auth.json || true
 ' <<< "$rendered"
 
 # Reload — Hermes' gateway reads config.yaml on SIGHUP. If that fails (older
