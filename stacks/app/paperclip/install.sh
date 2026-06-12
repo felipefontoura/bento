@@ -1,42 +1,22 @@
 #!/bin/bash
 # Paperclip post-deploy bootstrap:
-#
-#   1. Ensure the 'paperclip' database exists on bento's shared postgres
-#      stack. Without it paperclip's DATABASE_URL points at a database
-#      the operator never created, and migrations fail at first boot.
-#
-#   2. Seed paperclip's CLI config file at
-#      /paperclip/instances/production/config.json. The bundled
-#      `paperclipai` CLI refuses to run without it ("No config found —
-#      Run paperclip onboard first"). We write it directly instead of
-#      invoking `paperclipai onboard -y` because onboard tries to start
-#      a second paperclip server on port 3100, colliding with the
-#      swarm-managed one.
-#
-#   3. Mint a one-time bootstrap-ceo invite URL and print it to the
-#      operator. The URL is the only path to create the first
-#      instance_admin in `authenticated/public` mode (browser claim is
-#      intentionally disabled upstream). The URL is also persisted to
-#      ${state_dir}/paperclip-invite-url.txt so the handoff HTML
-#      can recover it if the operator loses the install terminal.
-#
-#      Re-deploy behaviour: `bootstrap-ceo` refuses (non-zero exit) if
-#      an instance_admin already exists. We eat the failure quietly so
-#      Step 3 re-runs don't re-prompt with a meaningless invite.
+#   1. Ensure the 'paperclip' database on bento's shared postgres.
+#   2. Seed paperclip's CLI config (the bundled `paperclipai` CLI refuses
+#      to run without it; we write directly to skip its `onboard -y` flow
+#      which tries to start a second server on 3100).
+#   3. Mint the bootstrap-ceo invite URL (only path to the first admin
+#      in authenticated/public mode), persist for the handoff HTML.
+#   4. Install the two adapter plugins (hermes_local, hermes_gateway) and
+#      graft the hermes stack's volumes if it's deployed alongside.
 
 set -euo pipefail
 source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 
 ensure_database paperclip
 
-# Swarm sometimes takes 30-60s to converge after the API create. Also
-# the postgres-TCP wait inside paperclip's compose adds a few seconds.
-# Bail with a non-fatal warning if it doesn't come up so install.sh
-# doesn't block Step 3 forever.
 if ! wait_for_service paperclip_paperclip 240; then
     echo "paperclip did not reach 1/1 within 240s — skipping bootstrap-ceo." >&2
-    echo "Recover later inside the container:" >&2
-    echo "  cd /app && node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts auth bootstrap-ceo" >&2
+    echo "Recover later via: docker exec <container> node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts auth bootstrap-ceo" >&2
     exit 0
 fi
 
@@ -48,23 +28,9 @@ db_url="postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/paperclip"
 # with `--config`) read from here.
 config_path="/paperclip/instances/production/config.json"
 
-# Seed the CLI's config file inside the container. On a fresh deploy
-# /paperclip/instances/production may not exist yet — paperclip's
-# server creates it on first boot, but install.sh races against the
-# postgres-TCP wait wrapper inside the container's command, so we
-# mkdir up front and chown back to node (the CLI runs as node).
-#
-# Schema requirements verified against upstream's onboard output:
-#   - $meta { version, source }       (required)
-#   - logging { mode, logDir }        (required)
-#   - database { mode, connectionString }
-#   - server, auth
-#
-# The literal '\$meta' below escapes once for the bash heredoc so
-# the JSON written to disk has the literal key '\$meta'. Without
-# the escape bash would interpolate \$meta as an empty variable
-# and the schema validator would reject the file with
-# '\$meta: Required'.
+# Seed the CLI's config file. We race the server's first-boot mkdir, so
+# create the dir up front and chown to node. `\$meta` is escaped once so
+# bash leaves the literal key (its schema validator requires it).
 now_iso=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
 
 sudo docker exec -i -u root "$cid" sh -c "
@@ -98,39 +64,9 @@ sudo docker exec -i -u root "$cid" sh -c "
 }
 EOF
 
-# Mint the bootstrap-ceo invite. We pass --config explicitly because
-# without it the CLI defaults to /paperclip/instances/default/config.json
-# (the CLI's notion of "default" instance is independent of the
-# server's PAPERCLIP_INSTANCE_ID env, so it would not find our
-# production/config.json without the flag).
-#
-# Idempotent on re-deploy: CLI returns non-zero with "admin already
-# exists" once first claim happened. `|| true` keeps us from
-# tripping set -e.
-# wait_for_service returns when Swarm sees the container running.
-# That fires BEFORE paperclip's node process has finished migrating
-# the shared postgres schema (instance_user_roles, invites, etc. —
-# the very tables bootstrap-ceo writes to). Without this loop, the
-# CLI bombs with:
-#
-#   Could not create bootstrap invite: Failed query: select … from
-#   "instance_user_roles" … "If using embedded-postgres, start the
-#   Paperclip server and run this command again."
-#
-# Migrations take 20-60s on a CX22. Retry every 3s for 3 minutes;
-# stop early on either success (URL produced) or 'admin already
-# exists' (idempotent re-deploy).
-#
-# Fast path on re-deploy: ask postgres directly whether an instance_admin
-# row already exists. If yes, skip the retry loop entirely (saves up to
-# ~180s when bootstrap-ceo would have failed all 60 attempts on a
-# stale-table edge case where the CLI doesn't print the canonical
-# 'admin already exists' marker).
-#
-# psql_exec runs against the bento postgres superuser shell but defaults
-# to the `postgres` database, so we shell out directly with -d paperclip.
-# Soft fail (empty admin_exists) when the table doesn't exist yet — first
-# deploy hasn't run migrations, so the retry loop below is the right path.
+# Mint the bootstrap-ceo invite. Re-deploy fast-path: if an instance_admin
+# already exists, skip the retry loop (saves up to ~180s on edge cases
+# where the CLI doesn't print the canonical 'admin already exists' marker).
 pg_cid=$(postgres_container 2>/dev/null || true)
 admin_exists=""
 if [[ -n "$pg_cid" ]]; then
@@ -142,9 +78,11 @@ fi
 
 invite_output=""
 if [[ "$admin_exists" == "1" ]]; then
-    echo "Paperclip already has an instance_admin — skipping bootstrap-ceo retry loop."
+    echo "Paperclip already has an instance_admin — skipping bootstrap-ceo."
     invite_output="admin already exists"
 else
+    # Migrations take 20-60s on a CX22 to populate instance_user_roles;
+    # the CLI needs them. Retry every 3s, stop on URL or admin-exists.
     echo "Waiting for paperclip migrations to settle before minting bootstrap-ceo invite…"
     attempts=0
     while (( attempts < 60 )); do
@@ -161,210 +99,72 @@ else
     done
 fi
 
-# Strip ANSI colour codes before grep — bootstrap-ceo output wraps
-# the URL in clack/prompt styling (\\e[36m … \\e[39m) which can
-# otherwise embed inside the captured string.
-#
-# `|| true` on the grep pipeline is CRITICAL: grep -oE exits 1 when
-# no match, pipefail propagates that, set -e then aborts install.sh
-# silently — which previously hid the bootstrap-ceo error AND
-# skipped the "already-claimed" branch below, so the operator
-# never saw anything between "Database 'paperclip' …" and the
-# "paperclip is ready" success box.
+# Strip ANSI styling from the CLI's output before grepping the URL. The
+# trailing `|| true` matters: grep -oE returns 1 when no match → pipefail
+# would abort install.sh silently and hide the bootstrap-ceo error below.
 invite_url=$(printf '%s\n' "$invite_output" \
     | sed 's/\x1b\[[0-9;]*m//g' \
     | grep -oE 'https?://[^[:space:]]+/invite/pcp_bootstrap_[A-Za-z0-9]+' \
     | head -1 || true)
 
-# Derive the state dir from BENTO_STATE_FILE (the only state-related
-# var bento's contract guarantees to install.sh — see CLAUDE.md).
-# `lib/stacks.sh` invokes us via `env VAR=val …` and does NOT pass
-# BENTO_STATE_DIR, so referencing it directly trips set -u.
 state_dir="$(dirname "$BENTO_STATE_FILE")"
 marker="${state_dir}/paperclip-invite-url.txt"
 
 if [[ -n "$invite_url" ]]; then
-    # Persist for the handoff HTML to surface even if the operator
-    # loses the install terminal. The state dir is already mode 700
-    # in the install path; tighten the marker itself to 600.
+    # Persisted so the handoff HTML can recover it if the install terminal closes.
     printf '%s\n' "$invite_url" > "$marker"
     chmod 600 "$marker"
-
-    cat <<MSG
-
-═══════════════════════════════════════════════════════════════
- Paperclip first-admin claim — open within 24h
-═══════════════════════════════════════════════════════════════
-
-   ${invite_url}
-
- First signup via this URL becomes instance_admin.
- URL also persisted at ${marker} and in the handoff HTML.
-
- Public signup is open. Lock it later via Portainer when needed.
-
-═══════════════════════════════════════════════════════════════
-
-MSG
+    echo
+    echo "Paperclip first-admin claim (24h): ${invite_url}"
+    echo "(saved at ${marker}; first signup via this URL becomes instance_admin)"
+    echo
 else
-    # Two reasons we land here:
-    #   1. Re-deploy and CLI refused because admin already exists.
-    #   2. Genuine error from the CLI (bad config, DB unreachable, …).
-    # The user needs to know which. Drop any stale marker either way,
-    # then surface bootstrap-ceo's full stderr so the operator can act.
     rm -f "$marker"
     if printf '%s' "$invite_output" | grep -qiE 'admin already exists|already claim'; then
-        echo "Paperclip already has an instance_admin; skipping bootstrap-ceo."
+        : # already reported above
     else
-        echo "bootstrap-ceo did not produce an invite URL. CLI output:" >&2
+        echo "bootstrap-ceo did not produce an invite URL:" >&2
         printf '%s\n' "$invite_output" | sed 's/^/  /' >&2
-        echo "" >&2
-        echo "Recover manually inside the container:" >&2
-        echo "  sudo docker exec -it <paperclip-container> sh -c '\\" >&2
-        echo "    cd /app && node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts \\\\" >&2
-        echo "      auth bootstrap-ceo --config ${config_path} --expires-hours 24 --force'" >&2
     fi
 fi
 
 # -----------------------------------------------------------------------------
-# Cross-stack Hermes integration + register the hermes_local adapter
-# (subprocess-based, full Hermes capabilities).
+# Hermes integration: register both adapter plugins + graft the hermes stack's
+# volumes if it's deployed alongside. The grafts are idempotent no-ops when
+# the hermes stack isn't around, so a paperclip-only install lands cleanly.
 # -----------------------------------------------------------------------------
-#
-# Design (binary, no copies anywhere):
-#
-#   Scenario A — paperclip alone, no hermes stack
-#     The hermes_local plugin is registered in /paperclip/adapter-plugins.json
-#     so it's ready the day the operator decides to add the hermes stack.
-#     Without /opt/hermes mounted, the plugin's wrapper script (also
-#     installed by this block) silently fails to exec — no agent of type
-#     "Hermes Agent (local)" will succeed until the hermes stack is up.
-#     That's the expected and documented behaviour. Built-in adapters
-#     (claude_local, codex_local, opencode_local) are unaffected.
-#
-#   Scenario B — paperclip + hermes, both deployed
-#     `graft_external_volume_to_service` (from lib/install-helpers.sh)
-#     attaches the hermes stack's `hermes-bin` volume at /opt/hermes in
-#     the running paperclip service via `docker service update --mount-add`.
-#     Likewise it attaches `hermes-data` at /opt/hermes-shared so the
-#     paperclip-side subprocess shares the SAME config.yaml + auth.json
-#     the hermes daemon already renders from state.providers — single
-#     source of truth, zero duplication.
-#
-#     Symlinks at /paperclip/.hermes/{config.yaml,auth.json} point at
-#     the shared mount, so the Hermes subprocess Felipe spawns from
-#     inside the paperclip container reads exactly what the hermes
-#     daemon serves over HTTP.
-#
-#     Skills + sessions stay paperclip-local (/paperclip/.hermes/skills,
-#     /paperclip/.hermes/sessions) — those are state, not config, and
-#     plugin syncSkills writes into them per wake.
-#
-# Idempotent: graft is a no-op when the volume or peer service isn't
-# there yet. Re-running install.sh after the hermes stack lands wires
-# the mounts on a rolling update.
 
-# Adapter registry path used by every plugin install block below.
-adapter_registry="/paperclip/adapter-plugins.json"
+# Two adapter plugins: subprocess (hermes_local) + HTTP passthrough
+# (hermes_gateway). Both come from npm; both register the same way.
+# `latest` resolves at install time. `npm install --no-save` puts the
+# package under <base>/node_modules/<pkg>, which is what the registry
+# entry's localPath points at.
+for spec in \
+    "@felipefontoura/paperclip-adapter-hermes-local-plus:${HERMES_LOCAL_PLUS_VERSION:-latest}:hermes_local" \
+    "@felipefontoura/paperclip-adapter-hermes-gateway:0.1.0:hermes_gateway"
+do
+    IFS=':' read -r pkg version type <<<"$spec"
+    base="/paperclip/adapter-plugins/${type//_/-}-${version}"
+    dir="${base}/node_modules/${pkg}"
 
-# HERMES_DOCKER_EXEC_AS_ROOT=1 + PATH are set in compose.yml — no wrapper
-# script needed (it didn't survive service updates anyway).
+    echo "Installing Paperclip adapter ${pkg}@${version}…"
+    sudo docker exec -u node "$cid" sh -c "
+        set -e
+        mkdir -p '${base}'
+        cd '${base}'
+        npm install --no-save --silent '${pkg}@${version}'
+    " || { echo "[paperclip] ${pkg} install failed — register via UI later." >&2; continue; }
 
-# Install the hermes_local-plus plugin itself.
-hermes_local_pkg="@felipefontoura/paperclip-adapter-hermes-local-plus"
-hermes_local_version="${HERMES_LOCAL_PLUS_VERSION:-latest}"
-hermes_local_dir="/paperclip/adapter-plugins/hermes-local-plus-${hermes_local_version}"
-
-echo "Installing Paperclip adapter ${hermes_local_pkg}@${hermes_local_version}…"
-sudo docker exec -u node "$cid" sh -c "
-    set -e
-    mkdir -p '${hermes_local_dir}'
-    cd '${hermes_local_dir}'
-    TARBALL=\$(npm pack '${hermes_local_pkg}@${hermes_local_version}' | tail -1)
-    tar xzf \"\$TARBALL\" --strip-components=1
-    rm -f \"\$TARBALL\"
-" || {
-    echo "[paperclip] hermes-local-plus npm pack failed. The plugin is unpublished or" >&2
-    echo "[paperclip] the in-container network can't reach the npm registry. Register" >&2
-    echo "[paperclip] manually via the Adapter manager UI later, or set" >&2
-    echo "[paperclip] HERMES_LOCAL_PLUS_VERSION to a version known on npm and re-run." >&2
-}
-
-# Register the plugin in adapter-plugins.json. We deliberately overwrite
-# any existing `hermes_local` entry — if the operator previously had a
-# different hermes_local registered (built-in or another fork), this
-# install path makes ours the active one.
-sudo docker exec -u node -i "$cid" node - <<NODEJS || true
+    sudo docker exec -u node -i "$cid" node - <<NODEJS || true
 const fs = require('fs');
-const path = '${adapter_registry}';
-const entry = {
-  packageName: '${hermes_local_dir}',
-  localPath:   '${hermes_local_dir}',
-  version:     '${hermes_local_version}',
-  type:        'hermes_local',
-  installedAt: new Date().toISOString()
-};
+const path = '/paperclip/adapter-plugins.json';
+const entry = { packageName: '${dir}', localPath: '${dir}', version: '${version}', type: '${type}', installedAt: new Date().toISOString() };
 let current = [];
-try {
-  current = JSON.parse(fs.readFileSync(path, 'utf8'));
-  if (!Array.isArray(current)) current = [];
-} catch (_) { current = []; }
-const next = current.filter(p => p && p.type !== entry.type).concat(entry);
-fs.writeFileSync(path, JSON.stringify(next, null, 2));
+try { current = JSON.parse(fs.readFileSync(path, 'utf8')); if (!Array.isArray(current)) current = []; } catch (_) {}
+fs.writeFileSync(path, JSON.stringify(current.filter(p => p && p.type !== entry.type).concat(entry), null, 2));
 console.log('[paperclip] adapter-plugins.json updated with ' + entry.type);
 NODEJS
-
-# -----------------------------------------------------------------------------
-# Register the Hermes Gateway adapter inside Paperclip — zero-touch, no UI.
-# -----------------------------------------------------------------------------
-#
-# Paperclip's adapter store is a flat JSON at /paperclip/adapter-plugins.json
-# plus an extracted plugin directory under /paperclip/adapter-plugins/<dir>/.
-# We populate both directly inside the volume from the published npm package
-# (`@felipefontoura/paperclip-adapter-hermes-gateway`), then restart paperclip
-# so the runtime picks the new adapter on next boot.
-#
-# Idempotent on re-deploy: re-extracts under a versioned directory and
-# replaces the registry entry of the same `type`.
-
-adapter_pkg="@felipefontoura/paperclip-adapter-hermes-gateway"
-adapter_version="0.1.0"
-adapter_dir="/paperclip/adapter-plugins/hermes-gateway-${adapter_version}"
-adapter_registry="/paperclip/adapter-plugins.json"
-
-echo "Installing Paperclip adapter ${adapter_pkg}@${adapter_version}…"
-sudo docker exec -u node "$cid" sh -c "
-    set -e
-    mkdir -p '${adapter_dir}'
-    cd '${adapter_dir}'
-    TARBALL=\$(npm pack '${adapter_pkg}@${adapter_version}' | tail -1)
-    tar xzf \"\$TARBALL\" --strip-components=1
-    rm -f \"\$TARBALL\"
-" || {
-    echo "[paperclip] adapter npm pack failed — register manually via the UI later." >&2
-}
-
-# Update the registry. node is in $PATH inside the image, so we let the
-# heredoc do the JSON-safe merge instead of shelling out to jq.
-sudo docker exec -u node -i "$cid" node - <<NODEJS || true
-const fs = require('fs');
-const path = '${adapter_registry}';
-const entry = {
-  packageName: '${adapter_dir}',
-  localPath:   '${adapter_dir}',
-  version:     '${adapter_version}',
-  type:        'hermes_gateway',
-  installedAt: new Date().toISOString()
-};
-let current = [];
-try {
-  current = JSON.parse(fs.readFileSync(path, 'utf8'));
-  if (!Array.isArray(current)) current = [];
-} catch (_) { current = []; }
-const next = current.filter(p => p && p.type !== entry.type).concat(entry);
-fs.writeFileSync(path, JSON.stringify(next, null, 2));
-console.log('[paperclip] adapter-plugins.json updated with ' + entry.type);
-NODEJS
+done
 
 # Cross-stack mounts come AFTER plugin installs — the graft fires a
 # rolling restart of paperclip_paperclip, and a `docker exec` racing
@@ -406,10 +206,5 @@ if [[ -n "$cid" ]]; then
     ' || echo "[paperclip] symlink step skipped — container not exec-ready." >&2
 fi
 
-# No final force-restart needed: the graft above already rolled the
-# service, and the rolled-up container's plugin loader reads
-# adapter-plugins.json on boot. The previous extra `service update
-# --force` here added ~30s (update_config.delay) + container start time
-# for no behavior change.
-#
-# Two adapters registered: hermes_local (subprocess) + hermes_gateway (HTTP).
+# The graft rolled the service; its new container reads
+# adapter-plugins.json on boot. No extra force-restart needed.

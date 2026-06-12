@@ -1,37 +1,4 @@
 services:
-  # ---------------------------------------------------------------------------
-  # hermes-init — one-shot sidecar.
-  # ---------------------------------------------------------------------------
-  # Copies /opt/hermes (the Python runtime + bin) from the upstream image
-  # into a NAMED Swarm volume. That volume (`hermes-bin`) is then
-  # cross-stack mounted read-only into the `paperclip` service so the
-  # `hermes_local` adapter plugin there can exec the binary as a
-  # subprocess — without needing its own ~1.2 GB copy in paperclip-data.
-  #
-  # Idempotent: re-running cp -r over the same source/dest does nothing
-  # destructive when the bytes are identical. The container exits as soon
-  # as the copy completes; Swarm `restart_policy: none` keeps it from
-  # respawning.
-  hermes-init:
-    image: nousresearch/hermes-agent:${HERMES_IMAGE_TAG:-latest}
-    entrypoint: ["sh", "-c"]
-    command:
-      - 'cp -r /opt/hermes/. /shared/hermes/ && echo "[hermes-init] runtime copied to hermes-bin volume"'
-    volumes:
-      - hermes-bin:/shared/hermes
-    deploy:
-      mode: replicated
-      replicas: 1
-      placement:
-        constraints:
-          - node.role == manager
-      restart_policy:
-        condition: none
-      labels:
-        - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=hermes
-        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
-
   hermes:
     image: nousresearch/hermes-agent:${HERMES_IMAGE_TAG:-latest}
     # OpenAI-compatible HTTP gateway. Consumed by Paperclip via the npm package
@@ -93,6 +60,12 @@ services:
       # also persists Hermes' on-disk caches (skills, model metadata)
       # across upgrades.
       - hermes-data:/opt/data
+      # The hermes Python runtime + binary ship inside the image at
+      # /opt/hermes. Docker's named-volume-init copies that path's contents
+      # into this empty volume on first start, so the paperclip stack can
+      # mount the same volume RO and exec the hermes binary as a subprocess
+      # — no separate copy-sidecar needed.
+      - hermes-bin:/opt/hermes
     # Swarm healthcheck intentionally omitted — Hermes' first boot pre-warms
     # provider clients which can blow the probe window on small VPS. Traefik's
     # backend health check covers user-facing readiness.
@@ -137,10 +110,7 @@ networks:
 volumes:
   hermes-data:
     driver: local
-  # hermes-bin — populated by the `hermes-init` one-shot service above and
-  # cross-stack mounted RO into the paperclip service when both stacks are
-  # deployed on the same host. Hermes never writes here at runtime; it's
-  # purely the binary + Python deps that paperclip's hermes_local adapter
-  # plugin needs to spawn `hermes chat`.
+  # Cross-stack mounted RO into the paperclip service. Populated by
+  # Docker's named-volume-init from the image's /opt/hermes on first boot.
   hermes-bin:
     driver: local
