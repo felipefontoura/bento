@@ -1,2 +1,6 @@
 .env.*
 !.env.example
+
+# Handoff/doctor reports generated locally by `bento install` and `bento
+# doctor`. They're operator-local artifacts, not part of the repo.
+reports/
