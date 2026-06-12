@@ -239,17 +239,8 @@ fi
 # there yet. Re-running install.sh after the hermes stack lands wires
 # the mounts on a rolling update.
 
-graft_external_volume_to_service \
-    paperclip_paperclip \
-    hermes_hermes-bin \
-    /opt/hermes \
-    readonly
-
-graft_external_volume_to_service \
-    paperclip_paperclip \
-    hermes_hermes-data \
-    /opt/hermes-shared \
-    readonly
+# Adapter registry path used by every plugin install block below.
+adapter_registry="/paperclip/adapter-plugins.json"
 
 # Install the wrapper script that exports HERMES_DOCKER_EXEC_AS_ROOT=1.
 # Hermes' shim refuses to run as root without that env, and the
@@ -282,31 +273,6 @@ WRAPPER
         echo "[paperclip] failed to install hermes wrapper — set Command in the UI manually." >&2
     }
 fi
-
-# Symlink config.yaml + auth.json from the hermes-shared mount so the
-# paperclip-spawned Hermes subprocess reads the same files the hermes
-# daemon serves over HTTP. Idempotent: ln -sfn replaces the symlink
-# atomically; skips when the target mount isn't there yet.
-sudo docker exec -u node "$cid" sh -c '
-    mkdir -p /paperclip/.hermes
-    if [ -d /opt/hermes-shared ]; then
-        # Preserve any existing local config the operator may have hand-
-        # crafted before this graft landed.
-        if [ -f /paperclip/.hermes/config.yaml ] && [ ! -L /paperclip/.hermes/config.yaml ]; then
-            ts=$(date +%s)
-            mv /paperclip/.hermes/config.yaml "/paperclip/.hermes/config.yaml.local-backup-${ts}"
-        fi
-        if [ -f /paperclip/.hermes/auth.json ] && [ ! -L /paperclip/.hermes/auth.json ]; then
-            ts=$(date +%s)
-            mv /paperclip/.hermes/auth.json "/paperclip/.hermes/auth.json.local-backup-${ts}"
-        fi
-        ln -sfn /opt/hermes-shared/config.yaml /paperclip/.hermes/config.yaml
-        ln -sfn /opt/hermes-shared/auth.json   /paperclip/.hermes/auth.json
-        echo "[paperclip] hermes config.yaml + auth.json symlinked to shared mount."
-    else
-        echo "[paperclip] hermes-shared mount not present — paperclip will not see hermes config. Deploy the hermes stack and re-run \`bento install paperclip\`."
-    fi
-' || true
 
 # Install the hermes_local-plus plugin itself.
 hermes_local_pkg="@felipefontoura/paperclip-adapter-hermes-local-plus"
@@ -404,9 +370,50 @@ fs.writeFileSync(path, JSON.stringify(next, null, 2));
 console.log('[paperclip] adapter-plugins.json updated with ' + entry.type);
 NODEJS
 
-# Force a service restart so paperclip's plugin loader sees the new entry.
-# `service update --force` is idempotent and respects the rolling update
-# config from the compose (start-first + rollback on failure).
+# Cross-stack mounts come AFTER plugin installs — each graft fires a
+# rolling restart of paperclip_paperclip, and a `docker exec` racing
+# that restart returns "container is not running". Plugins write into
+# the paperclip-data volume and don't depend on the mounts existing at
+# install time; the mounts only matter at wake time.
+graft_external_volume_to_service \
+    paperclip_paperclip \
+    hermes_hermes-bin \
+    /opt/hermes \
+    readonly
+
+graft_external_volume_to_service \
+    paperclip_paperclip \
+    hermes_hermes-data \
+    /opt/hermes-shared \
+    readonly
+
+# Wait for the service to settle after the grafts before exec'ing again.
+wait_for_service paperclip_paperclip 120 || true
+
+# Re-locate the container (it may have a new ID after the rolling restart).
+cid=$(_find_container 'paperclip_paperclip')
+
+# Symlink config.yaml + auth.json from the hermes-shared mount.
+if [[ -n "$cid" ]]; then
+    sudo docker exec -u node "$cid" sh -c '
+        mkdir -p /paperclip/.hermes
+        if [ -d /opt/hermes-shared ]; then
+            if [ -f /paperclip/.hermes/config.yaml ] && [ ! -L /paperclip/.hermes/config.yaml ]; then
+                mv /paperclip/.hermes/config.yaml "/paperclip/.hermes/config.yaml.local-backup-$(date +%s)"
+            fi
+            if [ -f /paperclip/.hermes/auth.json ] && [ ! -L /paperclip/.hermes/auth.json ]; then
+                mv /paperclip/.hermes/auth.json "/paperclip/.hermes/auth.json.local-backup-$(date +%s)"
+            fi
+            ln -sfn /opt/hermes-shared/config.yaml /paperclip/.hermes/config.yaml
+            ln -sfn /opt/hermes-shared/auth.json   /paperclip/.hermes/auth.json
+            echo "[paperclip] hermes config.yaml + auth.json symlinked to shared mount."
+        else
+            echo "[paperclip] hermes-shared mount not present yet."
+        fi
+    ' || echo "[paperclip] symlink step skipped — container not exec-ready." >&2
+fi
+
+# Final force restart so paperclip's plugin loader sees adapter-plugins.json.
 sudo docker service update --force paperclip_paperclip >/dev/null 2>&1 || true
 
 # Two adapters registered: hermes_local (subprocess) + hermes_gateway (HTTP).
