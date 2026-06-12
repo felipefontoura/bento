@@ -23,6 +23,12 @@ services:
       # Listen on every interface inside the overlay network.
       - API_SERVER_HOST=0.0.0.0
 
+      # 0o755 lets the paperclip stack's cross-stack RO mount traverse
+      # /opt/data so its hermes_local plugin can read config.yaml + auth.json
+      # without chasing perms after every restart. Hermes itself respects
+      # this via hermes_cli/config.py (HERMES_HOME_MODE env hook).
+      - HERMES_HOME_MODE=0755
+
       # Internal port. Traefik fronts it on the public side.
       - API_SERVER_PORT=8642
 
