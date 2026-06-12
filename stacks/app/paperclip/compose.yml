@@ -124,7 +124,7 @@ x-paperclip-common: &paperclip-common
     - HERMES_URL=http://hermes:8642/v1
     - HERMES_API_KEY=${HERMES_API_KEY:-}
     # hermes_local plugin version. Blank skips its install.
-    - HERMES_LOCAL_PLUS_VERSION=${HERMES_LOCAL_PLUS_VERSION:-0.1.11}
+    - HERMES_LOCAL_PLUS_VERSION=${HERMES_LOCAL_PLUS_VERSION:-latest}
 
   deploy: &paperclip-deploy
     mode: replicated

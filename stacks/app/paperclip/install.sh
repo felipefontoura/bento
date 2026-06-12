@@ -310,7 +310,7 @@ sudo docker exec -u node "$cid" sh -c '
 
 # Install the hermes_local-plus plugin itself.
 hermes_local_pkg="@felipefontoura/paperclip-adapter-hermes-local-plus"
-hermes_local_version="${HERMES_LOCAL_PLUS_VERSION:-0.1.11}"
+hermes_local_version="${HERMES_LOCAL_PLUS_VERSION:-latest}"
 hermes_local_dir="/paperclip/adapter-plugins/hermes-local-plus-${hermes_local_version}"
 
 echo "Installing Paperclip adapter ${hermes_local_pkg}@${hermes_local_version}…"
