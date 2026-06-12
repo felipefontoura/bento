@@ -311,39 +311,117 @@ portainer_get_stack() {
     portainer_curl -fsS "${base}/api/stacks/${stack_id}" -H "$auth"
 }
 
-# Redeploy a Git-backed stack — pulls latest commit + new images.
+# Get the current StackFileContent (compose YAML) for one stack. The
+# standalone redeploy endpoint requires the body to round-trip the
+# existing compose file — omitting it makes Portainer wipe the stack
+# definition instead of just refreshing envs.
+portainer_get_stack_file() {
+    local stack_id="$1"
+    local base auth raw
+    base="$(portainer_local_url)"
+    auth="$(portainer_auth_header)" || return 1
+    raw=$(portainer_curl -fsS "${base}/api/stacks/${stack_id}/file" -H "$auth") || return 1
+    jq -r '.StackFileContent // empty' <<< "$raw"
+}
+
+# Redeploy a stack. Handles both git-backed (Type=2 / Swarm-from-git)
+# and standalone (Type=1) Portainer stacks transparently. The
+# discriminator is the live .GitConfig field, not .Type — stacks created
+# via /api/stacks/create/swarm/repository sometimes land with Type=1 and
+# GitConfig=null (issue #29 repro on Hetzner), so .Type alone misroutes
+# them to /git/redeploy, which silently no-ops the env update.
 portainer_redeploy_stack() {
     local stack_id="$1"
+    # Default `[]` is preserved for the git-backed branch (which ignores
+    # env on /git/redeploy anyway). The standalone branch refuses to
+    # proceed with an empty Env array — see below — because the PUT
+    # endpoint replaces, rather than merges, envs.
     local env_json="${2:-[]}"
-    local base auth endpoint_id body http_code
+    local base auth endpoint_id body http_code meta git_backed
     base="$(portainer_local_url)"
     auth="$(portainer_auth_header)" || return 1
     endpoint_id="$(portainer_endpoint_id)" || return 1
 
-    body=$(jq -n --argjson env "$env_json" \
-        '{env: $env, prune: false, pullImage: true}')
+    meta=$(portainer_get_stack "$stack_id") || {
+        echo "Portainer redeploy: stack #${stack_id} not reachable." >&2
+        return 1
+    }
+    if [[ -z "$meta" || "$(jq -r 'type' <<< "$meta" 2>/dev/null)" != "object" ]]; then
+        echo "Portainer redeploy: stack #${stack_id} returned no metadata." >&2
+        return 1
+    fi
+    git_backed=$(jq -r '(.GitConfig // null) != null' <<< "$meta")
 
     local resp
     resp=$(mktemp)
     # shellcheck disable=SC2064
     trap "rm -f '$resp'" RETURN
 
-    http_code=$(portainer_curl -o "$resp" -w '%{http_code}' \
-        -X PUT "${base}/api/stacks/${stack_id}/git/redeploy?endpointId=${endpoint_id}" \
-        -H "$auth" \
-        -H 'Content-Type: application/json' \
-        -d "$body")
-    export BENTO_LAST_PORTAINER_HTTP_CODE="$http_code"
+    if [[ "$git_backed" == "true" ]]; then
+        # Portainer is case-sensitive — env, not Env, on /git/redeploy. Do not normalize.
+        body=$(jq -n --argjson env "$env_json" \
+            '{env: $env, prune: false, pullImage: true}')
 
-    if [[ "$http_code" =~ ^(401|403)$ ]]; then
-        portainer_invalidate_token
-        auth="$(portainer_auth_header)"
         http_code=$(portainer_curl -o "$resp" -w '%{http_code}' \
             -X PUT "${base}/api/stacks/${stack_id}/git/redeploy?endpointId=${endpoint_id}" \
             -H "$auth" \
             -H 'Content-Type: application/json' \
             -d "$body")
         export BENTO_LAST_PORTAINER_HTTP_CODE="$http_code"
+
+        if [[ "$http_code" =~ ^(401|403)$ ]]; then
+            portainer_invalidate_token
+            auth="$(portainer_auth_header)"
+            http_code=$(portainer_curl -o "$resp" -w '%{http_code}' \
+                -X PUT "${base}/api/stacks/${stack_id}/git/redeploy?endpointId=${endpoint_id}" \
+                -H "$auth" \
+                -H 'Content-Type: application/json' \
+                -d "$body")
+            export BENTO_LAST_PORTAINER_HTTP_CODE="$http_code"
+        fi
+    else
+        # Standalone path. Refuse to PUT with an empty Env — the endpoint
+        # replaces (not merges) the stack env, so [] would wipe every
+        # value. Callers that genuinely want a redeploy without env
+        # changes should pass back the stack's current .Env array.
+        if [[ "$(jq -r 'length' <<< "$env_json" 2>/dev/null)" == "0" ]]; then
+            echo "Portainer redeploy: refusing to PUT standalone stack #${stack_id} with empty Env (would clear all values)." >&2
+            return 1
+        fi
+
+        local stack_file
+        stack_file=$(portainer_get_stack_file "$stack_id") || {
+            echo "Portainer redeploy: failed to fetch StackFileContent for stack #${stack_id}." >&2
+            return 1
+        }
+        if [[ -z "$stack_file" ]]; then
+            echo "Portainer redeploy: empty StackFileContent for stack #${stack_id} — refusing to PUT." >&2
+            return 1
+        fi
+
+        # Portainer is case-sensitive — Env/StackFileContent/Prune/PullImage on the standalone PUT. Do not normalize.
+        body=$(jq -n \
+            --arg content "$stack_file" \
+            --argjson env "$env_json" \
+            '{StackFileContent: $content, Env: $env, Prune: false, PullImage: true}')
+
+        http_code=$(portainer_curl -o "$resp" -w '%{http_code}' \
+            -X PUT "${base}/api/stacks/${stack_id}?endpointId=${endpoint_id}" \
+            -H "$auth" \
+            -H 'Content-Type: application/json' \
+            -d "$body")
+        export BENTO_LAST_PORTAINER_HTTP_CODE="$http_code"
+
+        if [[ "$http_code" =~ ^(401|403)$ ]]; then
+            portainer_invalidate_token
+            auth="$(portainer_auth_header)"
+            http_code=$(portainer_curl -o "$resp" -w '%{http_code}' \
+                -X PUT "${base}/api/stacks/${stack_id}?endpointId=${endpoint_id}" \
+                -H "$auth" \
+                -H 'Content-Type: application/json' \
+                -d "$body")
+            export BENTO_LAST_PORTAINER_HTTP_CODE="$http_code"
+        fi
     fi
 
     if [[ "$http_code" != "200" ]]; then

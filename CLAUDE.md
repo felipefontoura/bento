@@ -89,7 +89,7 @@ install.sh
     ├── lib/ui.sh      gum wrappers + bento color palette + ui_input_validated
     ├── lib/hardening.sh  copied from felipefontoura/ubinkaze
     ├── lib/infra.sh   swarm init, network, deploy Traefik + Portainer, init admin
-    ├── lib/portainer.sh  REST client (auth + stacks CRUD + git redeploy + JWT retry)
+    ├── lib/portainer.sh  REST client (auth + stacks CRUD + redeploy (git + standalone) + JWT retry)
     ├── lib/stacks.sh  manifest discovery + env resolution + memory budget + deploy via API
     ├── lib/report.sh  generates handoff HTML at end of Step 3 / on demand
     ├── lib/install-helpers.sh  helpers used by per-stack install.sh scripts
