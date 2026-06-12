@@ -77,15 +77,18 @@ echo "Installing Paperclip adapter ${pkg}@${version}…"
 # warning/error that --silent swallows when npm "succeeds" with an empty
 # node_modules (the failure mode that left Paperclip silently loading
 # the upstream built-in hermes_local instead of our override).
-sudo docker exec -u node "$cid" sh -c "
+install_ok=0
+if sudo docker exec -u node "$cid" sh -c "
     set -e
     mkdir -p '${base}' && cd '${base}'
     npm install --no-save --no-progress --loglevel=error '${pkg}@${version}'
-    test -f '${dir}/dist/index.js'  # explicit guard against the empty-node_modules failure
-" && sudo docker exec -u node -i "$cid" node - <<NODEJS || {
-    echo "[paperclip] ${pkg} install failed — dist/index.js missing. Paperclip will fall back" >&2
-    echo "[paperclip] to the built-in hermes_local. Re-run install to retry." >&2
-}
+    test -f '${dir}/dist/index.js'
+"; then
+    install_ok=1
+fi
+
+if (( install_ok )); then
+    sudo docker exec -u node -i "$cid" node - <<NODEJS || true
 const fs = require('fs');
 const path = '/paperclip/adapter-plugins.json';
 const entry = { packageName: '${dir}', localPath: '${dir}', version: '${version}', type: 'hermes_local', installedAt: new Date().toISOString() };
@@ -98,6 +101,10 @@ try { current = JSON.parse(fs.readFileSync(path, 'utf8')); if (!Array.isArray(cu
 fs.writeFileSync(path, JSON.stringify(current.filter(p => p && p.type !== entry.type).concat(entry), null, 2));
 console.log('[paperclip] adapter-plugins.json updated with ' + entry.type);
 NODEJS
+else
+    echo "[paperclip] ${pkg} install failed — dist/index.js missing. Paperclip will fall" >&2
+    echo "[paperclip] back to the built-in hermes_local. Re-run install to retry." >&2
+fi
 
 # Cross-stack: hermes binary + data volume (RO) so the plugin can spawn
 # `hermes chat` reading the same config.yaml + auth.json the hermes
