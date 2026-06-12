@@ -111,15 +111,25 @@ _stacks_persist_env() {
     printf '%s' "$value"
 }
 
-# Look up <from_state_key> in any other deployed stack's envs first,
-# then in the bootstrap block. Echo the first non-empty match, or
-# nothing on miss.
+# Look up <from_state_key> across all bento-managed state slots. Echo the
+# first non-empty match, or nothing on miss. Search order:
+#   1. state.providers[$key]  — ambient AI-provider tokens (bento-auth)
+#   2. state.envs[any][$key]  — another stack's resolved env
+#   3. state.bootstrap[$key]  — host-wide bootstrap field
+#
+# state.providers wins because it's the canonical home for provider tokens
+# now that bento-auth writes there. A stack declaring `from_state: ZAI_API_KEY`
+# expects the ambient token to flow in without having to know which other
+# stack happens to have a copy of it.
 _stacks_lookup_from_state() {
     local from_state="$1"
     local sourced
-    sourced=$(jq -r --arg fs "$from_state" \
-        '[.envs // {} | .[]? | .[$fs] // empty] | map(select(. != null and . != "")) | first // ""' \
-        "$BENTO_STATE_FILE" 2>/dev/null)
+    sourced="$(state_get ".providers.$from_state")"
+    if [[ -z "$sourced" ]]; then
+        sourced=$(jq -r --arg fs "$from_state" \
+            '[.envs // {} | .[]? | .[$fs] // empty] | map(select(. != null and . != "")) | first // ""' \
+            "$BENTO_STATE_FILE" 2>/dev/null)
+    fi
     [[ -z "$sourced" ]] && sourced="$(state_get ".bootstrap.$from_state")"
     printf '%s' "$sourced"
 }
