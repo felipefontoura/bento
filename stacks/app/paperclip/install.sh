@@ -412,27 +412,4 @@ NODEJS
 # config from the compose (start-first + rollback on failure).
 sudo docker service update --force paperclip_paperclip >/dev/null 2>&1 || true
 
-# -----------------------------------------------------------------------------
-# Operator follow-up
-# -----------------------------------------------------------------------------
-#
-# Two adapters are now registered in Paperclip:
-#
-#   hermes_local   — subprocess wrapper, full Hermes CLI capabilities
-#                    (sessions, memory, tool loop, skills materialised as
-#                    symlinks). Zero per-agent config required — the
-#                    plugin reads ~/.hermes/config.yaml for provider
-#                    routing and picks /usr/local/bin/hermes-paperclip
-#                    automatically. Create an agent of type
-#                    "Hermes Agent (local)" and Run Heartbeat — that's it.
-#
-#   hermes_gateway — HTTP passthrough to the standalone `hermes` stack.
-#                    Use this for OpenAI-compatible workloads that
-#                    don't need the local subprocess. Each agent needs:
-#                      Environment variable HERMES_URL            = http://hermes:8642/v1
-#                      Environment variable HERMES_API_KEY        = ${HERMES_API_KEY}
-#                      Environment variable SKILLS_BRIDGE_URL     = http://paperclip-skills-bridge:8080
-#                      Environment variable SKILLS_BRIDGE_TOKEN   = ${BRIDGE_AUTH_TOKEN}
-#                    Both keys are in state.providers (printed by `bento status`).
-#
-# Pick whichever fits the workload; nothing breaks if you only use one.
+# Two adapters registered: hermes_local (subprocess) + hermes_gateway (HTTP).

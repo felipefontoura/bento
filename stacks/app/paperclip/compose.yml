@@ -3,11 +3,9 @@ x-paperclip-common: &paperclip-common
   # To add gemini / pi / grok, do it inside the running container with
   # `docker exec`, or fork this stack to extend the image.
   #
-  # Hermes is NOT a local CLI here — it's a separate stack (`hermes`)
-  # exposing an OpenAI-compatible HTTP gateway. Paperclip talks to it
-  # via the npm plugin `@felipefontoura/paperclip-adapter-hermes-gateway`
-  # which install.sh registers at deploy time. Skills are served to
-  # Hermes by the companion stack `paperclip-skills-bridge`.
+  # Hermes runs as a separate stack. paperclip integrates via two adapter
+  # plugins registered by install.sh: hermes_local (subprocess via cross-
+  # stack mount) and hermes_gateway (HTTP passthrough).
   image: ghcr.io/paperclipai/paperclip:latest
   networks:
     - network_public
@@ -122,32 +120,10 @@ x-paperclip-common: &paperclip-common
     #     adapter: openclaw_gateway
     #     URL:     ws://openclaw:18789
     #
-    # Hermes integrations — two flavours, registered side-by-side by
-    # this stack's install.sh:
-    #
-    # 1. hermes_local — subprocess. Hermes binary is copied into the
-    #    paperclip-data volume from the same nousresearch image the
-    #    `hermes` stack uses. The plugin
-    #    (@felipefontoura/paperclip-adapter-hermes-local-plus) spawns
-    #    `hermes chat` directly through the wrapper at
-    #    /usr/local/bin/hermes-paperclip. Full Hermes capabilities
-    #    (sessions, memory, tool loop, skills as symlinks). Zero
-    #    per-agent config required.
-    #
-    # 2. hermes_gateway — HTTP passthrough to the standalone `hermes`
-    #    stack (npm package paperclip-adapter-hermes-gateway). Reads its
-    #    endpoint + credentials from the four env vars below before
-    #    falling back to per-agent UI fields, so an operator who
-    #    deploys `hermes` + `paperclip-skills-bridge` can create a
-    #    Hermes Gateway agent with every adapter field left blank.
+    # hermes_gateway adapter — falls back to per-agent UI when blank.
     - HERMES_URL=http://hermes:8642/v1
     - HERMES_API_KEY=${HERMES_API_KEY:-}
-    - SKILLS_BRIDGE_URL=http://paperclip-skills-bridge:8080
-    - SKILLS_BRIDGE_TOKEN=${BRIDGE_AUTH_TOKEN:-}
-    #
-    # Version of the hermes-local-plus plugin to install. Bump this
-    # when a new release lands on npm. Set to "" to skip the plugin
-    # install and rely solely on hermes_gateway.
+    # hermes_local plugin version. Blank skips its install.
     - HERMES_LOCAL_PLUS_VERSION=${HERMES_LOCAL_PLUS_VERSION:-0.1.11}
 
   deploy: &paperclip-deploy
