@@ -698,12 +698,21 @@ unattended_step3() {
     # Pre-populate "seen" with stacks bento has already successfully
     # deployed (state.stacks.<key>.stack_id present), so re-running with
     # a wider BENTO_APPS list only deploys the new ones.
+    #
+    # BENTO_FORCE_REDEPLOY=1 skips the pre-population so every stack in
+    # BENTO_APPS goes through stacks_deploy again. Use this after rotating
+    # state.providers (added a new provider token, refreshed an expired one):
+    # the deploy will redeploy the stack via Portainer's git/redeploy PUT and
+    # then re-run its install.sh with the updated env in scope, so any rendered
+    # config (e.g. hermes /opt/data/config.yaml) picks up the new value.
     local seen=()
     local failed=()
-    while IFS= read -r _existing; do
-        [[ -n "$_existing" ]] && seen+=("$_existing")
-    done < <(jq -r '.stacks // {} | to_entries[] | select(.value.stack_id) | .key' \
-        "$BENTO_STATE_FILE" 2>/dev/null)
+    if [[ "${BENTO_FORCE_REDEPLOY:-0}" != "1" ]]; then
+        while IFS= read -r _existing; do
+            [[ -n "$_existing" ]] && seen+=("$_existing")
+        done < <(jq -r '.stacks // {} | to_entries[] | select(.value.stack_id) | .key' \
+            "$BENTO_STATE_FILE" 2>/dev/null)
+    fi
 
     local app
     for app in "${apps[@]}"; do

@@ -412,15 +412,27 @@ stacks_deploy() {
         fi
     fi
 
-    local env_payload stack_id
+    local env_payload stack_id existing_id
     env_payload="$(stacks_build_env_payload "$stack_key" "$manifest_path")" || return 1
 
-    stack_id=$(portainer_create_stack_from_git \
-        "$stack_name" \
-        "$compose_path" \
-        "$env_payload" \
-        "$BENTO_REPO_URL" \
-        "$BENTO_REPO_REF") || return 1
+    # Idempotent deploy: when state already records a stack_id for this key,
+    # the stack exists in Portainer — re-create would 409. Use the git/redeploy
+    # PUT to refresh env + pull the latest image while keeping the same stack
+    # record. Callers that want a refresh after state.providers changed (new
+    # token registered post-install) get the env propagated this way.
+    existing_id="$(state_get ".stacks[\"$stack_key\"].stack_id" 2>/dev/null)"
+    if [[ -n "$existing_id" && "$existing_id" != "null" ]]; then
+        ui_info "$stack_key already deployed as Portainer stack #$existing_id — redeploying."
+        portainer_redeploy_stack "$existing_id" "$env_payload" || return 1
+        stack_id="$existing_id"
+    else
+        stack_id=$(portainer_create_stack_from_git \
+            "$stack_name" \
+            "$compose_path" \
+            "$env_payload" \
+            "$BENTO_REPO_URL" \
+            "$BENTO_REPO_REF") || return 1
+    fi
 
     state_set ".stacks[\"$stack_key\"].stack_id" "$stack_id"
     state_set ".stacks[\"$stack_key\"].deployed_ref" "$(git -C "$BENTO_REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
