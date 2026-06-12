@@ -1,7 +1,7 @@
 {
   "name": "hermes",
   "category": "app",
-  "description": "Hermes Agent as an OpenAI-compatible HTTP gateway (gateway run + API_SERVER_*). Consumed by Paperclip via the npm package @felipefontoura/paperclip-adapter-hermes-gateway. Skills exposed through the paperclip-skills-bridge stack.",
+  "description": "Hermes Agent — exposes an OpenAI-compatible HTTP gateway on :8642 plus a hermes-bin volume that the paperclip stack mounts cross-stack to spawn the Hermes CLI from the hermes_local adapter plugin (@felipefontoura/paperclip-adapter-hermes-local-plus).",
   "depends_on": [],
   "env": [
     { "name": "HERMES_HOST",        "default": "hermes.${BASE_DOMAIN}", "prompt": "Hermes gateway hostname" },

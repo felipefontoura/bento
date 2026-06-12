@@ -86,9 +86,10 @@ model:
   provider: zai-coding-plan
 
 # -----------------------------------------------------------------------------
-# Skills — left empty here on purpose. The Paperclip adapter injects each
-# skill's URL into the system prompt at wake time (see the companion stack
-# `paperclip-skills-bridge`), so Hermes' own well-known scanner stays off.
+# Skills — left empty here on purpose. The Paperclip hermes_local adapter
+# plugin (@felipefontoura/paperclip-adapter-hermes-local-plus) materializes
+# each Paperclip-managed skill as a symlink under ~/.hermes/skills/ at wake
+# time, so Hermes' own well-known scanner stays off.
 # -----------------------------------------------------------------------------
 
 skills:
