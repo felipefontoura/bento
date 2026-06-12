@@ -73,9 +73,19 @@ base="/paperclip/adapter-plugins/hermes-local-${version}"
 dir="${base}/node_modules/${pkg}"
 
 echo "Installing Paperclip adapter ${pkg}@${version}…"
+# --loglevel=error keeps the install quiet on success but surfaces the
+# warning/error that --silent swallows when npm "succeeds" with an empty
+# node_modules (the failure mode that left Paperclip silently loading
+# the upstream built-in hermes_local instead of our override).
 sudo docker exec -u node "$cid" sh -c "
-    mkdir -p '${base}' && cd '${base}' && npm install --no-save --silent '${pkg}@${version}'
-" && sudo docker exec -u node -i "$cid" node - <<NODEJS || true
+    set -e
+    mkdir -p '${base}' && cd '${base}'
+    npm install --no-save --no-progress --loglevel=error '${pkg}@${version}'
+    test -f '${dir}/dist/index.js'  # explicit guard against the empty-node_modules failure
+" && sudo docker exec -u node -i "$cid" node - <<NODEJS || {
+    echo "[paperclip] ${pkg} install failed — dist/index.js missing. Paperclip will fall back" >&2
+    echo "[paperclip] to the built-in hermes_local. Re-run install to retry." >&2
+}
 const fs = require('fs');
 const path = '/paperclip/adapter-plugins.json';
 const entry = { packageName: '${dir}', localPath: '${dir}', version: '${version}', type: 'hermes_local', installedAt: new Date().toISOString() };
