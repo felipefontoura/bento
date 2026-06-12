@@ -79,13 +79,13 @@ sudo docker exec -u node "$cid" sh -c "
 const fs = require('fs');
 const path = '/paperclip/adapter-plugins.json';
 const entry = { packageName: '${dir}', localPath: '${dir}', version: '${version}', type: 'hermes_local', installedAt: new Date().toISOString() };
-// Strip stale entries before appending the fresh one:
-//   - hermes_local       — the prior plugin install (we replace with the new version)
-//   - hermes_gateway     — deprecated, leaks in from older installs
-const STALE = new Set(['hermes_local', 'hermes_gateway']);
+// Replace the prior hermes_local entry (if any) so re-installs don't
+// stack duplicate entries with the same type. Paperclip's plugin loader
+// gives the JSON entry precedence over the built-in hermes_local, so a
+// single entry here is the override.
 let current = [];
 try { current = JSON.parse(fs.readFileSync(path, 'utf8')); if (!Array.isArray(current)) current = []; } catch (_) {}
-fs.writeFileSync(path, JSON.stringify(current.filter(p => p && !STALE.has(p.type)).concat(entry), null, 2));
+fs.writeFileSync(path, JSON.stringify(current.filter(p => p && p.type !== entry.type).concat(entry), null, 2));
 console.log('[paperclip] adapter-plugins.json updated with ' + entry.type);
 NODEJS
 
