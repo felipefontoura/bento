@@ -242,37 +242,8 @@ fi
 # Adapter registry path used by every plugin install block below.
 adapter_registry="/paperclip/adapter-plugins.json"
 
-# Install the wrapper script that exports HERMES_DOCKER_EXEC_AS_ROOT=1.
-# Hermes' shim refuses to run as root without that env, and the
-# paperclip container runs as root inside (then drops privileges to
-# node via entrypoint). The wrapper goes at /usr/local/bin so the
-# plugin's HERMES_CLI_DEFAULT picks it up without any UI field. The
-# wrapper exec's /opt/hermes/bin/hermes — which only exists when the
-# hermes_hermes-bin graft above succeeded. Without the graft, the
-# wrapper fails the moment the plugin tries to spawn `hermes chat`,
-# and the failure shows up on the Run page with a clear message.
-if ! sudo docker exec "$cid" test -x /usr/local/bin/hermes-paperclip; then
-    sudo docker exec -u root "$cid" sh -c '
-        cat > /usr/local/bin/hermes-paperclip <<'\''WRAPPER'\''
-#!/bin/bash
-# Installed by bento stacks/app/paperclip/install.sh — Sprint #191.
-# Spawns the Hermes CLI from the hermes-stack hermes-bin volume mounted
-# at /opt/hermes via graft_external_volume_to_service. Fails clearly
-# when the hermes stack is not deployed.
-export HERMES_DOCKER_EXEC_AS_ROOT=1
-if [ ! -x /opt/hermes/bin/hermes ]; then
-    echo "[hermes-paperclip] /opt/hermes/bin/hermes not found. Deploy the hermes stack and re-run \`bento install paperclip\` to wire the cross-stack mount." >&2
-    exit 127
-fi
-exec /opt/hermes/bin/hermes "$@"
-WRAPPER
-        chmod +x /usr/local/bin/hermes-paperclip
-        cp /usr/local/bin/hermes-paperclip /usr/local/bin/hermes
-        chmod +x /usr/local/bin/hermes
-    ' || {
-        echo "[paperclip] failed to install hermes wrapper — set Command in the UI manually." >&2
-    }
-fi
+# HERMES_DOCKER_EXEC_AS_ROOT=1 + PATH are set in compose.yml — no wrapper
+# script needed (it didn't survive service updates anyway).
 
 # Install the hermes_local-plus plugin itself.
 hermes_local_pkg="@felipefontoura/paperclip-adapter-hermes-local-plus"

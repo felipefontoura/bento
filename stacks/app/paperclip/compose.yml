@@ -125,6 +125,13 @@ x-paperclip-common: &paperclip-common
     - HERMES_API_KEY=${HERMES_API_KEY:-}
     # hermes_local plugin version. Blank skips its install.
     - HERMES_LOCAL_PLUS_VERSION=${HERMES_LOCAL_PLUS_VERSION:-latest}
+    # Lets Hermes' shim run as root inside this container (paperclip drops
+    # to `node` but Hermes still checks geteuid). Plugin no longer needs
+    # a wrapper script.
+    - HERMES_DOCKER_EXEC_AS_ROOT=1
+    # Cross-stack mount target /opt/hermes/bin on PATH so plugin's fallback
+    # `hermes` resolves without any /usr/local/bin script.
+    - PATH=/opt/hermes/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
   deploy: &paperclip-deploy
     mode: replicated
