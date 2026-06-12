@@ -439,7 +439,16 @@ stacks_deploy() {
         # Export every env resolved for THIS stack so install.sh can read
         # CHATWOOT_HOST, *_SECRET_KEY_BASE, etc. without cracking open
         # state.json itself. POSTGRES_PASSWORD is always available.
+        #
+        # Order: ambient state.providers first, then stack-specific envs.
+        # When both sets define the same key, the later one wins, so a
+        # per-stack override in state.envs[stack_key] beats the ambient
+        # default in state.providers — matches the precedence used when
+        # we build the Portainer env payload (stacks_build_env_payload).
         local stack_env_assigns=()
+        while IFS= read -r kv; do
+            [[ -n "$kv" ]] && stack_env_assigns+=("$kv")
+        done < <(jq -r '.providers // {} | to_entries[] | "\(.key)=\(.value)"' "$BENTO_STATE_FILE")
         while IFS= read -r kv; do
             [[ -n "$kv" ]] && stack_env_assigns+=("$kv")
         done < <(jq -r ".envs[\"$stack_key\"] // {} | to_entries[] | \"\(.key)=\(.value)\"" "$BENTO_STATE_FILE")
