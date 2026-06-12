@@ -160,6 +160,15 @@ x-paperclip-common: &paperclip-common
 services:
   paperclip:
     <<: *paperclip-common
+    # Run as node user (uid 1000) with hermes group (gid 10000) as the
+    # primary group. The hermes stack writes config.yaml + state.db as
+    # hermes:hermes 0640 — group-readable. Making 10000 the primary group
+    # of this service lets paperclip's node user traverse the cross-stack
+    # RO mount of /opt/data without any chmod-after dance. node still owns
+    # paperclip-data, so reads/writes to existing files keep working; new
+    # files land with group 10000, which is harmless inside the volume.
+    # Swarm rejects `group_add`, so this is the cleanest available knob.
+    user: "1000:10000"
     # Wait for postgres to accept TCP before launching the node server.
     # Swarm does NOT honor the `depends_on: condition: service_healthy`
     # form that the upstream docker-compose.yml uses — only the basic

@@ -50,13 +50,14 @@ rendered=$(
         envsubst < "$template_path"
 )
 
-# config.yaml needs world-read so paperclip's cross-stack RO mount can
-# read it. /opt/data perms come from HERMES_HOME_MODE (set in compose.yml).
+# Write config.yaml owned by hermes:hermes. The default mode (0640 on
+# subsequent atomic_yaml_write passes by the daemon) is fine — paperclip
+# reads via the group_add: ["10000"] in its compose.yml, so any file
+# group-readable by the hermes group is visible to paperclip's node user.
 sudo docker exec -i -u root "$cid" sh -c '
     mkdir -p /opt/data
     cat > /opt/data/config.yaml
     chown -R hermes:hermes /opt/data 2>/dev/null || true
-    chmod 644 /opt/data/config.yaml
 ' <<< "$rendered"
 
 # Reload — Hermes' gateway reads config.yaml on SIGHUP. If that fails (older
@@ -65,23 +66,6 @@ if ! sudo docker exec "$cid" sh -c 'kill -HUP 1' 2>/dev/null; then
     echo "hermes didn't accept SIGHUP — forcing service restart to reload config." >&2
     sudo docker service update --force hermes_hermes >/dev/null
 fi
-
-# After the SIGHUP, the daemon may re-write config.yaml in-place (schema
-# upgrade since v0.16.0 — provider list grew, api_key field stays). The
-# rewrite drops mode back to 0640, which breaks the paperclip stack's RO
-# bind mount: paperclip's `node` user (uid 10000, different group than
-# hermes) can't traverse a 0640 file owned by a foreign uid/gid. Sleep
-# briefly so the rewrite finishes, then re-open. state.db follows the
-# same pattern (the pooled-credentials store the paperclip-spawned hermes
-# CLI reads via the same mount).
-sleep 3
-# Re-find the container — `docker service update --force` above would have
-# replaced the task entirely; the cid we cached is stale in that branch.
-cid=$(_find_container 'hermes_hermes')
-sudo docker exec -u root "$cid" sh -c '
-    chmod 644 /opt/data/config.yaml 2>/dev/null || true
-    chmod 644 /opt/data/state.db /opt/data/state.db-shm /opt/data/state.db-wal 2>/dev/null || true
-'
 
 echo "hermes config.yaml rendered and reloaded."
 
