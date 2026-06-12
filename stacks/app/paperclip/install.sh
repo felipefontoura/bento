@@ -202,11 +202,6 @@ if [[ -n "$cid" && -f "$hermes_template" ]]; then
     )
     sudo docker exec -i -u node "$cid" sh -c '
         mkdir -p /paperclip/.hermes
-        # Earlier deploys symlinked these into /opt/hermes-shared. Remove
-        # any leftover symlink so the write hits a real file instead of
-        # following a dangling target.
-        [ -L /paperclip/.hermes/config.yaml ] && rm -f /paperclip/.hermes/config.yaml
-        [ -L /paperclip/.hermes/auth.json   ] && rm -f /paperclip/.hermes/auth.json
         cat > /paperclip/.hermes/config.yaml
     ' <<< "$rendered"
     echo "[paperclip] hermes config.yaml rendered at /paperclip/.hermes/."
