@@ -129,8 +129,15 @@ x-paperclip-common: &paperclip-common
     # to `node` but Hermes still checks geteuid). Plugin no longer needs
     # a wrapper script.
     - HERMES_DOCKER_EXEC_AS_ROOT=1
-    # Cross-stack mount target /opt/hermes/bin on PATH so plugin's fallback
-    # `hermes` resolves without any /usr/local/bin script.
+    # Hermes CLI path consumed by the plugin (v0.1.15+). Declaring it here
+    # makes the bento the source of truth for the binary location: if the
+    # mount target ever changes, edit this line — no plugin republish needed.
+    # The plugin falls back to /opt/hermes/bin/hermes if unset, so this is
+    # belt-and-suspenders today.
+    - PAPERCLIP_HERMES_CLI=/opt/hermes/bin/hermes
+    # Same path on PATH so an operator who opens a shell in the container
+    # can type `hermes` plain — convenience only, plugin uses the absolute
+    # path above.
     - PATH=/opt/hermes/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
   deploy: &paperclip-deploy
