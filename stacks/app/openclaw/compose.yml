@@ -1,28 +1,29 @@
 # =============================================================================
-# Openclaw — chat-channel → LLM gateway with OpenAI-compatible API
+# Openclaw — personal AI assistant with a web Control UI
 # =============================================================================
 #
-# Overlay-only TOTAL. There is no Traefik route and no host port — both:
+# Beginner-first: everything is done in the browser, no terminal.
 #
-#   - Port 18789 (Control UI + /healthz + opt-in /v1/chat/completions)
-#   - Bundled SQLite, OAuth secrets, channel adapters
+#   1. bento exposes the Control UI via Traefik at https://${OPENCLAW_HOST}
+#      (single router → container port 18789; the WebSocket upgrade is
+#      proxied natively). The gateway token gates the WS handshake.
+#   2. The operator signs in to a provider straight from the UI — "sign in
+#      with ChatGPT" / "sign in with Claude" uses their SUBSCRIPTION via
+#      OAuth (no API key, flat fee). The OAuth profile persists in the
+#      openclaw-oauth volume. The CLI login (`openclaw models auth login`)
+#      needs an interactive TTY and fails over SSH, so the Control UI is the
+#      only terminal-free path — which is why bento exposes it.
+#   3. Channels: Telegram is the easy default — create a bot with @BotFather
+#      and paste the token (TELEGRAM_BOT_TOKEN below, or in the Control UI).
+#      No Meta business verification, unlike WhatsApp.
 #
-# live entirely on `network_public` and can only be reached by other
-# overlay containers. The companion bridge service (next bento batch) speaks
-# OpenAI-compatible chat completions against `http://openclaw:18789/v1/...`,
-# exactly the same shape it uses against Hermes.
-#
-# One-time operator setup happens via either:
-#
-#   docker exec -it $(docker ps -q -f name=openclaw_openclaw) sh
-#
-# for in-container config, or a temporary SSH tunnel for the Control UI:
-#
-#   ssh -L 18789:127.0.0.1:18789 user@vps
-#
-# The OpenAI-compatible /v1/* endpoint is OFF until install.sh writes the
-# 5-line JSON5 config and forces a service restart — there is no upstream
-# env var equivalent.
+# The OpenAI-compatible /v1/chat/completions endpoint stays enabled for
+# overlay consumers — paperclip's openclaw_gateway adapter talks to
+# `http://openclaw:18789/v1/...` over network_public, the same shape it uses
+# against Hermes. install.sh writes the JSON5 that enables both the Control
+# UI and /v1 (no upstream env equivalent for those flags) and pins
+# controlUi.allowedOrigins to the public host so the browser WS upgrade is
+# accepted.
 #
 # Gotcha: `host.docker.internal` is broken under Swarm overlay. If you point
 # Openclaw at a local LM Studio / Ollama, use the VPS host's private IP or a
@@ -72,10 +73,14 @@ services:
       # - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
 
       # =============================================================================
-      # Chat channels (commented — bring your own tokens)
+      # Chat channels — Telegram is the easy beginner default
       # =============================================================================
+      # Telegram needs only a bot token from @BotFather — no Meta business
+      # verification or WhatsApp Business API approval. Leave blank to skip
+      # and connect later from the Control UI. Slack/Discord stay commented;
+      # bring your own tokens or wire them in the UI.
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
 
-      # - TELEGRAM_BOT_TOKEN=
       # - SLACK_BOT_TOKEN=
       # - SLACK_APP_TOKEN=
       # - DISCORD_BOT_TOKEN=
@@ -100,6 +105,14 @@ services:
           cpus: "1.0"
           memory: 1024M
       labels:
+        - traefik.enable=true
+        - traefik.http.routers.openclaw.rule=Host(`${OPENCLAW_HOST}`)
+        - traefik.http.routers.openclaw.entrypoints=websecure
+        - traefik.http.routers.openclaw.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.openclaw.priority=2
+        - traefik.http.routers.openclaw.service=openclaw
+        - traefik.http.services.openclaw.loadbalancer.server.port=18789
+        - traefik.http.services.openclaw.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
         - BENTO_STACK_KEY=openclaw
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
