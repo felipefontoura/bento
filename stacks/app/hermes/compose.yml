@@ -94,6 +94,22 @@ services:
         - traefik.http.routers.hermes-dashboard.middlewares=hermes-auth
         - traefik.http.services.hermes-dashboard.loadbalancer.server.port=9119
         - traefik.http.services.hermes-dashboard.loadbalancer.passHostHeader=true
+        # --- Dashboard WebSocket route (NO basicauth; SPA-token in `?token=`) ---
+        # Chrome does NOT forward cached basic-auth credentials on a WebSocket
+        # upgrade, so a single basicauth-gated router 401s every WS the SPA
+        # tries to open (/api/ws, /api/events, /api/pty, /api/pub) and the
+        # Chat/Logs/Cron pages hang on a perpetual "connecting…" or close with
+        # 1006. These endpoints already require `?token=<_SESSION_TOKEN>` —
+        # the same token only obtainable by loading the HTML through the
+        # basicauth gate above — so the layered model holds: basicauth keeps
+        # outsiders from ever discovering the token, the token enforces auth on
+        # the WS upgrade. Higher priority so it wins the longest-prefix race
+        # against hermes-dashboard.
+        - traefik.http.routers.hermes-ws.rule=Host(`${HERMES_HOST}`) && (PathPrefix(`/api/ws`) || PathPrefix(`/api/events`) || PathPrefix(`/api/pty`) || PathPrefix(`/api/pub`))
+        - traefik.http.routers.hermes-ws.entrypoints=websecure
+        - traefik.http.routers.hermes-ws.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.hermes-ws.priority=10
+        - traefik.http.routers.hermes-ws.service=hermes-dashboard
         # --- API gateway route (Bearer auth via API_SERVER_KEY, native) ---
         - traefik.http.routers.hermes-api.rule=Host(`${HERMES_API_HOST}`)
         - traefik.http.routers.hermes-api.entrypoints=websecure
