@@ -259,13 +259,14 @@ auth_state_providers_unset() {
 # alternative is forcing every stack to read the credentials JSON on
 # every request, which not every stack supports.
 #
-# Optional second arg: env var name to --env-rm BEFORE the adds. Used
-# when the operator switches between OAuth (CLAUDE_CODE_OAUTH_TOKEN) and
-# API key (ANTHROPIC_API_KEY) for the same provider — the old var has
-# to go AWAY before the new one lands or Hermes hits the dual-header
+# Optional args: one or more env var names to --env-rm BEFORE the adds.
+# Used when vacating a provider slot — e.g. switching Anthropic OAuth
+# (CLAUDE_CODE_OAUTH_TOKEN) vs API key (ANTHROPIC_API_KEY), or clearing the
+# shared OpenAI slot (OPENAI_API_KEY + OPENAI_BASE_URL together) — the old
+# vars must go AWAY before the new ones land or Hermes hits the dual-header
 # trap during the brief overlap.
 auth_propagate_state_providers() {
-    local also_remove="${1:-}"
+    local also_remove=("$@")
     local services
     services=$(sudo docker service ls \
         --filter label=BENTO_MANAGED=true \
@@ -280,7 +281,13 @@ auth_propagate_state_providers() {
         add_args+=(--env-add "${provider_var}=${provider_val}")
     done < <(jq -r '.providers // {} | to_entries[] | "\(.key)\t\(.value)"' "$BENTO_STATE_FILE")
 
-    if [[ ${#add_args[@]} -eq 0 && -z "$also_remove" ]]; then
+    # Build the --env-rm list once (same for every service).
+    local remove_args=() rm_var
+    for rm_var in "${also_remove[@]}"; do
+        [[ -n "$rm_var" ]] && remove_args+=(--env-rm "$rm_var")
+    done
+
+    if [[ ${#add_args[@]} -eq 0 && ${#remove_args[@]} -eq 0 ]]; then
         return 0
     fi
 
@@ -304,10 +311,6 @@ auth_propagate_state_providers() {
             [[ -z "$has_env" ]] && continue
         fi
 
-        local remove_args=()
-        if [[ -n "$also_remove" ]]; then
-            remove_args+=(--env-rm "$also_remove")
-        fi
         sudo docker service update \
             "${remove_args[@]}" \
             "${add_args[@]}" \

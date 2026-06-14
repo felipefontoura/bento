@@ -1,19 +1,19 @@
 {
-  "_comment": "Data-driven catalog of API-key AI providers for bento-auth. The OAuth device-flow providers (claude, openai-codex) keep their bespoke flows in scripts/bento-auth; everything here is a plain API key that bento-auth stores in state.providers and propagates to every BENTO_MANAGED stack. ADDING A PROVIDER = ONE OBJECT BELOW — no code change. Fields: id (subcommand), label, format ('named' = provider with a dedicated env var the apps recognise built-in, no base URL, coexists with others; 'openai-compat' = custom OpenAI-compatible endpoint that occupies the shared OPENAI_API_KEY + OPENAI_BASE_URL slot, mutually exclusive with other slot occupants incl. Codex), env (where the key is stored), base_url / base_url_env (openai-compat only), signup_url (where to mint a key), validate_url (GET with Bearer to verify the key; empty = skip), note.",
+  "_comment": "Data-driven catalog of API-key AI providers for bento-auth. OAuth device-flow providers (claude, openai-codex) keep their bespoke flows in scripts/bento-auth; everything here is a plain API key that bento-auth stores in state.providers and propagates to every BENTO_MANAGED stack. ADDING A PROVIDER = ONE OBJECT BELOW — no code change. EVERY catalog provider gets its OWN dedicated env var(s) so they ALL coexist — registering one never evicts another. Fields: id (subcommand), label, format ('native' = the apps recognise a dedicated key env var built-in, no base URL needed; 'compat' = OpenAI-compatible but NOT built-in, so it gets a dedicated key env PLUS a dedicated base-url env — wire it as a custom provider in your app pointing apiKey/baseUrl at those env vars), env (key var), base_url / base_url_env (compat only — both dedicated, never the shared OPENAI_* slot), signup_url, validate_url (GET with Bearer to verify; empty = skip), note. The shared OPENAI_API_KEY + OPENAI_BASE_URL slot is reserved for the ad-hoc 'bento-auth openai-compat <label> <base_url>' command (exotic/one-off endpoints) and for the real OpenAI / openai-codex — it is NEVER used by a catalog entry.",
   "providers": [
     {
       "id": "openrouter",
       "label": "OpenRouter",
-      "format": "named",
+      "format": "native",
       "env": "OPENROUTER_API_KEY",
       "signup_url": "https://openrouter.ai/keys",
       "validate_url": "https://openrouter.ai/api/v1/key",
-      "note": "Universal aggregator — one key, hundreds of models."
+      "note": "Universal aggregator — one key, hundreds of models. Built-in provider."
     },
     {
       "id": "opencode",
       "label": "OpenCode (Zen + Go)",
-      "format": "named",
+      "format": "native",
       "env": "OPENCODE_API_KEY",
       "signup_url": "https://opencode.ai/auth",
       "validate_url": "https://opencode.ai/zen/v1/models",
@@ -22,7 +22,7 @@
     {
       "id": "gemini",
       "label": "Google Gemini (API key)",
-      "format": "named",
+      "format": "native",
       "env": "GEMINI_API_KEY",
       "signup_url": "https://aistudio.google.com/apikey",
       "validate_url": "",
@@ -31,82 +31,82 @@
     {
       "id": "deepseek",
       "label": "DeepSeek",
-      "format": "named",
+      "format": "native",
       "env": "DEEPSEEK_API_KEY",
       "signup_url": "https://platform.deepseek.com/api_keys",
       "validate_url": "https://api.deepseek.com/models",
-      "note": "Cheap, strong at coding."
+      "note": "Cheap, strong at coding. Built-in provider."
     },
     {
       "id": "groq",
       "label": "Groq",
-      "format": "named",
+      "format": "native",
       "env": "GROQ_API_KEY",
       "signup_url": "https://console.groq.com/keys",
       "validate_url": "https://api.groq.com/openai/v1/models",
-      "note": "Fastest inference."
+      "note": "Fastest inference. Built-in provider."
     },
     {
       "id": "xai",
       "label": "xAI Grok",
-      "format": "named",
+      "format": "native",
       "env": "XAI_API_KEY",
       "signup_url": "https://console.x.ai",
       "validate_url": "https://api.x.ai/v1/models",
-      "note": ""
+      "note": "Built-in provider."
     },
     {
       "id": "mistral",
       "label": "Mistral",
-      "format": "named",
+      "format": "native",
       "env": "MISTRAL_API_KEY",
       "signup_url": "https://console.mistral.ai/api-keys",
       "validate_url": "https://api.mistral.ai/v1/models",
-      "note": ""
+      "note": "Built-in provider."
     },
     {
       "id": "zai",
       "label": "z.ai GLM Coding Plan",
-      "format": "openai-compat",
-      "env": "OPENAI_API_KEY",
-      "base_url_env": "OPENAI_BASE_URL",
+      "format": "compat",
+      "env": "ZAI_API_KEY",
+      "base_url_env": "ZAI_BASE_URL",
       "base_url": "https://api.z.ai/api/paas/v4",
       "signup_url": "https://z.ai/manage-apikey/apikey-list",
       "validate_url": "https://api.z.ai/api/paas/v4/models",
-      "note": "Cheap GLM coding subscription (~USD 10/mo). Occupies the OpenAI slot."
+      "note": "Cheap GLM coding subscription (~USD 10/mo). Lives in its OWN slot (ZAI_API_KEY + ZAI_BASE_URL) — wire it as a custom OpenAI-compatible provider in your app. Does NOT touch the shared OpenAI slot."
     },
     {
       "id": "kimi",
       "label": "Kimi (Moonshot)",
-      "format": "openai-compat",
-      "env": "OPENAI_API_KEY",
-      "base_url_env": "OPENAI_BASE_URL",
+      "format": "compat",
+      "env": "KIMI_API_KEY",
+      "base_url_env": "KIMI_BASE_URL",
       "base_url": "https://api.moonshot.ai/v1",
       "signup_url": "https://platform.moonshot.ai/console/api-keys",
       "validate_url": "https://api.moonshot.ai/v1/models",
-      "note": "Occupies the OpenAI slot."
+      "note": "Own slot (KIMI_API_KEY + KIMI_BASE_URL) — wire as a custom provider."
     },
     {
       "id": "qwen",
       "label": "Qwen (DashScope / Model Studio)",
-      "format": "openai-compat",
-      "env": "OPENAI_API_KEY",
-      "base_url_env": "OPENAI_BASE_URL",
+      "format": "compat",
+      "env": "QWEN_API_KEY",
+      "base_url_env": "QWEN_BASE_URL",
       "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
       "signup_url": "https://bailian.console.alibabacloud.com/",
       "validate_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/models",
-      "note": "International (Singapore) endpoint. Occupies the OpenAI slot."
+      "note": "International (Singapore) endpoint. Own slot (QWEN_API_KEY + QWEN_BASE_URL)."
     },
     {
       "id": "minimax",
       "label": "MiniMax",
-      "format": "openai-compat",
-      "env": "OPENAI_API_KEY",
-      "base_url_env": "OPENAI_BASE_URL",
+      "format": "compat",
+      "env": "MINIMAX_API_KEY",
+      "base_url_env": "MINIMAX_BASE_URL",
       "base_url": "https://api.minimax.io/v1",
       "signup_url": "https://platform.minimax.io/",
       "validate_url": "https://api.minimax.io/v1/models",
-      "note": "Occupies the OpenAI slot."
+      "note": "Own slot (MINIMAX_API_KEY + MINIMAX_BASE_URL)."
     }
   ]
 }

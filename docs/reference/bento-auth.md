@@ -31,29 +31,36 @@ as data in `lib/provider-catalog.json` — `bento-auth` prompts for it,
 validates it, stores it in `state.providers`, and propagates. **Adding a
 provider is a one-object JSON edit, not code.** No paperclip dependency.
 
+**Every catalog provider gets its OWN dedicated env var(s)** — they all
+coexist, registering one never evicts another.
+
 | ID | Provider | Format | Env var(s) |
 |---|---|---|---|
-| `openrouter` | OpenRouter | named | `OPENROUTER_API_KEY` |
-| `opencode` | OpenCode (Zen + Go) | named | `OPENCODE_API_KEY` (one key, both catalogs) |
-| `gemini` | Google Gemini (key) | named | `GEMINI_API_KEY` |
-| `deepseek` | DeepSeek | named | `DEEPSEEK_API_KEY` |
-| `groq` | Groq | named | `GROQ_API_KEY` |
-| `xai` | xAI Grok | named | `XAI_API_KEY` |
-| `mistral` | Mistral | named | `MISTRAL_API_KEY` |
-| `zai` | z.ai GLM Coding Plan | openai-compat | `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
-| `kimi` | Kimi (Moonshot) | openai-compat | `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
-| `qwen` | Qwen (DashScope) | openai-compat | `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
-| `minimax` | MiniMax | openai-compat | `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
+| `openrouter` | OpenRouter | native | `OPENROUTER_API_KEY` |
+| `opencode` | OpenCode (Zen + Go) | native | `OPENCODE_API_KEY` (one key, both catalogs) |
+| `gemini` | Google Gemini (key) | native | `GEMINI_API_KEY` |
+| `deepseek` | DeepSeek | native | `DEEPSEEK_API_KEY` |
+| `groq` | Groq | native | `GROQ_API_KEY` |
+| `xai` | xAI Grok | native | `XAI_API_KEY` |
+| `mistral` | Mistral | native | `MISTRAL_API_KEY` |
+| `zai` | z.ai GLM Coding Plan | compat | `ZAI_API_KEY` + `ZAI_BASE_URL` |
+| `kimi` | Kimi (Moonshot) | compat | `KIMI_API_KEY` + `KIMI_BASE_URL` |
+| `qwen` | Qwen (DashScope) | compat | `QWEN_API_KEY` + `QWEN_BASE_URL` |
+| `minimax` | MiniMax | compat | `MINIMAX_API_KEY` + `MINIMAX_BASE_URL` |
 
-- **named**: the app recognises a dedicated env var (no base URL); these
-  coexist — register as many as you want.
-- **openai-compat**: a custom OpenAI-compatible endpoint that occupies the
-  shared `OPENAI_API_KEY` + `OPENAI_BASE_URL` slot — **mutually exclusive**
-  with other slot occupants (including `openai-codex`). Registering one
-  evicts the previous.
+- **native**: the app recognises a dedicated key env var built-in (no base
+  URL needed). Set the key, done.
+- **compat**: OpenAI-compatible but NOT built-in, so it gets a dedicated key
+  env **plus** a dedicated base-URL env (e.g. `ZAI_API_KEY` + `ZAI_BASE_URL`).
+  Wire it in your app as a custom provider whose `apiKey`/`baseUrl` reference
+  those vars. It lives in its OWN slot — it never touches the shared OpenAI
+  slot, so z.ai/Kimi/Qwen/MiniMax all coexist with each other and with the
+  real OpenAI.
 
-For anything not in the catalog: `bento-auth openai-compat <label> <base_url>`
-prompts for a key and parks it on the OpenAI-compat slot.
+The **shared `OPENAI_API_KEY` + `OPENAI_BASE_URL` slot** is reserved for the
+real OpenAI / `openai-codex`, and for one-off exotic endpoints registered via
+`bento-auth openai-compat <label> <base_url>` (that command — and only that
+command — occupies the shared slot, evicting any previous occupant).
 
 Other OAuth providers (Gemini/Qwen *subscription* tiers via the `opencode`
 login broker) are planned — open an issue with a one-line "I want X".
