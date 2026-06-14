@@ -36,6 +36,24 @@ services:
       - HERMES_DASHBOARD=1
       - HERMES_DASHBOARD_PORT=9119
       - HERMES_DASHBOARD_INSECURE=1
+
+      # =============================================================================
+      # Cross-stack readable home — UID/GID alignment with paperclip
+      # =============================================================================
+      # The paperclip container's `node` user runs as uid 1000 / gid 1000.
+      # The hermes daemon writes /opt/data/config.yaml as 0640 owner=hermes:hermes
+      # and `/opt/hermes/docker/stage2-hook.sh` chmods it back to 0640 on every
+      # boot, so a paperclip-side `chmod 0644` would not survive. Two envs fix
+      # this without touching file modes:
+      #
+      #   HERMES_GID=1000  → remaps the hermes group's gid to 1000, so config.yaml's
+      #                      group bit (rw-r-----) is readable by paperclip's `node`
+      #                      (which is gid 1000). Survives container restart and
+      #                      every future dashboard config write.
+      #   HERMES_HOME_MODE=0755 → opens /opt/data dir traversal for the cross-stack
+      #                      RO mount (default 0700 blocks it).
+      - HERMES_GID=1000
+      - HERMES_HOME_MODE=0755
     volumes:
       # Dashboard + gateway state (config, sessions, messaging registrations).
       - hermes-data:/opt/data
