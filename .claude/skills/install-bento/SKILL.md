@@ -226,85 +226,52 @@ For every chosen app, confirm in this order:
 
 # Post-install: AI provider authentication
 
-If the operator's `BENTO_APPS` includes any AI-runtime stack (`paperclip`, `openclaw`, `cli-proxy-api`), the install does **not** wire OAuth or API keys for them automatically. That happens via `scripts/bento-auth` after Step 3.
+If the operator's `BENTO_APPS` includes any AI-runtime stack (`paperclip`, `openclaw`, `cli-proxy-api`), the install does **not** wire provider keys for them automatically. API keys go in via `scripts/bento-auth` after Step 3; subscriptions go in via each app's native sign-in.
 
 ## What `bento-auth` does
 
-A host-side wrapper around the device-flow OAuth login that the paperclip image's bundled CLIs (`claude`, `opencode`) already implement. It runs the flow, extracts the resulting OAuth token from the credentials file the CLI just wrote, and updates the paperclip swarm service env so Hermes picks it up.
-
-Subcommands:
+Registers **API keys only**, catalog-driven (`lib/provider-catalog.json`): you paste a provider API key, it validates it (where possible), stores it in `state.providers.<ENV>`, and propagates to every `BENTO_MANAGED` stack (and future deploys, via `stacks_build_env_payload`).
 
 ```
-bento-auth                     interactive picker
-bento-auth claude              Anthropic OAuth (Pro/Max subscription)
-bento-auth openai-codex        ChatGPT Plus OAuth (Codex API)
-bento-auth list                tabular view of authenticated providers
-bento-auth status <provider>   healthcheck exit codes (0/4/5)
+bento-auth                     interactive picker (lists catalog providers)
+bento-auth <provider>          register a key (anthropic, openai, openrouter, zai, gemini, …)
+bento-auth openai-compat <label> <base_url>   ad-hoc OpenAI-compatible endpoint
+bento-auth list                registered keys (masked)
 ```
 
 Full reference: `docs/reference/bento-auth.md`.
 
+## Subscriptions are NOT bento-auth
+
+Claude Pro/Max and ChatGPT Plus are OAuth **subscriptions** — bento-auth does not handle them (the old env-snapshot approach went stale in ~10 days). Register them via the app's own native sign-in, which refreshes the token properly:
+
+- **openclaw** → `openclaw models auth login --provider openai` (interactive, TTY required; prints an `auth.openai.com` URL → operator authorizes in their browser → pastes the redirect URL back). The token auto-refreshes via the `offline_access` refresh token.
+- **paperclip** → the bundled CLIs (`claude /login`, `opencode auth login`).
+
+Caveat to surface if Claude-via-Hermes is the plan: Hermes calling `api.anthropic.com` is off-plan ("extra usage") even with a subscription; paperclip's `claude_local` adapter stays on-plan. (This is an app-native concern now, not a bento-auth one.)
+
 ## Triggering after unattended install
 
-`bento` Step 3 in interactive mode offers `bento-auth` automatically when paperclip is in the deploy set. Under `BENTO_UNATTENDED=1` (this skill's contract), that prompt is **skipped** — the operator's resume log will show a hint, but no auth happens.
+`bento` Step 3 interactive offers `bento-auth` when an AI stack is in the deploy set. Under `BENTO_UNATTENDED=1` it's **skipped** (registering a key is interactive). After a successful unattended install, end the report-back with:
 
-After the unattended install finishes successfully, **always** end the report-back with a "next step" line directing the operator to run `bento-auth` themselves over SSH. Device-flow OAuth requires interactively pasting a code from a browser — you cannot drive it for them.
-
-Suggested wording (paste verbatim):
-
-> Your VPS is hardened, deployed, and reachable. To wire the AI providers your agents will use, SSH in and run:
+> To register AI provider API keys, SSH in and run:
 >
 > ```
 > ssh root@<host> 'bash /root/.local/share/bento/scripts/bento-auth'
 > ```
 >
-> You'll be offered a picker (Claude / OpenAI Codex / list). Each provider opens a URL — paste the code from your browser back into the SSH session and you're done. Tokens last ~10 days; re-run when expired.
-
-## The Anthropic third-party policy you must surface
-
-**Restriction applies to Hermes-driven Claude calls only.** Paperclip's own `claude_local` adapter (which spawns the `claude` CLI as a subprocess) is on-plan and unaffected. Openclaw is unverified — treat like Hermes (off-plan) until someone tests.
-
-What goes off-plan and lands in "extra usage" (pay-as-you-go):
-
-- Hermes Agent `--provider anthropic` against `api.anthropic.com` — even with the OAuth token, Anthropic distinguishes the third-party fingerprint and routes off-plan. HTTP 400 with the literal message: `"Third-party apps now draw from your extra usage, not your plan limits. Add more at claude.ai/settings/usage and keep going."`
-
-What stays on-plan with the same OAuth token:
-
-- The `claude` CLI itself (interactive or `claude -p ...`).
-- Paperclip agents using `adapter_type: claude_local` (recommended path for Claude-driven Base25 agents today).
-
-`bento-auth claude` prints the full matrix before the device flow. `BENTO_AUTH_ASSUME_YES=1` skips the confirm but the warning still prints. The full reference doc lives at `docs/reference/bento-auth.md` ("Anthropic third-party policy (as of 2026-06-08)").
-
-When reporting back to the operator: if Hermes is the planned driver and Claude is the planned provider, **say this matrix out loud**. Recommend OpenAI Codex via ChatGPT Plus (`--provider openai-codex --model gpt-5.4`) as the default Hermes path until/unless the operator has loaded extra-usage credits; or recommend `claude_local` if they want Claude specifically and are OK losing Hermes features (MCP, sub-agent delegation) for that one agent.
-
-This is an Anthropic policy decision, not a bento bug. If you see the policy change (HTTP 400 body different / on-plan path widened), open an issue with the fresh response body so the docs catch up.
-
-OpenAI Codex via ChatGPT Plus does **not** have an analogous regime as of 2026-06-08 — Plus rate limits apply uniformly to native and third-party callers.
-
-## The `CLAUDE_CODE_OAUTH_TOKEN` invariant
-
-If the operator asks you to wire a Claude token manually (bypassing `bento-auth`), use `CLAUDE_CODE_OAUTH_TOKEN`, **never** `ANTHROPIC_API_KEY`. The latter triggers a dual-header bug: the Anthropic Python SDK auto-emits `x-api-key` while Hermes emits `Authorization: Bearer` for the same OAuth token, Anthropic priorities x-api-key, rejects with `401 invalid x-api-key`.
-
-If you find `ANTHROPIC_API_KEY` set on the paperclip service with an `sk-ant-oat*` value, that's the bug. Recovery:
-
-```bash
-ssh root@<host> "\
-  sudo docker service update \
-    --env-rm ANTHROPIC_API_KEY \
-    --env-add CLAUDE_CODE_OAUTH_TOKEN=<token> \
-    paperclip_paperclip"
-```
+> Pick a provider and paste the key. For **subscriptions** (ChatGPT Plus / Claude Pro/Max), use the app's native sign-in instead — e.g. `openclaw models auth login --provider openai` (it opens a URL; authorize in your browser and paste the redirect URL back).
 
 ## Ambient state.providers — bento propagates automatically
 
-Starting with the shared-state work, `bento-auth` writes every token to `~/.config/bento/state.json` under `providers.<ENV_VAR_NAME>` and immediately propagates it via `docker service update --env-add` to every running BENTO_MANAGED stack. Future deploys of any stack also inherit those vars automatically.
+`bento-auth` writes every key to `~/.config/bento/state.json` under `providers.<ENV_VAR_NAME>` and propagates it via `docker service update --env-add` to every running BENTO_MANAGED stack; future deploys inherit it.
 
-Operator implications you should surface in the report-back:
+Operator implications to surface:
 
-- **Run `bento-auth claude` once, every stack benefits.** No per-stack login.
-- **Refresh works the same way.** Re-run `bento-auth claude` when the token expires (~10 days); state and every running stack pick up the new value.
-- **Cosmetic warning.** Stacks like postgres / redis will show provider env vars in `docker service inspect`. Expected, no impact.
-- **Manifest envs still win.** A stack that declares its own `OPENAI_API_KEY` in its manifest (with the env prompt) gets that value, not the ambient one. `BENTO_ENV_<STACK>_<VAR>` overrides continue to work the same way.
+- **Set once, every env-consumer stack benefits.** No per-stack login.
+- **Who consumes it.** hermes, paperclip, and generic OpenAI-compatible apps read these env vars. **openclaw does NOT** — it owns its provider config (`models.providers`) and OAuth auth-profiles; configure its providers in its Control UI / config (it can reference a propagated `${ZAI_API_KEY}` in a custom-provider definition).
+- **Cosmetic.** Stacks like postgres / redis will show provider env vars in `docker service inspect`. Expected, no impact.
+- **Manifest envs still win.** A stack that declares its own `OPENAI_API_KEY` in its manifest gets that value, not the ambient one. `BENTO_ENV_<STACK>_<VAR>` overrides continue to work.
 
 # Report back to the operator
 
@@ -314,7 +281,7 @@ Final message (always include):
 - **Per-app URL** (read `state_get .bootstrap.base_domain` and the manifest's `post_deploy_url`).
 - **Bootstrap invite URLs** if any (the paperclip marker file is the canonical one).
 - **Handoff HTML path** — and the `scp` line to fetch it.
-- **Next step: `bento-auth`** when any AI-runtime stack (paperclip, openclaw, cli-proxy-api) is in the deploy set. Include the SSH oneliner and call out the Anthropic third-party "extra usage" policy if Claude is on the menu.
+- **Next step: provider auth** when any AI-runtime stack (paperclip, openclaw, cli-proxy-api) is in the deploy set. For **API keys**, include the `bento-auth` SSH oneliner. For **subscriptions** (ChatGPT Plus / Claude Pro/Max), point to the app's native sign-in (e.g. `openclaw models auth login --provider openai`) — bento-auth doesn't do subscriptions.
 - **Any warnings** (DNS still propagating, memory tight, etc.).
 
 Format the URLs as actual clickable links the user can copy. Don't paraphrase the values — the operator will paste them verbatim.

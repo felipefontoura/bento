@@ -93,7 +93,7 @@ install.sh
     ├── lib/stacks.sh  manifest discovery + env resolution + memory budget + deploy via API
     ├── lib/report.sh  generates handoff HTML at end of Step 3 / on demand
     ├── lib/install-helpers.sh  helpers used by per-stack install.sh scripts
-    ├── lib/auth-helpers.sh     helpers for scripts/bento-auth (OAuth wiring + provider catalog engine)
+    ├── lib/auth-helpers.sh     helpers for scripts/bento-auth (provider catalog engine + key propagation)
     └── lib/provider-catalog.json  data catalog of API-key AI providers (read by bento-auth)
     │
     ▼
