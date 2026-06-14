@@ -3,9 +3,10 @@ x-paperclip-common: &paperclip-common
   # To add gemini / pi / grok, do it inside the running container with
   # `docker exec`, or fork this stack to extend the image.
   #
-  # Hermes runs as a separate stack. paperclip integrates via two adapter
-  # plugins registered by install.sh: hermes_local (subprocess via cross-
-  # stack mount) and hermes_gateway (HTTP passthrough).
+  # Hermes integration is via the hermes_local adapter plugin
+  # (@felipefontoura/paperclip-adapter-hermes-local-plus), installed by
+  # install.sh. It spawns `hermes chat` as a subprocess using the binary
+  # mounted RO from the hermes stack's hermes-bin volume.
   image: ghcr.io/paperclipai/paperclip:latest
   networks:
     - network_public
@@ -90,25 +91,16 @@ x-paperclip-common: &paperclip-common
     - LOG_LEVEL=info
 
     # =============================================================================
-    # AI Providers (operator-supplied at day-2 via Portainer)
+    # AI Providers
     # =============================================================================
     #
-    # Bento ships paperclip with no API keys baked in. Add the ones you
-    # want via Portainer:
-    #
-    #   Stacks -> paperclip -> Editor -> add an env var -> Update the stack
-    #
-    # Paperclip's server doesn't call LLMs itself — it spawns CLIs that
-    # do. The env vars below are what those CLIs read:
-    #
-    #   OPENAI_API_KEY      -> codex CLI (bundled in image)
-    #   ANTHROPIC_API_KEY   -> claude CLI (bundled in image)
-    #   OPENROUTER_API_KEY  -> opencode CLI (bundled in image)
-    #   GEMINI_API_KEY      -> gemini CLI (requires `docker exec npm install -g @google/gemini-cli`)
+    # Keys for the bundled CLIs (codex, claude, opencode) and the hermes
+    # subprocess. Leave blank to disable; populate via the install wizard
+    # or Portainer (Stacks -> paperclip -> Editor -> Update).
     - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-    #
+
     # -----------------------------------------------------------------------------
     # Bento-native overlay integrations
     # -----------------------------------------------------------------------------
@@ -120,24 +112,16 @@ x-paperclip-common: &paperclip-common
     #     adapter: openclaw_gateway
     #     URL:     ws://openclaw:18789
     #
-    # hermes_gateway adapter — falls back to per-agent UI when blank.
-    - HERMES_URL=http://hermes:8642/v1
-    - HERMES_API_KEY=${HERMES_API_KEY:-}
-    # hermes_local plugin version. Blank skips its install.
-    - HERMES_LOCAL_PLUS_VERSION=${HERMES_LOCAL_PLUS_VERSION:-latest}
     # Lets Hermes' shim run as root inside this container (paperclip drops
     # to `node` but Hermes still checks geteuid). Plugin no longer needs
     # a wrapper script.
     - HERMES_DOCKER_EXEC_AS_ROOT=1
-    # Hermes CLI path consumed by the plugin (v0.1.15+). Declaring it here
-    # makes the bento the source of truth for the binary location: if the
-    # mount target ever changes, edit this line — no plugin republish needed.
-    # The plugin falls back to /opt/hermes/bin/hermes if unset, so this is
-    # belt-and-suspenders today.
+    # Binary the hermes_local plugin spawns. Set here so bento owns the path:
+    # the plugin reads PAPERCLIP_HERMES_CLI before its own default, so the
+    # cross-stack mount target lives in compose and can change without
+    # republishing the adapter. (Falls back to /opt/hermes/bin/hermes anyway.)
     - PAPERCLIP_HERMES_CLI=/opt/hermes/bin/hermes
-    # Same path on PATH so an operator who opens a shell in the container
-    # can type `hermes` plain — convenience only, plugin uses the absolute
-    # path above.
+    # Convenience PATH so an operator opening a shell can type `hermes` plain.
     - PATH=/opt/hermes/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
   deploy: &paperclip-deploy

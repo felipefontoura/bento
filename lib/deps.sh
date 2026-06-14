@@ -42,11 +42,12 @@ deps_install_base() {
        && command -v jq       >/dev/null 2>&1 \
        && command -v envsubst >/dev/null 2>&1 \
        && command -v gpg      >/dev/null 2>&1 \
-       && command -v git      >/dev/null 2>&1; then
+       && command -v git      >/dev/null 2>&1 \
+       && command -v htpasswd >/dev/null 2>&1; then
         return 0
     fi
 
-    _d_step "Installing core packages (curl, jq, envsubst, gpg)…"
+    _d_step "Installing core packages (curl, jq, envsubst, gpg, htpasswd)…"
     # shellcheck disable=SC2024
     # Redirects run as the calling shell (root during install). The log
     # path is in /tmp and writable by the caller — sudo-vs-redirect
@@ -54,7 +55,7 @@ deps_install_base() {
     if sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get update -qq \
             >>"$BENTO_DEPS_LOG" 2>&1 \
        && sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            curl ca-certificates gettext-base jq git gnupg \
+            curl ca-certificates gettext-base jq git gnupg apache2-utils \
             >>"$BENTO_DEPS_LOG" 2>&1; then
         _d_ok "Core packages ready"
     else

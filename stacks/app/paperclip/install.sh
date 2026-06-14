@@ -68,7 +68,7 @@ fi
 # time; the registry localPath points at the extracted package under
 # <base>/node_modules/<pkg>.
 pkg="@felipefontoura/paperclip-adapter-hermes-local-plus"
-version="${HERMES_LOCAL_PLUS_VERSION:-latest}"
+version="latest"
 base="/paperclip/adapter-plugins/hermes-local-${version}"
 dir="${base}/node_modules/${pkg}"
 
@@ -88,41 +88,28 @@ if sudo docker exec -u node "$cid" sh -c "
 fi
 
 if (( install_ok )); then
-    sudo docker exec -u node -i "$cid" node - <<NODEJS || true
-const fs = require('fs');
-const path = '/paperclip/adapter-plugins.json';
-const entry = { packageName: '${dir}', localPath: '${dir}', version: '${version}', type: 'hermes_local', installedAt: new Date().toISOString() };
-// Replace the prior hermes_local entry (if any) so re-installs don't
-// stack duplicate entries with the same type. Paperclip's plugin loader
-// gives the JSON entry precedence over the built-in hermes_local, so a
-// single entry here is the override.
-let current = [];
-try { current = JSON.parse(fs.readFileSync(path, 'utf8')); if (!Array.isArray(current)) current = []; } catch (_) {}
-fs.writeFileSync(path, JSON.stringify(current.filter(p => p && p.type !== entry.type).concat(entry), null, 2));
-console.log('[paperclip] adapter-plugins.json updated with ' + entry.type);
-NODEJS
+    # Replace the prior hermes_local entry (if any) so re-installs don't
+    # stack duplicates. Paperclip's plugin loader gives the JSON entry
+    # precedence over the built-in hermes_local, so a single entry is
+    # the override.
+    current=$(sudo docker exec "$cid" cat /paperclip/adapter-plugins.json 2>/dev/null || true)
+    [[ -z "$current" ]] && current='[]'
+    updated=$(jq --arg dir "$dir" \
+                 --arg version "$version" \
+                 --arg ts "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" '
+        (. // [])
+        | map(select(.type != "hermes_local"))
+        + [{ packageName: $dir, localPath: $dir, version: $version, type: "hermes_local", installedAt: $ts }]
+    ' <<< "$current")
+    sudo docker exec -u node -i "$cid" sh -c 'cat > /paperclip/adapter-plugins.json' <<< "$updated"
+    echo "[paperclip] adapter-plugins.json updated with hermes_local"
 else
     echo "[paperclip] ${pkg} install failed — dist/index.js missing. Paperclip will fall" >&2
     echo "[paperclip] back to the built-in hermes_local. Re-run install to retry." >&2
 fi
 
-# Cross-stack: hermes binary + data volume (RO) so the plugin can spawn
-# `hermes chat` reading the same config.yaml + auth.json the hermes
-# daemon renders. Idempotent no-op when the hermes stack isn't deployed.
+# Cross-stack: hermes binary (RO) so the plugin can spawn `hermes chat`
+# as a subprocess. Idempotent no-op when the hermes stack isn't deployed.
 graft_external_volumes_to_service \
     paperclip_paperclip \
-    hermes_hermes-bin:/opt/hermes:readonly \
-    hermes_hermes-data:/opt/hermes-shared:readonly
-
-wait_for_service paperclip_paperclip 120 || true
-cid=$(_find_container 'paperclip_paperclip')
-
-# Symlink ~/.hermes/{config.yaml,auth.json} to the cross-stack mount.
-# `ln -sfn` replaces existing symlinks atomically; if /opt/hermes-shared
-# isn't grafted, the dangling symlinks just stay until the hermes stack
-# lands.
-sudo docker exec -u node "$cid" sh -c '
-    mkdir -p /paperclip/.hermes
-    ln -sfn /opt/hermes-shared/config.yaml /paperclip/.hermes/config.yaml
-    ln -sfn /opt/hermes-shared/auth.json   /paperclip/.hermes/auth.json
-' || true
+    hermes_hermes-bin:/opt/hermes:readonly
