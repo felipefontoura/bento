@@ -1,23 +1,16 @@
 {
   "name": "hermes",
   "category": "app",
-  "description": "Hermes Agent — exposes an OpenAI-compatible HTTP gateway on :8642 plus a hermes-bin volume that the paperclip stack mounts cross-stack to spawn the Hermes CLI from the hermes_local adapter plugin (@felipefontoura/paperclip-adapter-hermes-local-plus).",
+  "description": "Hermes Agent — runs `gateway run` on the s6-overlay image, supervising in parallel: (1) OpenAI-compatible API HTTP server on :8642 (consumed by external bots, scripts, etc. with Bearer ${HERMES_API_KEY}), (2) Web dashboard on :9119 (config + API keys + sessions; Traefik Basic Auth gate). The CLI is reachable via `docker exec -it <container> hermes <subcommand>`. Also populates the hermes-bin cross-stack volume so the paperclip stack's hermes_local adapter can spawn `hermes chat` against the same binary.",
   "depends_on": [],
   "env": [
-    { "name": "HERMES_HOST",        "default": "hermes.${BASE_DOMAIN}", "prompt": "Hermes gateway hostname" },
-    { "name": "HERMES_API_KEY",     "generate": "openssl rand -hex 24", "hide": true },
-    { "name": "HERMES_MODEL_NAME",  "default": "hermes-agent" },
-    { "name": "HERMES_IMAGE_TAG",   "default": "latest" },
-    { "name": "OPENAI_API_KEY",     "from_state": "OPENAI_API_KEY",     "prompt": "OpenAI API key (optional)",      "hide": true, "default": "" },
-    { "name": "ANTHROPIC_API_KEY",  "from_state": "ANTHROPIC_API_KEY",  "prompt": "Anthropic API key (optional)",   "hide": true, "default": "" },
-    { "name": "OPENROUTER_API_KEY", "from_state": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (optional)", "hide": true, "default": "" },
-    { "name": "GOOGLE_API_KEY",     "from_state": "GOOGLE_API_KEY",     "prompt": "Google AI API key (optional)",   "hide": true, "default": "" },
-    { "name": "ZAI_API_KEY",        "from_state": "ZAI_API_KEY",        "prompt": "Z.AI API key (optional)",        "hide": true, "default": "" },
-    { "name": "GROQ_API_KEY",       "from_state": "GROQ_API_KEY",       "prompt": "Groq API key (optional)",        "hide": true, "default": "" },
-    { "name": "DEEPSEEK_API_KEY",   "from_state": "DEEPSEEK_API_KEY",   "prompt": "DeepSeek API key (optional)",    "hide": true, "default": "" },
-    { "name": "MISTRAL_API_KEY",    "from_state": "MISTRAL_API_KEY",    "prompt": "Mistral API key (optional)",     "hide": true, "default": "" },
-    { "name": "XAI_API_KEY",        "from_state": "XAI_API_KEY",        "prompt": "xAI API key (optional)",         "hide": true, "default": "" },
-    { "name": "CEREBRAS_API_KEY",   "from_state": "CEREBRAS_API_KEY",   "prompt": "Cerebras API key (optional)",    "hide": true, "default": "" }
+    { "name": "HERMES_IMAGE_TAG",          "default": "latest" },
+    { "name": "HERMES_HOST",               "default": "hermes.${BASE_DOMAIN}",     "prompt": "Hermes dashboard hostname" },
+    { "name": "HERMES_API_HOST",           "default": "api.hermes.${BASE_DOMAIN}", "prompt": "Hermes API gateway hostname (for external consumers / bots)" },
+    { "name": "HERMES_API_KEY",            "generate": "openssl rand -hex 24", "hide": true },
+    { "name": "HERMES_MODEL_NAME",         "default": "hermes-agent" },
+    { "name": "HERMES_DASHBOARD_PASSWORD", "generate": "openssl rand -base64 24", "hide": true },
+    { "name": "HERMES_DASHBOARD_HTPASSWD", "generate": "htpasswd -nbB admin \"$(jq -r '.envs.hermes.HERMES_DASHBOARD_PASSWORD' \"$HOME/.config/bento/state.json\")\" | sed 's/\\$/\\$\\$/g'", "hide": true }
   ],
-  "post_deploy_url": "https://${HERMES_HOST}/v1/models"
+  "post_deploy_url": "https://${HERMES_HOST}"
 }

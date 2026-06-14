@@ -1,17 +1,15 @@
 {
   "name": "paperclip",
   "category": "app",
-  "description": "AI agent orchestration (Claude Code / Codex / OpenCode + two Hermes flavours). Registers two adapters at deploy time: hermes_local (subprocess; @felipefontoura/paperclip-adapter-hermes-local-plus) for the full Hermes CLI, and hermes_gateway (HTTP; @felipefontoura/paperclip-adapter-hermes-gateway) for OpenAI-compatible passthrough. Hermes binary is copied into the paperclip-data volume from the nousresearch/hermes-agent image.",
+  "description": "AI agent orchestration (Claude Code / Codex / OpenCode + Hermes). Installs the hermes_local adapter (@felipefontoura/paperclip-adapter-hermes-local-plus) at deploy time and mounts the hermes-bin volume cross-stack so the plugin can spawn `hermes chat` as a subprocess. Provider API keys are operator-supplied via Portainer at day-2.",
   "depends_on": ["postgres"],
   "env": [
     { "name": "PAPERCLIP_HOST",     "default": "paperclip.${BASE_DOMAIN}", "prompt": "Paperclip hostname" },
     { "name": "BETTER_AUTH_SECRET", "generate": "openssl rand -hex 32",    "hide": true },
     { "name": "POSTGRES_PASSWORD",  "from_state": "POSTGRES_PASSWORD", "prompt": "Postgres password", "hide": true, "default": "" },
-    { "name": "OPENAI_API_KEY",     "prompt": "OpenAI API key (used by codex CLI) — optional",          "hide": true, "default": "" },
-    { "name": "ANTHROPIC_API_KEY",  "prompt": "Anthropic API key (used by claude CLI) — optional",      "hide": true, "default": "" },
-    { "name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (used by opencode CLI) — optional",   "hide": true, "default": "" },
-    { "name": "HERMES_API_KEY",     "from_state": "HERMES_API_KEY",    "prompt": "Hermes gateway bearer (deployed alongside the hermes stack)", "hide": true, "default": "" },
-    { "name": "HERMES_LOCAL_PLUS_VERSION", "default": "latest", "prompt": "Version of @felipefontoura/paperclip-adapter-hermes-local-plus to install — leave blank to skip" }
+    { "name": "OPENAI_API_KEY",     "from_state": "OPENAI_API_KEY",     "prompt": "OpenAI API key (optional)",     "hide": true, "default": "" },
+    { "name": "ANTHROPIC_API_KEY",  "from_state": "ANTHROPIC_API_KEY",  "prompt": "Anthropic API key (optional)",  "hide": true, "default": "" },
+    { "name": "OPENROUTER_API_KEY", "from_state": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (optional)", "hide": true, "default": "" }
   ],
   "post_deploy_url": "https://${PAPERCLIP_HOST}"
 }
