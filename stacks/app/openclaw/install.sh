@@ -24,21 +24,40 @@ source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 # `openclaw-config:` and the stack is `openclaw`, so the actual volume is:
 volume_name="openclaw_openclaw-config"
 
+# Telegram has no in-UI login button — the bot token comes from the
+# TELEGRAM_BOT_TOKEN env (default-account fallback), but the channel must also
+# be enabled in config. Only emit the channels block when a token is actually
+# present, so an empty deploy doesn't ship a dangling, disabled-but-declared
+# channel. lib/stacks.sh exports TELEGRAM_BOT_TOKEN into this script's env.
+telegram_channels=""
+if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
+    telegram_channels='
+  channels: {
+    // botToken resolves from the TELEGRAM_BOT_TOKEN env (default account).
+    telegram: { enabled: true },
+  },'
+fi
+
 echo "Writing Openclaw config to volume $volume_name…"
-# Four things happen in this one-shot container:
+# Five things happen in this one-shot container:
 #   1. Drop the JSON5 that enables /v1/chat/completions AND the public
 #      Control UI, and sets gateway.mode=local (openclaw refuses to boot
 #      when mode is absent).
 #   2. Pin controlUi.allowedOrigins to the public host so the browser WS
-#      upgrade from https://$OPENCLAW_HOST is accepted. OPENCLAW_HOST is
-#      exported into this script's env by lib/stacks.sh and forwarded to the
-#      alpine container via `-e`; the unquoted heredoc expands it there.
-#   3. Create the logs/ subdir openclaw writes to on boot — otherwise the
+#      upgrade from https://$OPENCLAW_HOST is accepted. OPENCLAW_HOST and
+#      TELEGRAM_CHANNELS are exported into this script's env by lib/stacks.sh /
+#      computed above and forwarded to the alpine container via `-e`; the
+#      unquoted heredoc expands them there.
+#   3. Enable the Telegram channel when a bot token was supplied.
+#   4. Create the logs/ subdir openclaw writes to on boot — otherwise the
 #      gateway logs EACCES on every start.
-#   4. chown the whole tree to uid/gid 1000 (the upstream `node` user),
+#   5. chown the whole tree to uid/gid 1000 (the upstream `node` user),
 #      because Swarm's default mount is root-owned and openclaw drops
 #      privileges before writing.
-sudo docker run --rm -e OPENCLAW_HOST="$OPENCLAW_HOST" -v "$volume_name:/cfg" alpine sh -c 'cat > /cfg/openclaw.json <<EOF
+sudo docker run --rm \
+    -e OPENCLAW_HOST="$OPENCLAW_HOST" \
+    -e TELEGRAM_CHANNELS="$telegram_channels" \
+    -v "$volume_name:/cfg" alpine sh -c 'cat > /cfg/openclaw.json <<EOF
 {
   gateway: {
     mode: "local",
@@ -57,7 +76,7 @@ sudo docker run --rm -e OPENCLAW_HOST="$OPENCLAW_HOST" -v "$volume_name:/cfg" al
       // unless the page origin is listed here.
       allowedOrigins: ["https://$OPENCLAW_HOST"],
     },
-  },
+  },$TELEGRAM_CHANNELS
 }
 EOF
 mkdir -p /cfg/logs
