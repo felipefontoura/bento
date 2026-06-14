@@ -419,10 +419,14 @@ EOF
 # has to remember the path. The script itself works fine from a bare
 # shell — this menu just makes it discoverable from the main bento flow.
 #
-# Skipped under BENTO_UNATTENDED: device-flow OAuth is, by design, an
-# interactive step (the user has to paste a code from their browser).
-# We still print a hint so unattended runs surface the suggestion in
-# their resume log.
+# Skipped under BENTO_UNATTENDED: registering a key is interactive (the
+# operator pastes it), so there's nothing to automate. We still print a
+# hint so unattended runs surface the suggestion in their resume log.
+#
+# bento-auth handles API keys only; the provider list lives in
+# lib/provider-catalog.json, so we just launch its interactive picker rather
+# than hard-coding a menu here. Subscriptions (Claude Pro/Max, ChatGPT Plus)
+# are registered via each app's native sign-in, not here.
 auth_run() {
     if [[ "${BENTO_UNATTENDED:-0}" == "1" ]]; then
         ui_info "Skipping AI provider auth — run 'bento-auth' on the host post-install."
@@ -434,19 +438,8 @@ auth_run() {
         ui_pause
         return 1
     fi
-    ui_section "Authenticate AI providers"
-    local choice
-    choice="$(ui_choose \
-        "Claude  (Anthropic, Pro/Max)" \
-        "OpenAI Codex  (ChatGPT Plus)" \
-        "List authenticated providers" \
-        "Back")"
-    case "$choice" in
-        "Claude"*)        "$script" claude ;;
-        "OpenAI Codex"*)  "$script" openai-codex ;;
-        "List"*)          "$script" list ;;
-        "Back"|*)         return 0 ;;
-    esac
+    ui_section "Authenticate AI providers (API keys)"
+    "$script"
     ui_pause
 }
 

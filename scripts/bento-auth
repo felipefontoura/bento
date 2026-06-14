@@ -1,43 +1,31 @@
 #!/bin/bash
-# bento-auth — interactive OAuth + API-key login for AI providers
+# bento-auth — register AI-provider API keys and propagate them
 #
-# Wraps the device-flow login of each provider that the paperclip image
-# already ships (claude, codex/opencode), persists the resulting token
-# into the paperclip swarm service so the Hermes runtime picks it up,
-# and surfaces the relevant commercial gotchas BEFORE the user spends
-# a credit they didn't budget for.
+# Scope: CLASSIC API KEYS ONLY. You paste a provider API key, bento-auth
+# validates it (where possible), stores it in ~/.config/bento/state.json under
+# `providers.<ENV_VAR>`, and propagates it to every running BENTO_MANAGED stack
+# (and to all future deploys via lib/stacks.sh::stacks_build_env_payload).
+#
+# Subscriptions (Claude Pro/Max, ChatGPT Plus) are intentionally OUT OF SCOPE:
+# they are OAuth and are far better handled by each app's NATIVE sign-in, which
+# refreshes the token properly — e.g. openclaw `models auth login`, paperclip's
+# bundled CLI logins (`claude /login`, `opencode auth login`). bento-auth's old
+# env-snapshot approach went stale in ~10 days and is gone.
 #
 # Usage:
 #   bento-auth                     interactive picker
-#   bento-auth claude              login Claude (Anthropic) via OAuth
-#   bento-auth openai-codex        login ChatGPT Plus -> Codex via OAuth
-#   bento-auth list                show authenticated providers + expiry
-#   bento-auth status <provider>   exit non-zero if token expired
+#   bento-auth <provider>          register an API key (catalog providers)
+#   bento-auth openai-compat <label> <base_url>
+#                                  register any OpenAI-compatible endpoint
+#   bento-auth list                show registered provider keys (masked)
 #   bento-auth --help              this help
 #
 # Environment:
-#   BENTO_REPO_ROOT   default /root/.local/share/bento
-#                     used to locate lib/auth-helpers.sh
-#   BENTO_AUTH_ASSUME_YES=1
-#                     skip the commercial-policy confirm prompt for claude
-#                     (you accepted it in writing somewhere else)
+#   BENTO_REPO_ROOT        clone path (default /root/.local/share/bento)
+#   BENTO_AUTH_ASSUME_YES  skip the "store anyway?" prompt on failed validation
 #
-# Designed assumption: this script runs on the VPS host, NOT inside the
-# paperclip container. It uses `docker exec` to drive the per-provider
-# CLI that ships with the paperclip image.
-#
-# Compatible providers (MVP):
-#   - claude         (Anthropic OAuth, Claude Pro/Max subscription)
-#                    NOTE: Anthropic moved third-party apps OFF the
-#                    Pro/Max quota. Inference via Hermes consumes "extra
-#                    usage" (pay-as-you-go) — see the warning below.
-#   - openai-codex   (ChatGPT Plus OAuth -> Codex; gpt-5.4 only model
-#                    accepted on Plus subscription)
-#
-# Out of scope here (MVP — track in repo issues):
-#   - auto-refresh cron      see issue #19
-#   - web UI                 future, after CLI proves the model
-#   - other OAuth providers  (gemini, qwen, etc.) — add when requested
+# Providers are declared as data in lib/provider-catalog.json — adding one is a
+# JSON edit, not a code change.
 
 set -uo pipefail
 
@@ -46,20 +34,17 @@ set -uo pipefail
 # -----------------------------------------------------------------------------
 
 # Locate the bento repo root so we can source helpers. boot.sh clones to
-# /root/.local/share/bento by default; honour an override so contributors
-# can dogfood from a working clone.
+# /root/.local/share/bento by default; honour an override so contributors can
+# dogfood from a working clone.
 BENTO_REPO_ROOT="${BENTO_REPO_ROOT:-/root/.local/share/bento}"
 if [[ ! -d "$BENTO_REPO_ROOT/lib" ]]; then
-    # Fall back to the directory containing this script (covers running
-    # from `~/Work/quickstack/scripts/bento-auth` during local dev).
     BENTO_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
 
 # shellcheck source=../lib/auth-helpers.sh
 source "$BENTO_REPO_ROOT/lib/auth-helpers.sh"
 
-# Lightweight ui_*-equivalent helpers — we don't require gum here because
-# bento-auth must also be runnable from one-line cron / SSH oneliners.
+# Lightweight ui helpers — no gum dependency so bento-auth runs from cron / SSH.
 _color() { printf '\033[%sm%s\033[0m' "$1" "$2"; }
 _info()  { printf '%s %s\n' "$(_color 36 'ℹ')" "$*"; }
 _warn()  { printf '%s %s\n' "$(_color 33 '⚠')" "$*" >&2; }
@@ -67,201 +52,11 @@ _ok()    { printf '%s %s\n' "$(_color 32 '✓')" "$*"; }
 _err()   { printf '%s %s\n' "$(_color 31 '✗')" "$*" >&2; }
 
 # -----------------------------------------------------------------------------
-# Commercial policy warning — Anthropic
+# Shared: persist + propagate
 # -----------------------------------------------------------------------------
 
-# Displayed once per `bento-auth claude` invocation, ahead of the device
-# flow. Set BENTO_AUTH_ASSUME_YES=1 to skip the confirm prompt — the
-# warning still PRINTS, because the rule is "no surprise bills", not
-# "no friction". Operators who automate this script should pin
-# BENTO_AUTH_ASSUME_YES in their orchestration and document it.
-_print_anthropic_warning() {
-    cat <<'WARN'
-
-═══════════════════════════════════════════════════════════════
- Login: Anthropic (Claude) via OAuth
-═══════════════════════════════════════════════════════════════
-
- This logs your Claude Pro/Max subscription into the paperclip
- container so the bundled `claude` CLI (and anything else that
- spawns it as a subprocess, e.g. paperclip's `claude_local`
- agent adapter) runs against your plan.
-
- ─── Anthropic third-party policy (verified 2026-06-08) ───
-
- The restriction below applies to HERMES ONLY. Paperclip's native
- `claude_local` adapter is unaffected and runs against your plan.
- Openclaw is unverified — assume same fate as Hermes until tested.
-
-   ✓ COVERED by your Pro/Max plan:
-     • the `claude` CLI itself (interactive or `claude -p ...`)
-     • paperclip's `claude_local` adapter
-       — spawns `claude` as a subprocess; Anthropic sees the
-         native CLI fingerprint, the request stays on-plan
-       — this is the recommended path for Claude-driven agents
-         on a bento deployment today
-
-   ✗ NOT COVERED — drawn from "extra usage" (pay-as-you-go) at
-     the public per-token rate:
-     • Hermes Agent's `--provider anthropic`
-       — Hermes spoofs user-agent and anthropic-beta headers but
-         Anthropic still distinguishes it from native Claude Code
-     • any other third-party HTTP client against api.anthropic.com
-       (Continue, Aider, Cursor extensions, …)
-     • openclaw  (unverified — likely off-plan like Hermes,
-                  please open an issue if you confirm)
-
- Symptom when an off-plan call fires with no credit loaded:
-     HTTP 400 — "Third-party apps now draw from your extra usage,
-     not your plan limits. Add more at claude.ai/settings/usage
-     and keep going."
-
- If you want Hermes-driven agents on Claude: load credits at
- https://claude.ai/settings/usage. Otherwise, route Claude work
- through paperclip's `claude_local` adapter — it works today.
-
- This is an Anthropic policy decision, not a bento bug. If/when
- the policy changes the warning will be updated. Filed as a
- temporary external limitation in docs/reference/bento-auth.md.
-
- Your call. This script wires the token either way.
-
-WARN
-}
-
-# -----------------------------------------------------------------------------
-# Subcommand: bento-auth claude
-# -----------------------------------------------------------------------------
-
-cmd_claude() {
-    _print_anthropic_warning
-
-    if [[ "${BENTO_AUTH_ASSUME_YES:-0}" != "1" ]]; then
-        printf 'Continue? [y/N] '
-        local reply
-        read -r reply
-        if [[ ! "$reply" =~ ^[Yy]$ ]]; then
-            _info "Cancelled. No changes made."
-            return 0
-        fi
-    fi
-
-    local cid
-    if ! cid=$(auth_find_paperclip_container); then
-        _err "paperclip container not running. Deploy the paperclip stack via Step 3 first."
-        return 1
-    fi
-
-    _info "Launching device-flow login inside the paperclip container..."
-    _info "You'll be given a URL to open in your browser — paste the code back here."
-
-    # `claude login` reads from stdin (the device-flow code), writes the
-    # device URL to stdout, and persists ~/.claude/.credentials.json on
-    # success. -i (interactive) + -t (tty) keeps the prompt rendering
-    # correctly across docker exec.
-    if ! sudo docker exec -it --user node -e HOME=/paperclip "$cid" claude /login; then
-        _err "claude /login failed. Re-run after fixing the issue."
-        return 1
-    fi
-
-    # Extract the freshly-minted access token from the credentials JSON
-    # the CLI just wrote, then wire it into the service env as
-    # CLAUDE_CODE_OAUTH_TOKEN. Hermes auto-detects OAuth tokens by the
-    # sk-ant-oat prefix and routes them via Bearer + Claude Code headers.
-    local token
-    token=$(sudo docker exec --user node "$cid" \
-        sh -c "jq -r '.claudeAiOauth.accessToken // empty' ${AUTH_CLAUDE_CREDENTIALS_PATH_IN_CONTAINER} 2>/dev/null") || true
-    if [[ -z "$token" ]]; then
-        _err "claude /login appeared to succeed but no token was written to ${AUTH_CLAUDE_CREDENTIALS_PATH_IN_CONTAINER}."
-        return 1
-    fi
-
-    _info "Persisting CLAUDE_CODE_OAUTH_TOKEN to bento state..."
-    auth_state_providers_set "CLAUDE_CODE_OAUTH_TOKEN" "$token"
-    # OAuth and API key for Anthropic are mutually exclusive — they
-    # trigger the dual-header trap if both are set. Drop the other
-    # before propagating the new value.
-    auth_state_providers_unset "ANTHROPIC_API_KEY"
-
-    _info "Propagating to every running BENTO_MANAGED stack..."
-    auth_propagate_state_providers "ANTHROPIC_API_KEY"
-
-    _ok   "Claude OAuth registered. Every present and future bento stack will inherit it."
-    _info "Test inside the paperclip container:"
-    printf '  docker exec --user node -e HOME=/paperclip %s \\\n' "$(printf '%.12s' "$cid")"
-    printf '    /opt/hermes/bin/hermes chat -q "ping" -Q --provider anthropic --model claude-haiku-4-5\n'
-    _info "Expect HTTP 400 with 'extra usage' until you load credits at https://claude.ai/settings/usage."
-}
-
-# -----------------------------------------------------------------------------
-# Subcommand: bento-auth openai-codex
-# -----------------------------------------------------------------------------
-
-cmd_openai_codex() {
-    cat <<'INFO'
-
-═══════════════════════════════════════════════════════════════
- Login: OpenAI Codex (ChatGPT Plus) via OAuth
-═══════════════════════════════════════════════════════════════
-
- This logs your ChatGPT Plus subscription into the paperclip
- container so the Hermes runtime can call Codex models for
- your agents.
-
- Billing: as of 2026-06-08, the ChatGPT Plus subscription
- ($20/month) still covers Codex calls from third-party clients
- within the standard Plus rate limits. Only the gpt-5.4 model
- is accepted on the Plus tier (other ids return HTTP 400).
-
-INFO
-
-    local cid
-    if ! cid=$(auth_find_paperclip_container); then
-        _err "paperclip container not running. Deploy the paperclip stack via Step 3 first."
-        return 1
-    fi
-
-    _info "Launching device-flow login inside the paperclip container (opencode auth login)..."
-    _info "You'll be given a URL to open in your browser — paste the code back here."
-
-    if ! sudo docker exec -it --user node -e HOME=/paperclip "$cid" \
-        opencode auth login openai; then
-        _err "opencode auth login openai failed. Re-run after fixing the issue."
-        return 1
-    fi
-
-    local token
-    token=$(sudo docker exec --user node "$cid" \
-        sh -c "jq -r '.openai.access // empty' ${AUTH_OPENCODE_PATH_IN_CONTAINER} 2>/dev/null") || true
-    if [[ -z "$token" ]]; then
-        _err "opencode auth login appeared to succeed but no token was written to ${AUTH_OPENCODE_PATH_IN_CONTAINER}."
-        return 1
-    fi
-
-    _info "Persisting OPENAI_API_KEY to bento state..."
-    auth_state_providers_set "OPENAI_API_KEY" "$token"
-
-    _info "Propagating to every running BENTO_MANAGED stack..."
-    auth_propagate_state_providers
-
-    # Live-register with Hermes on paperclip without waiting for the
-    # service-update restart cycle to swap envs in.
-    sudo docker exec --user node -e HOME=/paperclip "$cid" \
-        /opt/hermes/bin/hermes auth add openai-codex \
-            --type api-key --api-key "$token" --label "chatgpt-plus" >/dev/null 2>&1 || true
-
-    _ok   "OpenAI Codex OAuth registered. Every present and future bento stack will inherit it."
-    _info "Test inside the paperclip container:"
-    printf '  docker exec --user node -e HOME=/paperclip %s \\\n' "$(printf '%.12s' "$cid")"
-    printf '    /opt/hermes/bin/hermes chat -q "ping" -Q --provider openai-codex --model gpt-5.4\n'
-}
-
-# -----------------------------------------------------------------------------
-# Generic API-key registration (catalog-driven)
-# -----------------------------------------------------------------------------
-
-# Store a key + optional base URL in state.providers and propagate. Shared by
-# the catalog providers (cmd_api_key) and the ad-hoc openai-compat command.
+# Store a key (+ optional base URL) in state.providers and propagate to every
+# BENTO_MANAGED stack. Shared by catalog providers and the ad-hoc command.
 _register_api_key() {
     local label="$1" env="$2" key="$3" base_url="${4:-}" base_url_env="${5:-OPENAI_BASE_URL}"
 
@@ -277,7 +72,10 @@ _register_api_key() {
     _ok "${label} registered. Present and future bento stacks inherit it."
 }
 
-# bento-auth <provider> for any API-key provider in lib/provider-catalog.json.
+# -----------------------------------------------------------------------------
+# bento-auth <provider> — catalog-driven API-key registration
+# -----------------------------------------------------------------------------
+
 cmd_api_key() {
     local id="$1"
     if ! auth_catalog_has "$id"; then
@@ -338,8 +136,10 @@ cmd_api_key() {
     _register_api_key "$label" "$env" "$key" "$base_url" "${base_url_env:-OPENAI_BASE_URL}"
 }
 
-# bento-auth openai-compat <label> <base_url> — ad-hoc provider not in the
-# catalog (any OpenAI-compatible endpoint). Occupies the OpenAI slot.
+# -----------------------------------------------------------------------------
+# bento-auth openai-compat <label> <base_url> — ad-hoc OpenAI-compatible endpoint
+# -----------------------------------------------------------------------------
+
 cmd_openai_compat() {
     local label="${1:-}" base_url="${2:-}"
     if [[ -z "$label" || -z "$base_url" ]]; then
@@ -353,8 +153,8 @@ cmd_openai_compat() {
     printf '\n'
     _info "Register exotic OpenAI-compatible endpoint — ${label} (${base_url})"
     _warn "This is the SHARED OpenAI slot (OPENAI_API_KEY + OPENAI_BASE_URL) —"
-    _warn "  it REPLACES any other occupant (the real OpenAI key or openai-codex)."
-    _warn "  For a provider that must coexist, add it to the catalog instead."
+    _warn "  it REPLACES any other occupant. For a provider that must coexist,"
+    _warn "  add it to lib/provider-catalog.json with a dedicated env instead."
 
     printf 'Paste the API key (input hidden): '
     local key
@@ -388,120 +188,32 @@ cmd_openai_compat() {
 }
 
 # -----------------------------------------------------------------------------
-# Subcommand: bento-auth list
+# bento-auth list — show registered provider keys (from state.providers, masked)
 # -----------------------------------------------------------------------------
 
 cmd_list() {
-    local cid
-    if ! cid=$(auth_find_paperclip_container); then
-        _warn "paperclip container not running. Nothing to list."
-        return 1
-    fi
-
-    printf '%-16s %-12s %-30s %s\n' "provider" "source" "expires" "subject"
-    printf '%-16s %-12s %-30s %s\n' "--------" "------" "-------" "-------"
-
-    # Anthropic / claude — read claudeAiOauth from credentials.json
-    local claude_blob
-    claude_blob=$(sudo docker exec --user node "$cid" \
-        sh -c "cat ${AUTH_CLAUDE_CREDENTIALS_PATH_IN_CONTAINER} 2>/dev/null") || true
-    if [[ -n "$claude_blob" ]]; then
-        local claude_exp claude_label
-        claude_exp=$(printf '%s' "$claude_blob" | jq -r '.claudeAiOauth.expiresAt // empty' 2>/dev/null)
-        claude_label=$(auth_format_relative_expiry "$claude_exp")
-        printf '%-16s %-12s %-30s %s\n' "claude" "claude-cli" "$claude_label" "(Anthropic OAuth)"
-    fi
-
-    # Codex / openai — read opencode auth.json
-    local opencode_blob
-    opencode_blob=$(sudo docker exec --user node "$cid" \
-        sh -c "cat ${AUTH_OPENCODE_PATH_IN_CONTAINER} 2>/dev/null") || true
-    if [[ -n "$opencode_blob" ]]; then
-        local openai_access openai_exp openai_label
-        openai_access=$(printf '%s' "$opencode_blob" | jq -r '.openai.access // empty' 2>/dev/null)
-        if [[ -n "$openai_access" ]]; then
-            openai_exp=$(auth_decode_jwt_exp "$openai_access" || echo "")
-            openai_label=$(auth_format_relative_expiry "$openai_exp")
-            printf '%-16s %-12s %-30s %s\n' "openai-codex" "opencode" "$openai_label" "(ChatGPT Plus OAuth)"
-        fi
-    fi
-
-    # Catalog API keys — read from state.providers (the source of truth for
-    # everything that isn't an in-container OAuth file). Values are masked.
-    local any_key=0 var val masked base_url=""
+    local any=0 var val masked extra=""
     while IFS=$'\t' read -r var val; do
         [[ -z "$var" ]] && continue
-        if [[ "$var" == "OPENAI_BASE_URL" ]]; then
-            base_url="$val"
+        # Base URLs are not secrets — show them in full at the end.
+        if [[ "$var" == *BASE_URL ]]; then
+            extra="${extra}
+  ${var} = ${val}"
             continue
         fi
-        if (( any_key == 0 )); then
-            printf '\nstate.providers (API keys, masked):\n'
-            any_key=1
+        if (( any == 0 )); then
+            printf '%-26s %s\n' "provider env" "value (masked)"
+            printf '%-26s %s\n' "------------" "--------------"
+            any=1
         fi
         masked="${val:0:6}…${val: -4}"
-        printf '%-24s %s\n' "$var" "$masked"
+        printf '%-26s %s\n' "$var" "$masked"
     done < <(auth_state_providers_dump)
-    if [[ -n "$base_url" ]]; then
-        printf '%-24s %s\n' "OPENAI_BASE_URL" "$base_url"
+
+    if (( any == 0 )); then
+        _info "No provider keys registered yet. Run 'bento-auth <provider>' to add one."
     fi
-}
-
-# -----------------------------------------------------------------------------
-# Subcommand: bento-auth status <provider>
-# -----------------------------------------------------------------------------
-
-cmd_status() {
-    local provider="${1:-}"
-    if [[ -z "$provider" ]] || ! auth_is_supported_provider "$provider"; then
-        _err "Usage: bento-auth status <claude|openai-codex>"
-        return 2
-    fi
-
-    local cid
-    if ! cid=$(auth_find_paperclip_container); then
-        _err "paperclip container not running."
-        return 3
-    fi
-
-    case "$provider" in
-        claude)
-            local exp
-            exp=$(sudo docker exec --user node "$cid" \
-                sh -c "jq -r '.claudeAiOauth.expiresAt // empty' ${AUTH_CLAUDE_CREDENTIALS_PATH_IN_CONTAINER} 2>/dev/null") || true
-            if [[ -z "$exp" ]]; then
-                _err "No Claude credentials present."
-                return 4
-            fi
-            local now_ms
-            now_ms=$(( $(date +%s) * 1000 ))
-            if (( exp < now_ms )); then
-                _warn "Claude OAuth EXPIRED ($(auth_format_relative_expiry "$exp"))"
-                return 5
-            fi
-            _ok "Claude OAuth $(auth_format_relative_expiry "$exp")"
-            ;;
-        openai-codex)
-            local access exp
-            access=$(sudo docker exec --user node "$cid" \
-                sh -c "jq -r '.openai.access // empty' ${AUTH_OPENCODE_PATH_IN_CONTAINER} 2>/dev/null") || true
-            if [[ -z "$access" ]]; then
-                _err "No Codex credentials present."
-                return 4
-            fi
-            if ! exp=$(auth_decode_jwt_exp "$access"); then
-                _warn "Codex token present but expiry could not be decoded."
-                return 5
-            fi
-            local now_iso
-            now_iso=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-            if [[ "$exp" < "$now_iso" ]]; then
-                _warn "Codex OAuth EXPIRED ($(auth_format_relative_expiry "$exp"))"
-                return 5
-            fi
-            _ok "Codex OAuth $(auth_format_relative_expiry "$exp")"
-            ;;
-    esac
+    [[ -n "$extra" ]] && printf '\nbase URLs:%s\n' "$extra"
 }
 
 # -----------------------------------------------------------------------------
@@ -511,25 +223,20 @@ cmd_status() {
 cmd_interactive() {
     cat <<'BANNER'
 
-bento-auth — interactive provider login
+bento-auth — register an AI provider API key
 
-Pick a provider to log into. You can re-run this any time to add more
-or refresh expired tokens.
+Pick a provider to register a classic API key. Set once → propagated to every
+BENTO_MANAGED stack that reads it. (Subscriptions use each app's native sign-in.)
 
 BANNER
 
-    # Build the menu dynamically: the two OAuth providers first, then every
-    # API-key provider from the catalog, then list/quit. Adding a provider to
-    # provider-catalog.json shows up here automatically.
     local -a ids=() labels=()
-    ids+=("claude");       labels+=("Claude (Anthropic, Pro/Max) — OAuth")
-    ids+=("openai-codex"); labels+=("OpenAI Codex (ChatGPT Plus) — OAuth")
     local cid clabel
     while IFS=$'\t' read -r cid clabel _; do
         [[ -z "$cid" ]] && continue
-        ids+=("$cid"); labels+=("${clabel} — API key")
+        ids+=("$cid"); labels+=("$clabel")
     done < <(auth_catalog_list)
-    ids+=("__list__"); labels+=("List authenticated providers")
+    ids+=("__list__"); labels+=("List registered keys")
     ids+=("__quit__"); labels+=("Quit")
 
     PS3=$'\nProvider: '
@@ -541,11 +248,9 @@ BANNER
             continue
         fi
         case "${ids[$idx]}" in
-            claude)       cmd_claude;       break ;;
-            openai-codex) cmd_openai_codex; break ;;
-            __list__)     cmd_list;         break ;;
-            __quit__)     return 0 ;;
-            *)            cmd_api_key "${ids[$idx]}"; break ;;
+            __list__) cmd_list; break ;;
+            __quit__) return 0 ;;
+            *)        cmd_api_key "${ids[$idx]}"; break ;;
         esac
     done
 }
@@ -556,23 +261,19 @@ BANNER
 
 cmd_help() {
     cat <<'HELP'
-bento-auth — interactive OAuth + API-key login for AI providers
+bento-auth — register AI-provider API keys and propagate them
 
 Usage:
   bento-auth                     interactive picker
-  bento-auth claude              login Claude (Anthropic) via OAuth
-  bento-auth openai-codex        login ChatGPT Plus -> Codex via OAuth
-  bento-auth <provider>          register an API-key provider (see list below)
+  bento-auth <provider>          register an API key (see list below)
   bento-auth openai-compat <label> <base_url>
                                  register any OpenAI-compatible endpoint
-  bento-auth list                show authenticated providers + expiry
-  bento-auth status <provider>   exit 0 if valid, non-zero if missing/expired
+  bento-auth list                show registered provider keys (masked)
   bento-auth --help              this help
 
 HELP
 
-    # Enumerate catalog providers so help stays in sync with the data file.
-    printf 'API-key providers (from lib/provider-catalog.json):\n'
+    printf 'Providers (from lib/provider-catalog.json):\n'
     local cid clabel cfmt
     while IFS=$'\t' read -r cid clabel cfmt; do
         [[ -z "$cid" ]] && continue
@@ -583,14 +284,11 @@ HELP
 
 Environment:
   BENTO_REPO_ROOT       override clone path (default /root/.local/share/bento)
-  BENTO_AUTH_ASSUME_YES skip confirm prompts (Anthropic policy / failed-validation)
+  BENTO_AUTH_ASSUME_YES skip the "store anyway?" prompt on failed validation
 
-Exit codes (for `bento-auth status`):
-  0  token present and valid
-  2  bad usage
-  3  paperclip container not running
-  4  no credentials for that provider
-  5  token expired
+Subscriptions (Claude Pro/Max, ChatGPT Plus) are OUT OF SCOPE — they are OAuth
+and are handled by each app's native sign-in (which refreshes properly), e.g.
+openclaw `models auth login`, paperclip's bundled CLI logins.
 
 See docs/reference/bento-auth.md for the full picture.
 HELP
@@ -603,19 +301,17 @@ HELP
 main() {
     local cmd="${1:-}"
     case "$cmd" in
-        ""|interactive)     cmd_interactive ;;
-        claude)             cmd_claude ;;
-        openai-codex|codex) cmd_openai_codex ;;
-        openai-compat)      shift; cmd_openai_compat "$@" ;;
-        list)               cmd_list ;;
-        status)             shift; cmd_status "$@" ;;
-        -h|--help|help)     cmd_help ;;
+        ""|interactive)  cmd_interactive ;;
+        openai-compat)   shift; cmd_openai_compat "$@" ;;
+        list)            cmd_list ;;
+        -h|--help|help)  cmd_help ;;
         *)
-            # Any catalog provider id routes to the generic API-key flow.
             if auth_catalog_has "$cmd"; then
                 cmd_api_key "$cmd"
             else
-                _err "Unknown subcommand: $cmd"; cmd_help; exit 2
+                _err "Unknown subcommand: $cmd"
+                cmd_help
+                exit 2
             fi
             ;;
     esac

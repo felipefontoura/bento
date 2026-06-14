@@ -272,20 +272,18 @@ stacks_build_env_payload() {
         seen_vars["$var_name"]=1
     done < <(jq -c '.env[]?' "$manifest_path")
 
-    # Ambient AI-provider tokens — see scripts/bento-auth.
+    # Ambient AI-provider keys — see scripts/bento-auth.
     #
-    # state.providers is a flat object { ENV_VAR_NAME: token, … } that
-    # bento-auth writes after a successful device-flow login (or after
-    # the operator pastes an API key). Inject every entry that the stack
-    # didn't already declare in its own manifest — manifests win on
-    # collision, so a stack that wants a different per-deployment token
-    # for the same env var keeps full control via its normal env prompt.
+    # state.providers is a flat object { ENV_VAR_NAME: value, … } that
+    # bento-auth writes when the operator registers an API key. Inject
+    # every entry that the stack didn't already declare in its own
+    # manifest — manifests win on collision, so a stack that wants a
+    # different per-deployment value for the same env var keeps full
+    # control via its normal env prompt.
     #
-    # We emit each (key, value) verbatim. The key is the env var name
-    # itself (e.g. CLAUDE_CODE_OAUTH_TOKEN, not the abstract "anthropic")
-    # — encapsulating the dual-header gotcha from PR #20 at the state
-    # layer means downstream consumers never have to know which env var
-    # name maps to which auth mode for which provider.
+    # We emit each (key, value) verbatim, keyed by the env var name itself
+    # (e.g. OPENROUTER_API_KEY) — downstream consumers just read the env
+    # var they expect, no provider abstraction in the middle.
     #
     # Stacks that don't use the var simply ignore it. Pollution in
     # `docker service inspect` of e.g. postgres is the cosmetic cost we

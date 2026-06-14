@@ -1,6 +1,24 @@
 {
-  "_comment": "Data-driven catalog of API-key AI providers for bento-auth. OAuth device-flow providers (claude, openai-codex) keep their bespoke flows in scripts/bento-auth; everything here is a plain API key that bento-auth stores in state.providers and propagates to every BENTO_MANAGED stack. ADDING A PROVIDER = ONE OBJECT BELOW — no code change. EVERY catalog provider gets its OWN dedicated env var(s) so they ALL coexist — registering one never evicts another. Fields: id (subcommand), label, format ('native' = the apps recognise a dedicated key env var built-in, no base URL needed; 'compat' = OpenAI-compatible but NOT built-in, so it gets a dedicated key env PLUS a dedicated base-url env — wire it as a custom provider in your app pointing apiKey/baseUrl at those env vars), env (key var), base_url / base_url_env (compat only — both dedicated, never the shared OPENAI_* slot), signup_url, validate_url (GET with Bearer to verify; empty = skip), note. The shared OPENAI_API_KEY + OPENAI_BASE_URL slot is reserved for the ad-hoc 'bento-auth openai-compat <label> <base_url>' command (exotic/one-off endpoints) and for the real OpenAI / openai-codex — it is NEVER used by a catalog entry.",
+  "_comment": "Data-driven catalog of API-key AI providers for bento-auth — paste a key, it is validated, stored in state.providers, and propagated to every BENTO_MANAGED stack. Subscriptions (OAuth) are NOT handled here; each app owns its native sign-in. ADDING A PROVIDER = ONE OBJECT BELOW (no code change). Most providers get their OWN dedicated env var(s) so they coexist — registering one never evicts another. Fields: id (subcommand), label, format ('native' = the app recognises a dedicated key env var built-in, no base URL needed; 'compat' = OpenAI-compatible custom endpoint, gets a dedicated key env PLUS a dedicated base-url env — wire it as a custom provider in your app pointing apiKey/baseUrl at those env vars), env (key var), base_url / base_url_env (compat only — both dedicated, never the shared OPENAI_* slot), signup_url, validate_url (GET with Bearer to verify; empty = skip), note. The shared OPENAI_API_KEY + OPENAI_BASE_URL slot belongs to the native 'openai' entry and the ad-hoc 'bento-auth openai-compat <label> <base_url>' command; compat entries never touch it.",
   "providers": [
+    {
+      "id": "anthropic",
+      "label": "Anthropic (Claude API key)",
+      "format": "native",
+      "env": "ANTHROPIC_API_KEY",
+      "signup_url": "https://console.anthropic.com/settings/keys",
+      "validate_url": "",
+      "note": "Classic console API key (sk-ant-api...), pay-as-you-go. NOT the Claude Pro/Max subscription — for that use the app's native sign-in (e.g. paperclip's claude_local). Validation skipped (Anthropic uses x-api-key, not Bearer)."
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI (Platform API key)",
+      "format": "native",
+      "env": "OPENAI_API_KEY",
+      "signup_url": "https://platform.openai.com/api-keys",
+      "validate_url": "https://api.openai.com/v1/models",
+      "note": "Classic platform API key (sk-...), pay-as-you-go on api.openai.com. NOT the ChatGPT Plus subscription — for that use the app's native OAuth (e.g. openclaw 'models auth login --provider openai'). Occupies the shared OpenAI slot."
+    },
     {
       "id": "openrouter",
       "label": "OpenRouter",
