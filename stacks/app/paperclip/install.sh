@@ -122,6 +122,12 @@ install_log=$(mktemp)
 trap 'rm -f "$install_log"' EXIT
 for attempt in 1 2 3; do
     cid=$(_find_container 'paperclip_paperclip')
+    # SC2024 false positive on the `… >"$install_log"` redirect in the elif
+    # below: $install_log is a user-owned mktemp, so the shell (not root)
+    # performing the redirect is exactly what we want — the log must stay
+    # readable by this script for the failure dump. The directive must sit on
+    # the whole `if` (SC1123 forbids it on an individual elif branch).
+    # shellcheck disable=SC2024
     if [[ -z "$cid" ]]; then
         echo "[paperclip] no running container on attempt $attempt — retrying" >&2
     elif sudo docker exec -u node "$cid" sh -c "
