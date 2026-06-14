@@ -124,8 +124,23 @@ else
     exit 1
 fi
 
-# Cross-stack: hermes binary (RO) so the plugin can spawn `hermes chat`
-# as a subprocess. Idempotent no-op when the hermes stack isn't deployed.
+# Cross-stack: hermes binary (RO) + hermes data dir (RO) so the
+# hermes_local plugin can spawn `hermes chat` reading the same
+# config.yaml + auth.json the daemon manages via its dashboard.
+# Idempotent no-op when the hermes stack isn't deployed.
 graft_external_volumes_to_service \
     paperclip_paperclip \
-    hermes_hermes-bin:/opt/hermes:readonly
+    hermes_hermes-bin:/opt/hermes:readonly \
+    hermes_hermes-data:/opt/hermes-shared:readonly
+
+# Symlink ~/.hermes/{config.yaml,auth.json} to the cross-stack mount so
+# the subprocess hermes (HOME=/paperclip) resolves them from there.
+# `ln -sfn` replaces existing symlinks atomically; if /opt/hermes-shared
+# isn't grafted, the dangling symlinks stay quiet until hermes lands.
+wait_for_service paperclip_paperclip 120 || true
+cid=$(_find_container 'paperclip_paperclip')
+sudo docker exec -u node "$cid" sh -c '
+    mkdir -p /paperclip/.hermes
+    ln -sfn /opt/hermes-shared/config.yaml /paperclip/.hermes/config.yaml
+    ln -sfn /opt/hermes-shared/auth.json   /paperclip/.hermes/auth.json
+' || true
