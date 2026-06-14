@@ -70,10 +70,10 @@
       "format": "compat",
       "env": "ZAI_API_KEY",
       "base_url_env": "ZAI_BASE_URL",
-      "base_url": "https://api.z.ai/api/paas/v4",
+      "base_url": "https://api.z.ai/api/coding/paas/v4",
       "signup_url": "https://z.ai/manage-apikey/apikey-list",
       "validate_url": "https://api.z.ai/api/paas/v4/models",
-      "note": "Cheap GLM coding subscription (~USD 10/mo). Lives in its OWN slot (ZAI_API_KEY + ZAI_BASE_URL) — wire it as a custom OpenAI-compatible provider in your app. Does NOT touch the shared OpenAI slot."
+      "note": "Cheap GLM coding SUBSCRIPTION (~USD 10/mo). base_url is the CODING-PLAN endpoint (/api/coding/paas/v4) — the subscription bills here. The pay-as-you-go API platform is /api/paas/v4 (separate prepaid balance); override ZAI_BASE_URL to that only if you use credits instead of the plan. Lives in its OWN slot (ZAI_API_KEY + ZAI_BASE_URL); wire it as a custom OpenAI-compatible provider in your app. Verified: glm-5.1 replies via the coding endpoint; paas/v4 returns 'insufficient balance' on a plan-only account."
     },
     {
       "id": "kimi",
