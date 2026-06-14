@@ -93,7 +93,8 @@ install.sh
     ├── lib/stacks.sh  manifest discovery + env resolution + memory budget + deploy via API
     ├── lib/report.sh  generates handoff HTML at end of Step 3 / on demand
     ├── lib/install-helpers.sh  helpers used by per-stack install.sh scripts
-    └── lib/auth-helpers.sh     helpers for scripts/bento-auth (OAuth wiring)
+    ├── lib/auth-helpers.sh     helpers for scripts/bento-auth (OAuth wiring + provider catalog engine)
+    └── lib/provider-catalog.json  data catalog of API-key AI providers (read by bento-auth)
     │
     ▼
 Bootstrap (one-time): asks BASE_DOMAIN + ADMIN_EMAIL + ADVERTISE_ADDR, persists to state
@@ -154,6 +155,7 @@ bento/
 │   ├── install-helpers.sh        # helpers for per-stack install.sh scripts
 │   ├── palette.sh                # pre-gum ANSI palette
 │   ├── portainer.sh
+│   ├── provider-catalog.json     # data catalog of API-key AI providers (bento-auth)
 │   ├── report.sh                 # handoff HTML generator
 │   ├── stacks.sh
 │   ├── state.sh

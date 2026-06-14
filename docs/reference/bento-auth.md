@@ -13,15 +13,50 @@ hosts a small `auth_run` wrapper).
 
 ---
 
-## Supported providers (MVP)
+## Supported providers
+
+There are two shapes, by auth mechanism:
+
+**1. OAuth device-flow (subscription).** A bespoke flow per provider — the
+login runs *inside the paperclip container* against a bundled CLI, so these
+require paperclip deployed.
 
 | ID | Provider | Subscription used | Notes |
 |---|---|---|---|
 | `claude` | Anthropic (Claude) | Pro / Max | **Anthropic charges third-party apps to "extra usage"** — see [Commercial reality](#commercial-reality-anthropic) below. |
 | `openai-codex` | OpenAI Codex via ChatGPT | Plus ($20/mo) | Only `gpt-5.4` model accepted on Plus. |
 
-Other OAuth providers (Gemini, Qwen, etc.) are easy to add — open an
-issue with a one-line "I want X" and we'll wire it.
+**2. API-key (catalog-driven).** Everything else is a plain API key declared
+as data in `lib/provider-catalog.json` — `bento-auth` prompts for it,
+validates it, stores it in `state.providers`, and propagates. **Adding a
+provider is a one-object JSON edit, not code.** No paperclip dependency.
+
+| ID | Provider | Format | Env var(s) |
+|---|---|---|---|
+| `openrouter` | OpenRouter | named | `OPENROUTER_API_KEY` |
+| `opencode` | OpenCode (Zen + Go) | named | `OPENCODE_API_KEY` (one key, both catalogs) |
+| `gemini` | Google Gemini (key) | named | `GEMINI_API_KEY` |
+| `deepseek` | DeepSeek | named | `DEEPSEEK_API_KEY` |
+| `groq` | Groq | named | `GROQ_API_KEY` |
+| `xai` | xAI Grok | named | `XAI_API_KEY` |
+| `mistral` | Mistral | named | `MISTRAL_API_KEY` |
+| `zai` | z.ai GLM Coding Plan | openai-compat | `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
+| `kimi` | Kimi (Moonshot) | openai-compat | `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
+| `qwen` | Qwen (DashScope) | openai-compat | `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
+| `minimax` | MiniMax | openai-compat | `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
+
+- **named**: the app recognises a dedicated env var (no base URL); these
+  coexist — register as many as you want.
+- **openai-compat**: a custom OpenAI-compatible endpoint that occupies the
+  shared `OPENAI_API_KEY` + `OPENAI_BASE_URL` slot — **mutually exclusive**
+  with other slot occupants (including `openai-codex`). Registering one
+  evicts the previous.
+
+For anything not in the catalog: `bento-auth openai-compat <label> <base_url>`
+prompts for a key and parks it on the OpenAI-compat slot.
+
+Other OAuth providers (Gemini/Qwen *subscription* tiers via the `opencode`
+login broker) are planned — open an issue with a one-line "I want X".
 
 ---
 
