@@ -40,6 +40,16 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # The upstream image ships a HEALTHCHECK that does
+    # `fetch('http://127.0.0.1:18789/healthz')`, but bento binds the gateway
+    # to `lan` (OPENCLAW_GATEWAY_BIND) so the overlay — Traefik and
+    # paperclip — can reach it. With a non-loopback bind the loopback probe
+    # times out, the task never goes healthy, Swarm wedges it at 0/1, and
+    # Traefik never registers the route (so no TLS cert is ever requested).
+    # Per bento convention app services carry no Swarm healthcheck — Traefik's
+    # backend HTTP probe handles readiness — so disable the image one.
+    healthcheck:
+      disable: true
     volumes:
       # Three separate volumes — OAuth secret dir MUST live outside the
       # data dir per upstream guidance (different encryption lifecycle).
