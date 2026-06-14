@@ -73,19 +73,32 @@ base="/paperclip/adapter-plugins/hermes-local-${version}"
 dir="${base}/node_modules/${pkg}"
 
 echo "Installing Paperclip adapter ${pkg}@${version}…"
-# --loglevel=error keeps the install quiet on success but surfaces the
-# warning/error that --silent swallows when npm "succeeds" with an empty
-# node_modules (the failure mode that left Paperclip silently loading
-# the upstream built-in hermes_local instead of our override).
+# Retry up to 3 times with backoff. `npm install` can return exit 0 with an
+# empty node_modules on transient registry hiccups (slow CDN, packument
+# refresh races) — the file-existence test below is the authoritative
+# "did the install actually land" check. Each attempt's npm log goes
+# to a tmpfile we tail on failure, so the operator sees the real error
+# rather than a silent fallback to the built-in hermes_local.
 install_ok=0
-if sudo docker exec -u node "$cid" sh -c "
-    set -e
-    mkdir -p '${base}' && cd '${base}'
-    npm install --no-save --no-progress --loglevel=error '${pkg}@${version}'
-    test -f '${dir}/dist/index.js'
-"; then
-    install_ok=1
-fi
+install_log=$(mktemp)
+trap 'rm -f "$install_log"' EXIT
+for attempt in 1 2 3; do
+    if sudo docker exec -u node "$cid" sh -c "
+        set -e
+        mkdir -p '${base}' && cd '${base}'
+        rm -rf node_modules package.json package-lock.json
+        npm install --no-save --no-progress --loglevel=warn '${pkg}@${version}'
+        test -f '${dir}/dist/index.js'
+    " >"$install_log" 2>&1; then
+        install_ok=1
+        break
+    fi
+    if (( attempt < 3 )); then
+        sleep_s=$(( attempt * 10 ))
+        echo "[paperclip] install attempt $attempt failed — retrying in ${sleep_s}s" >&2
+        sleep "$sleep_s"
+    fi
+done
 
 if (( install_ok )); then
     # Replace the prior hermes_local entry (if any) so re-installs don't
@@ -104,8 +117,11 @@ if (( install_ok )); then
     sudo docker exec -u node -i "$cid" sh -c 'cat > /paperclip/adapter-plugins.json' <<< "$updated"
     echo "[paperclip] adapter-plugins.json updated with hermes_local"
 else
-    echo "[paperclip] ${pkg} install failed — dist/index.js missing. Paperclip will fall" >&2
-    echo "[paperclip] back to the built-in hermes_local. Re-run install to retry." >&2
+    echo "[paperclip] ${pkg} install failed after 3 attempts. Last npm output:" >&2
+    sed 's/^/[paperclip]   /' "$install_log" >&2
+    echo "[paperclip] Paperclip will fall back to the built-in hermes_local." >&2
+    echo "[paperclip] Re-run \`bento install\` once the registry/network is reachable." >&2
+    exit 1
 fi
 
 # Cross-stack: hermes binary (RO) so the plugin can spawn `hermes chat`
