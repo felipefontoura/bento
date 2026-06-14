@@ -32,7 +32,9 @@
 
 services:
   openclaw:
-    image: ghcr.io/openclaw/openclaw:latest
+    # Tag overridable per-deploy via OPENCLAW_IMAGE_TAG (same convention as
+    # hermes/paperclip).
+    image: ghcr.io/openclaw/openclaw:${OPENCLAW_IMAGE_TAG:-latest}
     networks:
       - network_public
     logging:
@@ -40,6 +42,16 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # The upstream image ships a HEALTHCHECK that does
+    # `fetch('http://127.0.0.1:18789/healthz')`, but bento binds the gateway
+    # to `lan` (OPENCLAW_GATEWAY_BIND) so the overlay — Traefik and
+    # paperclip — can reach it. With a non-loopback bind the loopback probe
+    # times out, the task never goes healthy, Swarm wedges it at 0/1, and
+    # Traefik never registers the route (so no TLS cert is ever requested).
+    # Per bento convention app services carry no Swarm healthcheck — Traefik's
+    # backend HTTP probe handles readiness — so disable the image one.
+    healthcheck:
+      disable: true
     volumes:
       # Three separate volumes — OAuth secret dir MUST live outside the
       # data dir per upstream guidance (different encryption lifecycle).
@@ -48,24 +60,45 @@ services:
       - openclaw-oauth:/home/node/.config/openclaw
     environment:
       # =============================================================================
-      # Core
+      # Gateway — authentication & bind
       # =============================================================================
 
-      # Bearer token for both the Control UI and (once enabled) /v1/chat/completions.
+      # Shared secret that gates BOTH the Control UI's WebSocket handshake and
+      # the OpenAI-compatible /v1 bearer. A non-loopback bind (below) makes auth
+      # mandatory — openclaw refuses to expose the gateway without it.
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
 
-      # Bind on the LAN inside the container so the overlay can reach it.
-      # `loopback` would shadow the service from sibling containers.
+      # Bind on all LAN interfaces so the overlay (Traefik + paperclip) can
+      # reach the gateway. `loopback` would shadow it from sibling containers.
       - OPENCLAW_GATEWAY_BIND=lan
 
-      # Where the gateway stores SQLite + JSON5 config + workspace.
+      # =============================================================================
+      # State directories (each backed by a named volume below)
+      # =============================================================================
+
+      # SQLite + JSON5 config + workspace tree.
       - OPENCLAW_CONFIG_DIR=/home/node/.openclaw
       - OPENCLAW_WORKSPACE_DIR=/home/node/.openclaw/workspace
+      # OAuth profile secrets live on a SEPARATE volume from the data dir per
+      # upstream guidance (different encryption lifecycle). This is where the
+      # "sign in with ChatGPT/Claude" subscription tokens persist across deploys.
       - OPENCLAW_AUTH_PROFILE_SECRET_DIR=/home/node/.config/openclaw
 
       # =============================================================================
-      # LLM providers (commented — uncomment at least one to actually serve)
+      # Timezone
       # =============================================================================
+
+      # Process + log timestamps. Match the rest of the bento fleet.
+      - TZ=America/Sao_Paulo
+
+      # =============================================================================
+      # LLM provider — the primary path is the Control UI, not these vars
+      # =============================================================================
+      # Recommended (terminal-free): open the Control UI and "sign in with
+      # ChatGPT / Claude" — it uses your SUBSCRIPTION via OAuth (no API key,
+      # flat fee) and persists on the openclaw-oauth volume. The pay-as-you-go
+      # API keys below are an ADVANCED bring-your-own alternative: uncomment one
+      # and redeploy (openclaw reads it as that provider's default-account key).
 
       # - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -76,14 +109,19 @@ services:
       # Chat channels — Telegram is the easy beginner default
       # =============================================================================
       # Telegram needs only a bot token from @BotFather — no Meta business
-      # verification or WhatsApp Business API approval. Leave blank to skip
-      # and connect later from the Control UI. Slack/Discord stay commented;
-      # bring your own tokens or wire them in the UI.
+      # verification or WhatsApp Business API approval. It has no in-UI login
+      # button (unlike QR-paired channels): the token comes from this env var
+      # (the default-account fallback) and install.sh flips
+      # channels.telegram.enabled on when it is set. Leave blank to skip — you
+      # can add it later from the Control UI's config editor
+      # (channels.telegram.botToken + enabled).
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
 
-      # - SLACK_BOT_TOKEN=
-      # - SLACK_APP_TOKEN=
-      # - DISCORD_BOT_TOKEN=
+      # Slack / Discord: bring your own tokens, then enable the channel in the
+      # Control UI config editor (channels.<name>.enabled).
+      # - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
+      # - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
+      # - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
     deploy:
       mode: replicated
       replicas: 1

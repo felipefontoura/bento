@@ -4,6 +4,7 @@
   "description": "Personal AI assistant with a web Control UI — sign in with your ChatGPT/Claude subscription in the browser, chat, and connect a Telegram bot, all without a terminal. OpenAI-compatible /v1/chat/completions stays enabled for overlay consumers (paperclip, etc.).",
   "depends_on": [],
   "env": [
+    { "name": "OPENCLAW_IMAGE_TAG", "default": "latest" },
     { "name": "OPENCLAW_HOST", "default": "openclaw.${BASE_DOMAIN}", "prompt": "Openclaw Control UI hostname" },
     { "name": "OPENCLAW_GATEWAY_TOKEN", "generate": "openssl rand -hex 32", "hide": true },
     { "name": "TELEGRAM_BOT_TOKEN", "prompt": "Optional: Telegram bot token from @BotFather (leave blank to connect later in the Control UI)", "hide": true, "default": "" }
