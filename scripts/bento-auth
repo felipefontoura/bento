@@ -299,9 +299,10 @@ cmd_api_key() {
     [[ -n "$note" ]] && printf '  %s\n' "$note"
     [[ -n "$signup_url" ]] && _info "Get a key at: ${signup_url}"
     if [[ -n "$base_url" ]]; then
-        _warn "OpenAI-compatible (${base_url}). This occupies the shared slot"
-        _warn "  ${env} + ${base_url_env:-OPENAI_BASE_URL} — it REPLACES any other"
-        _warn "  provider in that slot (including OpenAI Codex)."
+        _info "OpenAI-compatible endpoint: ${base_url}"
+        _info "Stored in its OWN slot (${env} + ${base_url_env}) — coexists with"
+        _info "  every other provider. Wire it in your app as a custom provider:"
+        _info "    apiKey = \${${env}}   baseUrl = \${${base_url_env}}"
     fi
 
     printf 'Paste the API key (input hidden): '
@@ -344,13 +345,16 @@ cmd_openai_compat() {
     if [[ -z "$label" || -z "$base_url" ]]; then
         _err "Usage: bento-auth openai-compat <label> <base_url>"
         _info "Example: bento-auth openai-compat my-llm https://api.example.com/v1"
+        _info "For known providers (z.ai, kimi, qwen, …) use their named subcommand —"
+        _info "  this is only for exotic / one-off endpoints not in the catalog."
         return 2
     fi
 
     printf '\n'
-    _info "Register OpenAI-compatible provider — ${label} (${base_url})"
-    _warn "Occupies the shared OPENAI_API_KEY + OPENAI_BASE_URL slot — replaces"
-    _warn "  any other provider in that slot (including OpenAI Codex)."
+    _info "Register exotic OpenAI-compatible endpoint — ${label} (${base_url})"
+    _warn "This is the SHARED OpenAI slot (OPENAI_API_KEY + OPENAI_BASE_URL) —"
+    _warn "  it REPLACES any other occupant (the real OpenAI key or openai-codex)."
+    _warn "  For a provider that must coexist, add it to the catalog instead."
 
     printf 'Paste the API key (input hidden): '
     local key
