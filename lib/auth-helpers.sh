@@ -138,6 +138,75 @@ auth_is_supported_provider() {
 }
 
 # -----------------------------------------------------------------------------
+# Provider catalog — data-driven API-key providers
+# -----------------------------------------------------------------------------
+#
+# The OAuth providers above (claude, openai-codex) keep bespoke flows in
+# scripts/bento-auth because they need a device flow + a CLI in the paperclip
+# container. Everything in lib/provider-catalog.json is a plain API key:
+# bento-auth prompts for it, optionally validates it, stores it in
+# state.providers and propagates. Adding a provider is a JSON edit, not code.
+
+# Absolute path to the catalog. Resolved at call time so it tracks
+# BENTO_REPO_ROOT even when this file is sourced before it's set.
+auth_catalog_path() {
+    printf '%s/lib/provider-catalog.json' "${BENTO_REPO_ROOT:-/root/.local/share/bento}"
+}
+
+# True if <id> is a known catalog provider.
+auth_catalog_has() {
+    local id="$1" path
+    path="$(auth_catalog_path)"
+    [[ -f "$path" ]] || return 1
+    jq -e --arg id "$id" '.providers[] | select(.id==$id)' "$path" >/dev/null 2>&1
+}
+
+# Echo one field of a catalog provider record (empty if absent).
+auth_catalog_get() {
+    local id="$1" field="$2" path
+    path="$(auth_catalog_path)"
+    [[ -f "$path" ]] || return 1
+    jq -r --arg id "$id" --arg f "$field" \
+        '.providers[] | select(.id==$id) | .[$f] // empty' "$path" 2>/dev/null
+}
+
+# Emit `id<TAB>label<TAB>format` for every catalog provider (pickers/help).
+auth_catalog_list() {
+    local path
+    path="$(auth_catalog_path)"
+    [[ -f "$path" ]] || return 1
+    jq -r '.providers[] | "\(.id)\t\(.label)\t\(.format)"' "$path" 2>/dev/null
+}
+
+# Validate an API key by GETting <url> with a Bearer header.
+#   0 = HTTP 2xx (accepted)
+#   1 = non-2xx / unreachable (rejected)
+#   2 = cannot validate (no url, or curl missing) — caller treats as skip
+auth_validate_api_key() {
+    local url="$1" key="$2"
+    [[ -z "$url" ]] && return 2
+    command -v curl >/dev/null 2>&1 || return 2
+    local code
+    code=$(curl -sS -o /dev/null -w '%{http_code}' \
+        -H "Authorization: Bearer ${key}" \
+        --max-time 15 "$url" 2>/dev/null) || true
+    [[ "$code" =~ ^2[0-9][0-9]$ ]] && return 0
+    return 1
+}
+
+# Emit `VAR<TAB>value` for every entry in state.providers (for `bento-auth
+# list`). Sources state.sh lazily so BENTO_STATE_FILE is defined.
+auth_state_providers_dump() {
+    if ! declare -F state_set >/dev/null 2>&1; then
+        # shellcheck source=state.sh
+        source "${BENTO_REPO_ROOT}/lib/state.sh"
+    fi
+    [[ -f "$BENTO_STATE_FILE" ]] || return 0
+    jq -r '.providers // {} | to_entries[] | "\(.key)\t\(.value)"' \
+        "$BENTO_STATE_FILE" 2>/dev/null
+}
+
+# -----------------------------------------------------------------------------
 # state.providers — ambient propagation
 # -----------------------------------------------------------------------------
 

@@ -257,6 +257,133 @@ INFO
 }
 
 # -----------------------------------------------------------------------------
+# Generic API-key registration (catalog-driven)
+# -----------------------------------------------------------------------------
+
+# Store a key + optional base URL in state.providers and propagate. Shared by
+# the catalog providers (cmd_api_key) and the ad-hoc openai-compat command.
+_register_api_key() {
+    local label="$1" env="$2" key="$3" base_url="${4:-}" base_url_env="${5:-OPENAI_BASE_URL}"
+
+    _info "Persisting ${env} to bento state..."
+    auth_state_providers_set "$env" "$key"
+    if [[ -n "$base_url" ]]; then
+        auth_state_providers_set "$base_url_env" "$base_url"
+    fi
+
+    _info "Propagating to every running BENTO_MANAGED stack..."
+    auth_propagate_state_providers
+
+    _ok "${label} registered. Present and future bento stacks inherit it."
+}
+
+# bento-auth <provider> for any API-key provider in lib/provider-catalog.json.
+cmd_api_key() {
+    local id="$1"
+    if ! auth_catalog_has "$id"; then
+        _err "Unknown provider: $id"
+        return 2
+    fi
+
+    local label env base_url base_url_env signup_url validate_url note
+    label=$(auth_catalog_get "$id" label)
+    env=$(auth_catalog_get "$id" env)
+    base_url=$(auth_catalog_get "$id" base_url)
+    base_url_env=$(auth_catalog_get "$id" base_url_env)
+    signup_url=$(auth_catalog_get "$id" signup_url)
+    validate_url=$(auth_catalog_get "$id" validate_url)
+    note=$(auth_catalog_get "$id" note)
+
+    printf '\n'
+    _info "Register API key — ${label}"
+    [[ -n "$note" ]] && printf '  %s\n' "$note"
+    [[ -n "$signup_url" ]] && _info "Get a key at: ${signup_url}"
+    if [[ -n "$base_url" ]]; then
+        _warn "OpenAI-compatible (${base_url}). This occupies the shared slot"
+        _warn "  ${env} + ${base_url_env:-OPENAI_BASE_URL} — it REPLACES any other"
+        _warn "  provider in that slot (including OpenAI Codex)."
+    fi
+
+    printf 'Paste the API key (input hidden): '
+    local key
+    read -rs key
+    printf '\n'
+    if [[ -z "$key" ]]; then
+        _err "No key entered. Aborted."
+        return 1
+    fi
+
+    if [[ -n "$validate_url" ]]; then
+        _info "Validating against ${validate_url} ..."
+        auth_validate_api_key "$validate_url" "$key"
+        case $? in
+            0) _ok "Key accepted by ${label}." ;;
+            2) _warn "Skipped validation (curl missing) — storing anyway." ;;
+            *)
+                _warn "Validation FAILED — key rejected or endpoint unreachable."
+                if [[ "${BENTO_AUTH_ASSUME_YES:-0}" != "1" ]]; then
+                    printf 'Store it anyway? [y/N] '
+                    local reply
+                    read -r reply
+                    if [[ ! "$reply" =~ ^[Yy]$ ]]; then
+                        _info "Aborted. No changes made."
+                        return 1
+                    fi
+                fi
+                ;;
+        esac
+    fi
+
+    _register_api_key "$label" "$env" "$key" "$base_url" "${base_url_env:-OPENAI_BASE_URL}"
+}
+
+# bento-auth openai-compat <label> <base_url> — ad-hoc provider not in the
+# catalog (any OpenAI-compatible endpoint). Occupies the OpenAI slot.
+cmd_openai_compat() {
+    local label="${1:-}" base_url="${2:-}"
+    if [[ -z "$label" || -z "$base_url" ]]; then
+        _err "Usage: bento-auth openai-compat <label> <base_url>"
+        _info "Example: bento-auth openai-compat my-llm https://api.example.com/v1"
+        return 2
+    fi
+
+    printf '\n'
+    _info "Register OpenAI-compatible provider — ${label} (${base_url})"
+    _warn "Occupies the shared OPENAI_API_KEY + OPENAI_BASE_URL slot — replaces"
+    _warn "  any other provider in that slot (including OpenAI Codex)."
+
+    printf 'Paste the API key (input hidden): '
+    local key
+    read -rs key
+    printf '\n'
+    if [[ -z "$key" ]]; then
+        _err "No key entered. Aborted."
+        return 1
+    fi
+
+    _info "Validating against ${base_url%/}/models ..."
+    auth_validate_api_key "${base_url%/}/models" "$key"
+    case $? in
+        0) _ok "Key accepted." ;;
+        2) _warn "Skipped validation (curl missing) — storing anyway." ;;
+        *)
+            _warn "Validation FAILED (the endpoint may not expose /models)."
+            if [[ "${BENTO_AUTH_ASSUME_YES:-0}" != "1" ]]; then
+                printf 'Store it anyway? [y/N] '
+                local reply
+                read -r reply
+                if [[ ! "$reply" =~ ^[Yy]$ ]]; then
+                    _info "Aborted. No changes made."
+                    return 1
+                fi
+            fi
+            ;;
+    esac
+
+    _register_api_key "$label" "OPENAI_API_KEY" "$key" "$base_url" "OPENAI_BASE_URL"
+}
+
+# -----------------------------------------------------------------------------
 # Subcommand: bento-auth list
 # -----------------------------------------------------------------------------
 
@@ -293,6 +420,26 @@ cmd_list() {
             openai_label=$(auth_format_relative_expiry "$openai_exp")
             printf '%-16s %-12s %-30s %s\n' "openai-codex" "opencode" "$openai_label" "(ChatGPT Plus OAuth)"
         fi
+    fi
+
+    # Catalog API keys — read from state.providers (the source of truth for
+    # everything that isn't an in-container OAuth file). Values are masked.
+    local any_key=0 var val masked base_url=""
+    while IFS=$'\t' read -r var val; do
+        [[ -z "$var" ]] && continue
+        if [[ "$var" == "OPENAI_BASE_URL" ]]; then
+            base_url="$val"
+            continue
+        fi
+        if (( any_key == 0 )); then
+            printf '\nstate.providers (API keys, masked):\n'
+            any_key=1
+        fi
+        masked="${val:0:6}…${val: -4}"
+        printf '%-24s %s\n' "$var" "$masked"
+    done < <(auth_state_providers_dump)
+    if [[ -n "$base_url" ]]; then
+        printf '%-24s %s\n' "OPENAI_BASE_URL" "$base_url"
     fi
 }
 
@@ -367,20 +514,34 @@ or refresh expired tokens.
 
 BANNER
 
+    # Build the menu dynamically: the two OAuth providers first, then every
+    # API-key provider from the catalog, then list/quit. Adding a provider to
+    # provider-catalog.json shows up here automatically.
+    local -a ids=() labels=()
+    ids+=("claude");       labels+=("Claude (Anthropic, Pro/Max) — OAuth")
+    ids+=("openai-codex"); labels+=("OpenAI Codex (ChatGPT Plus) — OAuth")
+    local cid clabel
+    while IFS=$'\t' read -r cid clabel _; do
+        [[ -z "$cid" ]] && continue
+        ids+=("$cid"); labels+=("${clabel} — API key")
+    done < <(auth_catalog_list)
+    ids+=("__list__"); labels+=("List authenticated providers")
+    ids+=("__quit__"); labels+=("Quit")
+
     PS3=$'\nProvider: '
     local choice
-    select choice in \
-        "Claude (Anthropic, Pro/Max)" \
-        "OpenAI Codex (ChatGPT Plus)" \
-        "List authenticated providers" \
-        "Quit"
-    do
-        case "$REPLY" in
-            1) cmd_claude;       break ;;
-            2) cmd_openai_codex; break ;;
-            3) cmd_list;         break ;;
-            4) return 0 ;;
-            *) _warn "Invalid choice. Try again." ;;
+    select choice in "${labels[@]}"; do
+        local idx=$(( REPLY - 1 ))
+        if (( idx < 0 || idx >= ${#ids[@]} )); then
+            _warn "Invalid choice. Try again."
+            continue
+        fi
+        case "${ids[$idx]}" in
+            claude)       cmd_claude;       break ;;
+            openai-codex) cmd_openai_codex; break ;;
+            __list__)     cmd_list;         break ;;
+            __quit__)     return 0 ;;
+            *)            cmd_api_key "${ids[$idx]}"; break ;;
         esac
     done
 }
@@ -397,13 +558,28 @@ Usage:
   bento-auth                     interactive picker
   bento-auth claude              login Claude (Anthropic) via OAuth
   bento-auth openai-codex        login ChatGPT Plus -> Codex via OAuth
+  bento-auth <provider>          register an API-key provider (see list below)
+  bento-auth openai-compat <label> <base_url>
+                                 register any OpenAI-compatible endpoint
   bento-auth list                show authenticated providers + expiry
   bento-auth status <provider>   exit 0 if valid, non-zero if missing/expired
   bento-auth --help              this help
 
+HELP
+
+    # Enumerate catalog providers so help stays in sync with the data file.
+    printf 'API-key providers (from lib/provider-catalog.json):\n'
+    local cid clabel cfmt
+    while IFS=$'\t' read -r cid clabel cfmt; do
+        [[ -z "$cid" ]] && continue
+        printf '  %-12s %s (%s)\n' "$cid" "$clabel" "$cfmt"
+    done < <(auth_catalog_list)
+
+    cat <<'HELP'
+
 Environment:
   BENTO_REPO_ROOT       override clone path (default /root/.local/share/bento)
-  BENTO_AUTH_ASSUME_YES skip the Anthropic commercial-policy confirm prompt
+  BENTO_AUTH_ASSUME_YES skip confirm prompts (Anthropic policy / failed-validation)
 
 Exit codes (for `bento-auth status`):
   0  token present and valid
@@ -426,10 +602,18 @@ main() {
         ""|interactive)     cmd_interactive ;;
         claude)             cmd_claude ;;
         openai-codex|codex) cmd_openai_codex ;;
+        openai-compat)      shift; cmd_openai_compat "$@" ;;
         list)               cmd_list ;;
         status)             shift; cmd_status "$@" ;;
         -h|--help|help)     cmd_help ;;
-        *)                  _err "Unknown subcommand: $cmd"; cmd_help; exit 2 ;;
+        *)
+            # Any catalog provider id routes to the generic API-key flow.
+            if auth_catalog_has "$cmd"; then
+                cmd_api_key "$cmd"
+            else
+                _err "Unknown subcommand: $cmd"; cmd_help; exit 2
+            fi
+            ;;
     esac
 }
 
