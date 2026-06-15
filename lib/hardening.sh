@@ -486,10 +486,23 @@ EOF
 chmod +x /etc/cron.daily/docker-cleanup
 
 # Configure auditd
+#
+# CIS Docker Benchmark says to audit the daemon's configuration surface, NOT
+# the on-disk storage tree. Watching `/var/lib/docker` with `-w` recursively
+# enrolls every file in every container layer (millions on a populous host) —
+# each `docker pull`, `service update`, `container start` then fires syscall
+# events the kernel must serialize through auditd before the syscall can
+# return. Observed in production 2026-06-11 on a CX22: auditd pinned at 80%
+# CPU sustained, `docker pull` stuck "Preparing" for 15 minutes, and the
+# audit backlog spilling enough events to log "lost 162" entries. The line
+# was removed and image pulls + service starts immediately recovered.
+#
+# Keep the watches on dockerd / docker binary / service / daemon.json /
+# etc/default — those rarely change and capture the real configuration
+# tampering you'd want to know about.
 cat <<EOF >/etc/audit/rules.d/audit.rules
 # Docker daemon configuration
 -w /usr/bin/dockerd -k docker
--w /var/lib/docker -k docker
 -w /etc/docker -k docker
 -w /usr/lib/systemd/system/docker.service -k docker
 -w /etc/default/docker -k docker
