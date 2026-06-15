@@ -529,15 +529,34 @@ update_redeploy_stacks() {
 
     local failures=()
     while IFS= read -r pick; do
-        local stack_id
+        local stack_id manifest_path env_payload
         stack_id=$(jq -r --arg n "$pick" '.[] | select(.Name == $n) | .Id' <<< "$stacks_json" | head -1)
         if [[ -z "$stack_id" ]]; then
             ui_warn "Could not resolve stack id for '$pick' — skipping."
             failures+=("$pick")
             continue
         fi
+
+        # Resolve the env payload from the current manifest + state BEFORE
+        # calling redeploy. The standalone-stack PUT path replaces envs;
+        # passing nothing would clear them. Rebuilding here is also what
+        # makes the "Update → Re-deploy stacks" flow actually propagate
+        # freshly-populated state.envs.<key> values and state.providers
+        # ambient tokens to the running container (issue #29).
+        manifest_path="$(stacks_manifest_for_key "$pick")"
+        if [[ -z "$manifest_path" ]]; then
+            ui_warn "$pick: no bento manifest found — skipping (stack exists in Portainer but bento has no source for it)."
+            failures+=("$pick")
+            continue
+        fi
+        if ! env_payload="$(stacks_build_env_payload "$pick" "$manifest_path")"; then
+            ui_error "$pick: env resolution failed — skipping redeploy to avoid clearing envs."
+            failures+=("$pick")
+            continue
+        fi
+
         ui_info "Redeploying $pick (Portainer stack #$stack_id)…"
-        if portainer_redeploy_stack "$stack_id"; then
+        if portainer_redeploy_stack "$stack_id" "$env_payload"; then
             ui_success "$pick redeployed."
         else
             ui_error "Redeploy of $pick failed."
