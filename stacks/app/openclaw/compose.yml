@@ -17,13 +17,18 @@
 #      and paste the token (TELEGRAM_BOT_TOKEN below, or in the Control UI).
 #      No Meta business verification, unlike WhatsApp.
 #
-# The OpenAI-compatible /v1/chat/completions endpoint stays enabled for
-# overlay consumers — paperclip's openclaw_gateway adapter talks to
-# `http://openclaw:18789/v1/...` over network_public, the same shape it uses
-# against Hermes. install.sh writes the JSON5 that enables both the Control
-# UI and /v1 (no upstream env equivalent for those flags) and pins
-# controlUi.allowedOrigins to the public host so the browser WS upgrade is
-# accepted.
+# Two overlay surfaces are exposed for consumers on network_public:
+#   - The Gateway WS protocol (`ws://openclaw:18789`) — this is what
+#     paperclip's openclaw_gateway adapter speaks. It invokes openclaw's full
+#     agent runtime (agentic loop, tools, shell, plugins, the configured
+#     model/subscription) and streams `event agent` frames back, with
+#     persistent sessions and Ed25519 device pairing. NOT a dumb completions
+#     proxy — the agent's tools execute here, in the openclaw container.
+#   - The OpenAI-compatible /v1/chat/completions endpoint — a separate, plain
+#     inference shim (no agent loop) for generic OpenAI-API consumers.
+# install.sh writes the JSON5 that enables the Control UI and /v1 (no upstream
+# env equivalent for those flags) and pins controlUi.allowedOrigins to the
+# public host so the browser WS upgrade is accepted.
 #
 # Gotcha: `host.docker.internal` is broken under Swarm overlay. If you point
 # Openclaw at a local LM Studio / Ollama, use the VPS host's private IP or a
