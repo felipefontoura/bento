@@ -1,10 +1,15 @@
 #!/bin/bash
-# Drop the JSON5 config that enables BOTH Openclaw surfaces bento relies on:
+# Drop the JSON5 config that enables the two Openclaw surfaces bento relies on:
 # the public web Control UI (beginner management) and the OpenAI-compatible
-# /v1/chat/completions endpoint (overlay consumers like paperclip). Neither
-# flag has an env-var equivalent upstream (verified against
+# /v1/chat/completions shim (a plain inference endpoint for generic OpenAI-API
+# consumers). Neither flag has an env-var equivalent upstream (verified against
 # src/config/types.gateway.ts), so this hook is the canonical way to set them
 # at install time.
+#
+# Note: paperclip's openclaw_gateway adapter does NOT use /v1 — it speaks the
+# Gateway WS protocol (ws://openclaw:18789) and drives openclaw's full agent
+# runtime. That protocol is served by the gateway itself (mode + token below),
+# not by the chatCompletions flag.
 #
 # We write through a throwaway alpine container with the named volume
 # mounted, instead of `docker exec` against the openclaw container — that
