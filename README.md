@@ -89,12 +89,22 @@ URLs + credentials.
 [Prerequisites](#prerequisites)). Nothing is installed locally except Claude
 Code — Docker/Swarm/apt all run on the VPS.
 
-**Install the plugin once** (inside Claude Code — same on macOS/Linux/Windows):
+**Install the plugin once** — type these **inside Claude Code** (not your shell),
+**one at a time**. They are two separate slash commands; run the first, wait for
+it to confirm, then run the second. Don't paste both lines together — that
+concatenates them into one broken command.
 
-```
-/plugin marketplace add felipefontoura/bento
-/plugin install bento@felipefontoura
-```
+1. Add the marketplace:
+
+   ```
+   /plugin marketplace add felipefontoura/bento
+   ```
+
+2. Then install the plugin:
+
+   ```
+   /plugin install bento@felipefontoura
+   ```
 
 **Then just ask.** The plugin adds these `/bento:*` skills:
 
