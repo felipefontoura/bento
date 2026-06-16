@@ -54,23 +54,17 @@ services:
       - BETTER_AUTH_SECRET=${METAMCP_BETTER_AUTH_SECRET}
 
       # =============================================================================
-      # Bootstrap — create the admin and lock public signup
+      # First admin & public signup
       # =============================================================================
-      # Auto-creates a single admin (credentials surfaced by install.sh) and
-      # turns OFF public signup so a public endpoint can't be self-registered.
-      # MetaMCP persists DISABLE_SIGNUP in its config table; the controls are
-      # re-applied on every run. A bootstrapped admin exists, so disabling
-      # registration never locks the operator out.
-      - BOOTSTRAP_ENABLE=true
-      - BOOTSTRAP_USER_EMAIL=${METAMCP_ADMIN_EMAIL}
-      - BOOTSTRAP_USER_PASSWORD=${METAMCP_ADMIN_PASSWORD}
-
-      # Don't reset the admin password on redeploy.
-      - BOOTSTRAP_RECREATE_USER=false
-
-      # Public UI + SSO signup OFF.
-      - BOOTSTRAP_DISABLE_REGISTRATION_UI=true
-      - BOOTSTRAP_DISABLE_REGISTRATION_SSO=true
+      # No admin is auto-created. On first visit MetaMCP's signup page is OPEN:
+      # the first person to register becomes the admin. Public signup stays ON
+      # until you turn it OFF in MetaMCP -> Settings -> "Disable signup" (the
+      # toggle is persisted in the database). Register your admin right after
+      # deploy, then disable signup so the public endpoint can't be self-registered.
+      #
+      # (MetaMCP's BOOTSTRAP_* env auto-admin feature is intentionally NOT used:
+      # it landed on main after, and is absent from, every published Docker image
+      # as of this writing — so the env vars would be silently ignored.)
 
       # =============================================================================
       # Docker Networking

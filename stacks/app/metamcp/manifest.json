@@ -5,8 +5,6 @@
   "depends_on": ["postgres"],
   "env": [
     { "name": "METAMCP_HOST",               "default": "metamcp.${BASE_DOMAIN}", "prompt": "MetaMCP hostname" },
-    { "name": "METAMCP_ADMIN_EMAIL",        "default": "admin@${BASE_DOMAIN}", "prompt": "MetaMCP admin email" },
-    { "name": "METAMCP_ADMIN_PASSWORD",     "generate": "openssl rand -base64 24", "hide": true },
     { "name": "METAMCP_BETTER_AUTH_SECRET", "generate": "openssl rand -hex 32",  "hide": true },
     { "name": "POSTGRES_PASSWORD",          "from_state": "POSTGRES_PASSWORD", "prompt": "Postgres password", "hide": true, "default": "" }
   ],

@@ -1,30 +1,28 @@
 #!/bin/bash
-# MetaMCP post-deploy bootstrap.
+# MetaMCP post-deploy setup.
 #
 # MetaMCP keeps all state in Postgres and runs its own Drizzle migrations on
-# first start, so the only database bootstrap needed here is creating the
-# `metamcp` database in the shared `postgres` stack.
+# first start, so the only database setup needed here is creating the `metamcp`
+# database in the shared `postgres` stack.
 #
-# The admin user and the "public signup disabled" config are bootstrapped by
-# the container itself from the BOOTSTRAP_* env (see compose.yml). We surface
-# the generated admin credentials below so the operator can log in.
+# No admin user is created here: the published Docker image does not ship the
+# BOOTSTRAP_* auto-admin feature, so the first admin is registered through the
+# web UI on first visit (see compose.yml). We print the open-signup warning and
+# the lock-down step below.
 set -euo pipefail
 source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 
 ensure_database metamcp
 
-# Surface the generated admin credentials. Saved to a 0600 marker next to the
-# bento state and echoed once, mirroring paperclip's first-admin invite.
-marker="$(dirname "$BENTO_STATE_FILE")/metamcp-admin.txt"
-{
-    echo "MetaMCP admin login (https://${METAMCP_HOST:-metamcp}):"
-    echo "  email:    ${METAMCP_ADMIN_EMAIL:-}"
-    echo "  password: ${METAMCP_ADMIN_PASSWORD:-}"
-    echo "Public signup is disabled — this is the only account."
-} > "$marker"
-chmod 600 "$marker"
+cat <<EOF
 
-echo
-echo "MetaMCP admin: ${METAMCP_ADMIN_EMAIL:-} / ${METAMCP_ADMIN_PASSWORD:-}"
-echo "(saved at ${marker} — public signup is OFF)"
-echo
+  MetaMCP — FIRST RUN ACTION REQUIRED
+  -----------------------------------
+  Public signup is currently OPEN. Open https://${METAMCP_HOST:-metamcp} now and
+  register the FIRST account — it becomes your admin.
+
+  Then lock it down: in MetaMCP go to Settings -> "Disable signup" so nobody
+  else can self-register on your public endpoint. The setting persists in the
+  database, so it survives restarts and redeploys.
+
+EOF
