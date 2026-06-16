@@ -104,6 +104,11 @@ services:
         - traefik.http.routers.metamcp.service=metamcp
         - traefik.http.services.metamcp.loadbalancer.server.port=12008
         - traefik.http.services.metamcp.loadbalancer.passHostHeader=true
+        # Bento management labels — let introspection tooling find this service
+        # via `docker service ls --filter label=BENTO_MANAGED=true`.
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=metamcp
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:
   network_public:
