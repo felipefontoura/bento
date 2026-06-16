@@ -1,6 +1,6 @@
 services:
   metamcp:
-    image: ghcr.io/metatool-ai/metamcp:v2.4.22
+    image: ghcr.io/metatool-ai/metamcp:latest
     networks:
       - network_public
     logging:
