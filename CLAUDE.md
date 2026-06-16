@@ -21,7 +21,7 @@ repo and is meant to be equally useful for any human contributor.
 > - **Convention change** (healthchecks, logging, secrets, deploy block,
 >   etc.) → update the "Quality bar" table and the "How to add a new
 >   application stack" section here, **and** the relevant guidance in
->   `.claude/skills/add-app-stack/SKILL.md`.
+>   `.claude/skills/contribute-stack/SKILL.md`.
 > - **New library file under `lib/`** → add it to the architecture box
 >   *and* the `lib/` ASCII tree below.
 > - **External-facing behaviour** (env vars, flags, prompts, report
@@ -137,12 +137,22 @@ bento/
 ├── install.sh                    # main menu loop
 ├── README.md                     # user-facing quickstart
 ├── CLAUDE.md                     # this file
+├── .claude-plugin/
+│   └── marketplace.json          # plugin marketplace catalog (name: felipefontoura)
 ├── .claude/
-│   └── skills/                   # task-specific playbooks for AI agents
-│       ├── add-app-stack/
-│       │   └── SKILL.md
-│       └── install-bento/
+│   └── skills/                   # CONTRIBUTOR-only project skills (loaded in-repo)
+│       └── contribute-stack/     # scaffold a new stack + commit for a PR upstream
 │           └── SKILL.md
+├── plugins/
+│   └── bento/                    # the OPERATOR plugin students install (no clone)
+│       ├── .claude-plugin/
+│       │   └── plugin.json       # name: bento → skills are /bento:<verb>
+│       └── skills/
+│           ├── install/SKILL.md  # fresh-VPS bootstrap over SSH (unattended)
+│           ├── deploy/SKILL.md   # add/redeploy apps on an existing bento VPS
+│           ├── update/SKILL.md   # pull latest bento + redeploy managed stacks
+│           ├── status/SKILL.md   # read-only health check
+│           └── auth/SKILL.md     # register AI-provider API keys (bento-auth)
 ├── docs/
 │   └── reference/
 │       └── bento-auth.md         # AI provider OAuth login (bento-auth script)
@@ -675,19 +685,45 @@ rather than mutating state on bad data.
 
 ---
 
-## What lives in `.claude/`
+## What lives in `.claude/` and `plugins/`
 
-- `.claude/skills/<name>/SKILL.md` — task-specific playbooks Claude Code
-  loads as slash commands when working in this repo. Currently:
-  - `add-app-stack` — scaffolds a new stack following the convention above.
-  - `install-bento` — drives a complete bento install end-to-end on a
-    fresh VPS via SSH using `BENTO_UNATTENDED=1` (no TUI). Owns the
-    watch-output → match-pattern → run-recovery loop the operator used
-    to walk manually; reports back with credentials, per-app URLs,
-    bootstrap invite links, and the handoff HTML path.
+There are two distinct audiences, so there are two distinct skill homes.
 
-Skills are optional sugar — every step is also written out in plain prose
-above. A human can follow the recipe without Claude.
+**Contributor skills — `.claude/skills/`** (project skills, auto-loaded only
+when someone works inside a clone of this repo):
+
+- `contribute-stack` — scaffolds a new stack following the convention above
+  and commits it for a PR upstream. It edits repo files, so it opens with a
+  context guard (`CLAUDE.md` + `stacks/app/` must exist) and refuses to run
+  outside a checkout. Invoked `/contribute-stack`.
+
+**Operator plugin — `plugins/bento/`** (the `bento` plugin students install via
+the `felipefontoura` marketplace; they never clone the repo). All skills are
+namespaced `/bento:<verb>`:
+
+- `install` — drives a complete bento install end-to-end on a **fresh** VPS via
+  SSH using `BENTO_UNATTENDED=1` (no TUI). Owns the whole console flow the
+  operator used to walk by hand — Bootstrap + Step 1 (harden) + the
+  post-hardening reboot and `bento-resume.service` continuation + Step 2 (infra)
+  + Step 3 (apps) — plus the watch-output → match-pattern → run-recovery loop,
+  and reports back with credentials, per-app URLs, invite links, and the handoff
+  HTML path.
+- `deploy` — re-runs Step 3 unattended to add/redeploy apps on a VPS that
+  already runs bento.
+- `update` — re-applies the bootstrap unattended to pull the latest ref and
+  redeploy managed stacks.
+- `status` — read-only health check (Swarm replicas, HTTPS, host resources).
+- `auth` — registers AI-provider API keys by driving `scripts/bento-auth` over
+  SSH (pipes the key in with `BENTO_AUTH_ASSUME_YES=1`; never echoes it).
+
+The point of the plugin: a student needs only Claude Code + an SSH key. Every
+`BENTO_UNATTENDED` env var, every Step 1/2/3, the reboot harness, and the
+recovery recipes are abstracted behind `/bento:*` — they never SSH in manually
+or touch bento's interactive menu.
+
+Distribution is documented in `README.md`. Skills are optional sugar — every
+step is also written out in plain prose above; a human can follow the recipe
+without Claude.
 
 ---
 

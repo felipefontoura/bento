@@ -1,0 +1,14 @@
+{
+  "name": "felipefontoura",
+  "owner": {
+    "name": "Felipe Fontoura",
+    "email": "ffontouras@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "bento",
+      "description": "Install, deploy, update, and operate a bento VPS over SSH from Claude Code",
+      "source": "./plugins/bento"
+    }
+  ]
+}

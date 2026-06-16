@@ -1,0 +1,10 @@
+{
+  "name": "bento",
+  "description": "Install, deploy, update, and operate a bento VPS over SSH from Claude Code",
+  "version": "1.0.0",
+  "author": {
+    "name": "Felipe Fontoura"
+  },
+  "homepage": "https://github.com/felipefontoura/bento",
+  "repository": "https://github.com/felipefontoura/bento"
+}

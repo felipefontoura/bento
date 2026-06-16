@@ -1,6 +1,6 @@
 ---
-name: install-bento
-description: Drive an end-to-end bento install on a fresh Ubuntu/Debian VPS via SSH — pre-flight checks, unattended one-liner, post-hardening reboot, app deploys, recovery from the failure modes that historically required manual operator intervention, and a final report with URLs + invite links.
+name: install
+description: Drive an end-to-end bento install on a FRESH Ubuntu/Debian VPS via SSH — pre-flight checks, unattended one-liner, post-hardening reboot, infra + app deploys, recovery from the failure modes that historically required manual operator intervention, and a final report with URLs + invite links. Use for a brand-new server. For adding apps to a server that already runs bento, use the deploy skill instead.
 ---
 
 You are operating an installer the user has trusted you with on a remote machine. **Confirm scope before destructive actions.** This skill chooses to be loud about what it is doing — narrate before every state-changing step, dump enough output to be auditable, and stop on anything that smells off rather than guess.
@@ -12,9 +12,19 @@ The user says something like:
 - "set up paperclip + n8n + chatwoot on my new VPS"
 - "bootstrap a bento deployment on `<ip>`"
 
-Or names this skill explicitly: `/install-bento`.
+Or names this skill explicitly: `/bento:install`.
 
 If the user asks a question *about* bento without asking you to install (e.g. "what does Step 1 do?"), this is the wrong skill — answer from `CLAUDE.md` instead.
+
+**Sibling skills in this plugin** — route to them instead when the VPS already
+runs bento:
+
+- `/bento:deploy` — add or redeploy apps on a server that already has bento.
+- `/bento:update` — pull the latest bento and redeploy managed stacks.
+- `/bento:status` — read-only health check of a bento VPS.
+- `/bento:auth` — register AI-provider API keys on a bento VPS.
+
+This skill (`install`) is only for the first run on a fresh host.
 
 # Inputs to gather
 

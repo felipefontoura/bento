@@ -22,12 +22,13 @@ bash <(curl -sSL https://raw.githubusercontent.com/felipefontoura/bento/stable/b
 
 Paste that on a fresh Ubuntu/Debian VPS, answer three questions (domain, admin email, public IP), and ~15 minutes later you have a hardened host, Traefik + Portainer with TLS, the apps you picked, and an HTML handoff report. Already know bento? Copy and go. Want context? Keep reading.
 
-> **For consultants / agencies setting up bento for a client:** if you use Claude Code, this repo ships a `install-bento` skill at [`.claude/skills/install-bento/SKILL.md`](.claude/skills/install-bento/SKILL.md). Hand Claude an SSH-reachable VPS + a domain + an app list, and it drives the whole install end-to-end via `BENTO_UNATTENDED=1` (no TUI), recovers from the failure modes documented in the skill, and reports back with credentials + URLs. Useful when you want a one-prompt install instead of babysitting the terminal.
+> **Prefer to drive it from Claude Code instead of the server console?** Install the `bento` plugin and Claude does the whole flow over SSH — you never SSH in by hand or touch the bento menu. See [Install with Claude Code](#install-with-claude-code-no-server-console). Ideal for beginners (works on Windows) and for consultants setting up a client's VPS: hand Claude an SSH-reachable host + a domain + an app list and pick up at the end with credentials + URLs.
 
 <details>
 <summary><strong>Table of contents</strong></summary>
 
 - [Quickstart](#quickstart)
+- [Install with Claude Code](#install-with-claude-code-no-server-console)
 - [What is bento](#what-is-bento)
 - [How it works](#how-it-works)
 - [Stacks](#stacks)
@@ -72,6 +73,63 @@ Pick from a checklist. For each stack, bento:
 4. **Prints the URL** — you open and log in.
 
 When Paperclip is in the deploy set, Step 3 offers an optional **Authenticate AI providers** step right after a successful deploy so the agent runtime can immediately call out to Claude / OpenAI Codex. The same menu is available any time from the main menu, or directly as `bento-auth` on the host. Full details in [docs/reference/bento-auth.md](docs/reference/bento-auth.md).
+
+---
+
+## Install with Claude Code (no server console)
+
+Everything above — Bootstrap, Step 1, Step 2, Step 3, the post-hardening reboot,
+the unattended env vars, the recovery when something stalls — is **drudgery you
+shouldn't have to do by hand** if you "just want to use it." The `bento` plugin
+for Claude Code drives all of it over SSH. You never log into the server console
+or touch bento's menu: you talk to Claude, it does the rest and hands you back
+URLs + credentials.
+
+**You need:** Claude Code, an SSH key on the VPS, and wildcard DNS (see
+[Prerequisites](#prerequisites)). Nothing is installed locally except Claude
+Code — Docker/Swarm/apt all run on the VPS.
+
+**Install the plugin once** (inside Claude Code — same on macOS/Linux/Windows):
+
+```
+/plugin marketplace add felipefontoura/bento
+/plugin install bento@felipefontoura
+```
+
+**Then just ask.** The plugin adds these `/bento:*` skills:
+
+| Command | What Claude does over SSH |
+|---|---|
+| `/bento:install` | Fresh VPS → hardened host + Traefik/Portainer + your apps. Runs Step 1/2/3 unattended, rides through the reboot, recovers from known failures, reports URLs + Portainer login. |
+| `/bento:deploy` | Add or redeploy apps on a server that already runs bento. |
+| `/bento:update` | Pull the latest bento and redeploy your stacks. |
+| `/bento:status` | Read-only health check (services, HTTPS, disk/memory). |
+| `/bento:auth` | Register an AI-provider API key and propagate it to your stacks. |
+
+Example: *"`/bento:install` on root@198.51.100.42, domain example.com, apps n8n
+and chatwoot"* → Claude takes it from there.
+
+<details>
+<summary><strong>Windows</strong> — the only local requirement is a working <code>ssh</code></summary>
+
+Docker and everything else run on the VPS, so locally you just need Claude Code
++ `ssh`. The lowest-friction path is **WSL2**, where the commands are identical
+to macOS/Linux:
+
+```powershell
+wsl --install        # PowerShell as admin, then reboot
+```
+```bash
+# inside the Ubuntu/WSL terminal:
+ssh-keygen -t ed25519                       # paste the .pub into Hetzner
+curl -fsSL https://claude.ai/install.sh | bash
+claude                                       # then: /plugin marketplace add … / /plugin install …
+```
+
+Native Windows works too (`irm https://claude.ai/install.ps1 | iex`, plus Git
+for Windows for the Bash tool); if `ssh` complains about key permissions, run
+`icacls "$env:USERPROFILE\.ssh\id_ed25519" /inheritance:r /grant:r "$env:USERNAME`:F"`.
+</details>
 
 ---
 
@@ -238,7 +296,7 @@ bash install.sh
 
 Adding a stack, changing conventions, or extending the installer? Read **[CLAUDE.md](CLAUDE.md)** — the canonical maintainer guide. It covers the Bento ↔ Portainer ownership model, the manifest schema, env resolution order, code style for shell + YAML + JSON, and a step-by-step recipe for adding new application stacks (with n8n called out as the gold-standard quality bar).
 
-`.claude/skills/add-app-stack/` is a Claude Code skill that automates the new-stack scaffold for AI-assisted contributions.
+`.claude/skills/contribute-stack/` is a Claude Code skill (invoked `/contribute-stack`) that automates the new-stack scaffold for AI-assisted contributions. It guards on being inside a repo clone, so it never fires for end users who only installed the `bento` operator plugin.
 
 PRs welcome. Open an issue first for anything beyond a small fix.
 
