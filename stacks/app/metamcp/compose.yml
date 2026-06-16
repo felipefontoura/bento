@@ -73,6 +73,28 @@ services:
       # Rewrites `localhost` MCP targets to `host.docker.internal` so stdio MCP
       # servers MetaMCP spawns can reach host-bound services.
       - TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL=true
+
+    # Persistent named volumes.
+    #
+    #  metamcp-secrets -> /secrets
+    #    Credential files (service-account JSON, OAuth tokens) that stdio MCP
+    #    servers read. MetaMCP does NOT propagate the service-level env to the
+    #    children it spawns, so each server points at these mounted files
+    #    through its OWN per-server env (e.g. set, in the MetaMCP UI for that
+    #    server, GOOGLE_APPLICATION_CREDENTIALS=/secrets/google-sa.json). Mounted
+    #    read-write because OAuth-based servers refresh and rewrite their token
+    #    file here. Operator-populated (empty by default) and persists across
+    #    redeploys.
+    #
+    #  metamcp-uv-cache -> ~/.cache/uv, metamcp-npm-cache -> ~/.npm
+    #    Persist uvx/npx package downloads across restarts. Without this every
+    #    redeploy re-downloads each stdio server's package on first spawn, which
+    #    overruns MetaMCP's single connect attempt and parks the server in an
+    #    ERROR state. install.sh chowns all three to the image's non-root uid.
+    volumes:
+      - metamcp-secrets:/secrets
+      - metamcp-uv-cache:/home/nextjs/.cache/uv
+      - metamcp-npm-cache:/home/nextjs/.npm
     deploy:
       mode: replicated
       replicas: 1
@@ -92,7 +114,9 @@ services:
       resources:
         limits:
           cpus: "1"
-          memory: 1024M
+          # Headroom for the persistent package cache plus the several concurrent
+          # stdio MCP subprocesses (python/node) MetaMCP spawns and keeps warm.
+          memory: 1700M
       # Swarm healthcheck intentionally omitted (bento convention) — Next.js SSR
       # boot on a small VPS trips wget/start_period probes and SIGKILLs healthy
       # containers. Traefik's backend health check covers user-facing readiness.
@@ -109,6 +133,14 @@ services:
         - BENTO_MANAGED=true
         - BENTO_STACK_KEY=metamcp
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
+
+volumes:
+  metamcp-secrets:
+    driver: local
+  metamcp-uv-cache:
+    driver: local
+  metamcp-npm-cache:
+    driver: local
 
 networks:
   network_public:

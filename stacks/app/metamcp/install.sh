@@ -14,6 +14,18 @@ source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 
 ensure_database metamcp
 
+# MetaMCP runs as a non-root user (uid 1001) and spawns stdio MCP servers that
+# write a persistent package cache (uvx/npx) and, for OAuth-based servers,
+# rewrite their refreshed token under /secrets. Fresh named volumes are
+# root-owned, so chown the three to that uid (idempotent). Volume names are
+# <stack-key>_<compose-volume-name>.
+for vol in \
+  "${BENTO_STACK_KEY}_metamcp-uv-cache" \
+  "${BENTO_STACK_KEY}_metamcp-npm-cache" \
+  "${BENTO_STACK_KEY}_metamcp-secrets"; do
+  docker run --rm -v "${vol}:/v" alpine chown -R 1001:1001 /v >/dev/null 2>&1 || true
+done
+
 cat <<EOF
 
   MetaMCP — FIRST RUN ACTION REQUIRED
