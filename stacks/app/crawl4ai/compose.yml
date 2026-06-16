@@ -1,0 +1,59 @@
+services:
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    networks:
+      - network_public
+    volumes:
+      # Chromium shared memory. The default 64M container /dev/shm makes
+      # headless Chrome crash on large pages — bind the host's (RAM-backed)
+      # /dev/shm so the browser has room. This is the upstream pattern.
+      - /dev/shm:/dev/shm
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      # =============================================================================
+      # Core Application
+      # =============================================================================
+
+      # Internal-only deployment (no public Traefik route). The n8n search MCP
+      # reaches it over the overlay at http://crawl4ai:11235.
+      #
+      # No CRAWL4AI_API_TOKEN — access is internal, on the private overlay only.
+      # No LLM provider keys — extraction uses the heuristic "fit" markdown
+      # path (clean main content), not LLM-based extraction.
+      - PORT=11235
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 15s
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 180s
+      resources:
+        # Heavy (headless Chromium). Capped at 1.5G; the host now has 4G swap
+        # as a backstop for crawl spikes. Reservations dropped on purpose so a
+        # tight VPS can still schedule it.
+        limits:
+          cpus: "1.5"
+          memory: 1536M
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=crawl4ai
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
+
+networks:
+  network_public:
+    name: network_public
+    external: true
