@@ -1,13 +1,27 @@
 ---
-name: add-app-stack
-description: Scaffold a new application stack in the bento repo following the established conventions (per-stack directory with compose.yml + manifest.json + optional install.sh)
+name: contribute-stack
+description: For CONTRIBUTORS working inside a local clone of the bento repo — scaffold a new application stack (stacks/<category>/<key>/ with compose.yml + manifest.json + optional install.sh) following repo conventions, then commit it for a PR upstream. This is NOT an operator/end-user skill; it edits and commits repo files. To DEPLOY an app onto a running VPS, use the bento plugin's deploy skill instead.
 ---
 
-# add-app-stack
+# contribute-stack
 
-Use this skill when the user asks to add a new application stack to the
+Use this skill when a CONTRIBUTOR asks to add a new application stack to the
 bento repo. Always start by reading `CLAUDE.md` for current conventions —
 prefer its rules over anything stated here if they ever drift.
+
+> **Context guard — check before doing anything.** This skill operates on a
+> local clone of the bento repo: it creates files under `stacks/`, edits
+> `README.md`, and makes a git commit. Confirm you are in that context —
+> `CLAUDE.md` and a `stacks/app/` directory must exist in the working tree:
+>
+> ```bash
+> test -f CLAUDE.md && test -d stacks/app && echo BENTO_REPO_OK
+> ```
+>
+> If that fails, STOP. This is a contributor skill, not an operator one. The
+> user is probably trying to **deploy** an app onto their own VPS — point them
+> at the bento plugin's `/bento:deploy` skill, which does it over SSH without a
+> local clone. Do not try to scaffold files outside a bento checkout.
 
 **Every comment, message, and doc you produce must be in English.** Even
 when the user prompts you in Portuguese, the artifacts going into the
