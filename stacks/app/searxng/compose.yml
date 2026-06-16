@@ -1,0 +1,81 @@
+services:
+  searxng:
+    image: searxng/searxng:latest
+    networks:
+      - network_public
+    volumes:
+      - searxng-config:/etc/searxng
+    # The entrypoint drops privileges to the `searxng` user and chowns
+    # /etc/searxng on first boot — these caps are what the upstream image
+    # needs to do that on a fresh, root-owned volume.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      # =============================================================================
+      # Core Application
+      # =============================================================================
+
+      # Base URL used to build absolute links in results. This is an
+      # internal-only deployment (no public Traefik route) — the n8n search
+      # MCP reaches it over the overlay as http://searxng:8080.
+      - SEARXNG_BASE_URL=http://searxng:8080/
+
+      # =============================================================================
+      # Runtime / Workers
+      # =============================================================================
+
+      # uWSGI sizing — small on purpose; this is a low-volume internal API.
+      - UWSGI_WORKERS=2
+      - UWSGI_THREADS=4
+
+      # =============================================================================
+      # Notes
+      # =============================================================================
+
+      # secret_key, the JSON output format, and the disabled bot-limiter are
+      # seeded into /etc/searxng/settings.yml by install.sh. The stock image
+      # ships HTML-only output, which an MCP/agent cannot parse. No Redis is
+      # wired (limiter off) — fine for low-volume internal search.
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 15s
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=searxng
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
+
+networks:
+  network_public:
+    name: network_public
+    external: true
+
+volumes:
+  searxng-config:
+    driver: local
