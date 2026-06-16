@@ -89,6 +89,7 @@ Each stack is a directory at `stacks/<category>/<key>/` with `compose.yml`, `man
 | app | [CLI Proxy API](stacks/app/cli-proxy-api) | OpenAI-compatible proxy in front of CLI providers |
 | app | [Evolution API](stacks/app/evolution-api) | WhatsApp gateway |
 | app | [Hermes](stacks/app/hermes) | Seeds a shared volume with Hermes Agent so Paperclip's hermes_local adapter can exec the CLI locally (overlay-only, idle sleep, no gateway) |
+| app | [MetaMCP](stacks/app/metamcp) | MCP aggregator/gateway — unify multiple MCP servers (stdio + HTTP) behind one endpoint, with a web admin UI |
 | app | [n8n](stacks/app/n8n) | Workflow automation |
 | app | [n8n MCP](stacks/app/n8n-mcp) | MCP server for n8n |
 | app | [Openclaw](stacks/app/openclaw) | Personal AI assistant with a web Control UI — sign in with your ChatGPT/Claude subscription, chat, connect a Telegram bot, no terminal. OpenAI-compatible API kept for overlay consumers |

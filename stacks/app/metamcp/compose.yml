@@ -1,0 +1,117 @@
+services:
+  metamcp:
+    image: ghcr.io/metatool-ai/metamcp:v2.4.22
+    networks:
+      - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      # =============================================================================
+      # Core Application
+      # =============================================================================
+
+      # Runtime environment.
+      - NODE_ENV=production
+
+      # Log verbosity: all | info | errors-only | none
+      - LOG_LEVEL=errors-only
+
+      # =============================================================================
+      # Public URLs / Reverse Proxy
+      # =============================================================================
+
+      # Public base URL. Used by Better Auth callbacks, the web UI, and the
+      # generated MCP endpoint URLs. Avoid a trailing slash.
+      - APP_URL=https://${METAMCP_HOST}
+
+      # Frontend-visible copy of APP_URL (baked into the Next.js client).
+      - NEXT_PUBLIC_APP_URL=https://${METAMCP_HOST}
+
+      # =============================================================================
+      # Database (PostgreSQL)
+      # =============================================================================
+      # Reuses the shared `postgres` stack. The `metamcp` database is created by
+      # install.sh; MetaMCP runs its own Drizzle migrations on first start.
+
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=metamcp
+
+      # Connection string composed from the values above.
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/metamcp
+
+      # =============================================================================
+      # Security / Authentication
+      # =============================================================================
+
+      # Better Auth signing secret. MUST remain stable across restarts/upgrades
+      # or all sessions are invalidated.
+      - BETTER_AUTH_SECRET=${METAMCP_BETTER_AUTH_SECRET}
+
+      # =============================================================================
+      # Bootstrap — create the admin and lock public signup
+      # =============================================================================
+      # Auto-creates a single admin (credentials surfaced by install.sh) and
+      # turns OFF public signup so a public endpoint can't be self-registered.
+      # MetaMCP persists DISABLE_SIGNUP in its config table; the controls are
+      # re-applied on every run. A bootstrapped admin exists, so disabling
+      # registration never locks the operator out.
+      - BOOTSTRAP_ENABLE=true
+      - BOOTSTRAP_USER_EMAIL=${METAMCP_ADMIN_EMAIL}
+      - BOOTSTRAP_USER_PASSWORD=${METAMCP_ADMIN_PASSWORD}
+
+      # Don't reset the admin password on redeploy.
+      - BOOTSTRAP_RECREATE_USER=false
+
+      # Public UI + SSO signup OFF.
+      - BOOTSTRAP_DISABLE_REGISTRATION_UI=true
+      - BOOTSTRAP_DISABLE_REGISTRATION_SSO=true
+
+      # =============================================================================
+      # Docker Networking
+      # =============================================================================
+
+      # Rewrites `localhost` MCP targets to `host.docker.internal` so stdio MCP
+      # servers MetaMCP spawns can reach host-bound services.
+      - TRANSFORM_LOCALHOST_TO_DOCKER_INTERNAL=true
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+      # Swarm healthcheck intentionally omitted (bento convention) — Next.js SSR
+      # boot on a small VPS trips wget/start_period probes and SIGKILLs healthy
+      # containers. Traefik's backend health check covers user-facing readiness.
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.metamcp.rule=Host(`${METAMCP_HOST}`)
+        - traefik.http.routers.metamcp.entrypoints=websecure
+        - traefik.http.routers.metamcp.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.metamcp.service=metamcp
+        - traefik.http.services.metamcp.loadbalancer.server.port=12008
+        - traefik.http.services.metamcp.loadbalancer.passHostHeader=true
+
+networks:
+  network_public:
+    name: network_public
+    external: true
