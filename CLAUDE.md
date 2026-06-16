@@ -155,7 +155,8 @@ bento/
 │           └── auth/SKILL.md     # register AI-provider API keys (bento-auth)
 ├── docs/
 │   └── reference/
-│       └── bento-auth.md         # AI provider OAuth login (bento-auth script)
+│       ├── bento-auth.md         # AI provider OAuth login (bento-auth script)
+│       └── crawl4ai-proxy.md     # optional outbound proxy for the crawler
 ├── lib/
 │   ├── auth-helpers.sh           # helpers for scripts/bento-auth
 │   ├── banner.sh

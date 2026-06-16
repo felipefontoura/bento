@@ -106,7 +106,9 @@ concatenates them into one broken command.
    /plugin install bento@felipefontoura
    ```
 
-**Then just ask.** The plugin adds these `/bento:*` skills:
+**Then just ask.** The plugin adds these `/bento:*` skills.
+
+**Lifecycle** — get the box and its apps running:
 
 | Command | What Claude does over SSH |
 |---|---|
@@ -116,8 +118,26 @@ concatenates them into one broken command.
 | `/bento:status` | Read-only health check (services, HTTPS, disk/memory). |
 | `/bento:auth` | Register an AI-provider API key and propagate it to your stacks. |
 
+**Operate** — day-2 work *inside* the deployed apps, through each one's API.
+You don't invoke these by name: Claude auto-loads the right one when you describe
+the task in plain language (*"send a WhatsApp"*, *"reply to a customer"*,
+*"build a workflow"*). Each discovers the host/credentials from bento state — it
+never hardcodes your instance.
+
+| Command | Operate… | Talk to it like |
+|---|---|---|
+| `/bento:paperclip` | Paperclip agent orchestration — agents, instruction bundles, skills, board issues. | *"create an agent / import skills / clean up the board"* |
+| `/bento:hermes` | Hermes agent gateway — chat over the OpenAI-compatible API, run the CLI, wire MCP servers. | *"talk to my agent / give it the youtube tools"* |
+| `/bento:n8n` | n8n workflows, driven through the n8n-mcp tools (schemas + validation baked in). | *"build / fix / run a workflow"* |
+| `/bento:evolution-api` | Evolution API — WhatsApp instances, QR pairing, send messages, webhooks. | *"connect my WhatsApp / send a message"* |
+| `/bento:chatwoot` | Chatwoot support desk — conversations, replies, contacts, inboxes. | *"reply to a customer / list open chats"* |
+| `/bento:typebot` | Typebot chatbots — start/continue chats, publish, read results (builder vs viewer). | *"start a bot chat / get results"* |
+| `/bento:plunk` | Plunk transactional email — send, track events, manage contacts (AWS SES behind it). | *"send an email / track an event"* |
+| `/bento:metamcp` | MetaMCP gateway — group MCP servers into namespaces + endpoints, mint keys. | *"add an MCP server / get my tools endpoint"* |
+
 Example: *"`/bento:install` on root@198.51.100.42, domain example.com, apps n8n
-and chatwoot"* → Claude takes it from there.
+and chatwoot"* → Claude takes it from there. Later: *"send a WhatsApp to +55…
+saying the order shipped"* → Claude loads `/bento:evolution-api` on its own.
 
 <details>
 <summary><strong>Windows</strong> — the only local requirement is a working <code>ssh</code></summary>
@@ -155,6 +175,7 @@ Each stack is a directory at `stacks/<category>/<key>/` with `compose.yml`, `man
 | db | [Redis](stacks/db/redis) | In-memory cache |
 | app | [Chatwoot](stacks/app/chatwoot) | Customer support platform |
 | app | [CLI Proxy API](stacks/app/cli-proxy-api) | OpenAI-compatible proxy in front of CLI providers |
+| app | [Crawl4AI](stacks/app/crawl4ai) | Headless web crawler/extractor (internal-only). Optional outbound proxy to dodge datacenter-IP anti-bot blocks — see [docs/reference/crawl4ai-proxy.md](docs/reference/crawl4ai-proxy.md) |
 | app | [Evolution API](stacks/app/evolution-api) | WhatsApp gateway |
 | app | [Hermes](stacks/app/hermes) | Seeds a shared volume with Hermes Agent so Paperclip's hermes_local adapter can exec the CLI locally (overlay-only, idle sleep, no gateway) |
 | app | [MetaMCP](stacks/app/metamcp) | MCP aggregator/gateway — unify multiple MCP servers (stdio + HTTP) behind one endpoint, with a web admin UI |

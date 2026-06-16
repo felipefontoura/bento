@@ -25,6 +25,24 @@ services:
       # No LLM provider keys — extraction uses the heuristic "fit" markdown
       # path (clean main content), not LLM-based extraction.
       - PORT=11235
+
+      # =============================================================================
+      # Optional outbound proxy
+      # =============================================================================
+      # Datacenter IPs (Hetzner et al.) get blocked by anti-bot on many sites
+      # (HTTP 403 "Blocked by anti-bot protection") regardless of fingerprint.
+      # Route the headless Chromium through a residential/mobile proxy by setting
+      # CRAWL4AI_PROXY in bento state (blank = direct egress, no proxy — the
+      # default, so operators without a proxy are unaffected). Crawl4AI has no
+      # documented global proxy; HTTP(S)_PROXY is the pragmatic lever Linux
+      # Chromium honors. Both cases set (Chromium/curl/wget differ); NO_PROXY
+      # keeps overlay-internal traffic direct. See docs/reference/crawl4ai-proxy.md.
+      - HTTP_PROXY=${CRAWL4AI_PROXY:-}
+      - HTTPS_PROXY=${CRAWL4AI_PROXY:-}
+      - http_proxy=${CRAWL4AI_PROXY:-}
+      - https_proxy=${CRAWL4AI_PROXY:-}
+      - NO_PROXY=localhost,127.0.0.1,searxng,metamcp,postgres,redis
+      - no_proxy=localhost,127.0.0.1,searxng,metamcp,postgres,redis
     deploy:
       mode: replicated
       replicas: 1

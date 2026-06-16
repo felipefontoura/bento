@@ -3,5 +3,12 @@
   "category": "app",
   "description": "Crawl4AI — self-hosted LLM-friendly web crawler/extractor. Takes a URL and returns clean markdown of the main content (headless Chromium). Internal-only: no Traefik, reached over the overlay at http://crawl4ai:11235 by the n8n search MCP. Heavy (Chromium) — relies on the host swap. No API token (internal overlay only), no LLM keys (heuristic 'fit' markdown extraction).",
   "depends_on": [],
-  "env": []
+  "env": [
+    {
+      "name": "CRAWL4AI_PROXY",
+      "default": "",
+      "hide": true,
+      "prompt": "Optional: outbound proxy URL for the crawler (http://user:pass@host:port) — leave blank for direct egress"
+    }
+  ]
 }
