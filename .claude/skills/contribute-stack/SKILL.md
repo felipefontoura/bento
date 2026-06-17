@@ -1,6 +1,6 @@
 ---
 name: contribute-stack
-description: For CONTRIBUTORS working inside a local clone of the bento repo — scaffold a new application stack (stacks/<category>/<key>/ with compose.yml + manifest.json + optional install.sh) following repo conventions, then commit it for a PR upstream. This is NOT an operator/end-user skill; it edits and commits repo files. To DEPLOY an app onto a running VPS, use the bento plugin's deploy skill instead.
+description: For CONTRIBUTORS working inside a local clone of the bento repo — scaffold a new application stack (stacks/<category>/<key>/ with compose.yml + manifest.json + optional install.sh) and, when the app exposes a programmable API, a companion /bento:<key> operate skill, following repo conventions, then commit it for a PR upstream. This is NOT an operator/end-user skill; it edits and commits repo files. To DEPLOY an app onto a running VPS, use the bento plugin's deploy skill instead.
 ---
 
 # contribute-stack
@@ -256,6 +256,50 @@ If the install script is non-trivial, consider a follow-up commit:
 feat(<your-key>): bootstrap database on first deploy
 ```
 
+### 10. Offer a companion operate skill (if the app has an API)
+
+Getting a stack *running* is only half the job. A stack that exposes a
+**programmable HTTP API** (not just a UI a human clicks) earns a `/bento:<key>`
+**operate skill** — the day-2 counterpart that teaches Claude to drive the
+running app's API. This is the rung that closes the loop
+install → deploy → auth → **operate**. Existing examples live in
+`plugins/bento/skills/` (`paperclip`, `hermes`, `n8n`, `evolution-api`,
+`chatwoot`, `typebot`, `plunk`, `metamcp`).
+
+**Offer it, don't force it.** Ask the contributor whether they want the
+companion skill. If the app is UI-only with no meaningful API to drive day-2,
+skip it and say so.
+
+If yes, create `plugins/bento/skills/<key>/SKILL.md`, modelling an existing one
+(`evolution-api` is the lean reference shape). Hold to these principles:
+
+- **Help, don't reproduce the docs.** Carry the non-obvious operational
+  intelligence — auth model + quirks, how to discover the instance, gotchas,
+  known bugs + workarounds, bento-specific wiring. Do NOT transcribe the
+  endpoint reference (method/path tables, request bodies, exhaustive enum
+  lists). Point to the official doc as the source of truth, and state "when this
+  skill and the docs disagree, the docs win." (Exception: an app with no public
+  API doc — e.g. source-only — justifies an endpoint orientation that points to
+  the running source instead.)
+- **Discover, don't hardcode.** Read host + credentials from bento state
+  (`jq -r '.envs."<key>".<VAR>' "$HOME/.config/bento/state.json"`); never bake in
+  an operator's domain, keys, or ids — use placeholders + the discovery command.
+- **Rich auto-load description.** The frontmatter `description` is what makes the
+  skill load *without* the user invoking it by name — pack it with
+  natural-language triggers in the words a non-technical user actually says
+  ("send a WhatsApp", "reply to a customer", "build a workflow"), plus the
+  technical ones. End it by pointing deployment back to `/bento:deploy`.
+- **Standard sections:** When to invoke · Discover the instance — don't hardcode ·
+  Auth · How to operate it (a short orientation, not a full reference) · Gotchas ·
+  Report back · Docs (source of truth).
+
+Then add a row to the README **Operate** table (under "Install with Claude
+Code"), and commit it separately from the stack:
+
+```
+feat(<your-key>): add /bento:<your-key> operate skill
+```
+
 ## Failure modes to watch for
 
 - **Skipping the upstream fetch and inventing env vars** — the most common
@@ -270,6 +314,12 @@ feat(<your-key>): bootstrap database on first deploy
   default; prefer `${VAR:-default}` or proper manifest entries.
 - **Flat env block without categories** — fails the quality bar. Group
   with comment headers like n8n does.
+- **Scaffolding a stack with a real API but never offering the operate skill**
+  — the install→deploy→auth→operate loop stays half-built. If the app has a
+  programmable API, always offer the `/bento:<key>` companion (step 10).
+- **An operate skill that reproduces the docs** — endpoint tables, request
+  bodies, and enum dumps belong in the upstream docs, not the skill. The skill
+  carries the gotchas/wiring/auth-quirks and points to the docs.
 - **Reaching for a custom Dockerfile too quickly** — `lib/stacks.sh`
   auto-detects `build:` and runs `docker compose build` before the
   Portainer stack create, so a custom image will work, but the
@@ -289,3 +339,5 @@ After finishing, tell the user:
 - Whether an install script was needed and what it does.
 - The smoke checks that passed.
 - Where the post-deploy URL will land.
+- Whether the app has a programmable API and, if so, whether a companion
+  `/bento:<key>` operate skill was offered or created (step 10).
