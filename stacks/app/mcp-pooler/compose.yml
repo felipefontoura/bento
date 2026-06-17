@@ -1,0 +1,36 @@
+services:
+  pooler:
+    image: ghcr.io/felipefontoura/mcp-pooler:latest
+    networks:
+      - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      # MetaMCP namespace endpoint to pool, e.g. https://host/metamcp/<namespace>/mcp
+      - UPSTREAM_URL=${MCP_POOLER_UPSTREAM_URL}
+      # Bearer API key (issued in the MetaMCP admin) for that namespace.
+      - UPSTREAM_KEY=${MCP_POOLER_UPSTREAM_KEY}
+      # tools/list cache refresh interval (seconds). New MCPs added in the MetaMCP
+      # admin appear here within this window.
+      - REFRESH_SEC=${MCP_POOLER_REFRESH_SEC:-45}
+      - POOLER_PORT=9100
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:9100/health', timeout=3).status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      update_config:
+        order: start-first
+
+networks:
+  network_public:
+    external: true

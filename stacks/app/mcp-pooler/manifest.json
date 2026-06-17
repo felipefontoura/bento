@@ -1,0 +1,12 @@
+{
+  "name": "mcp-pooler",
+  "category": "app",
+  "description": "Caching MCP proxy (connection pooler) in front of a MetaMCP namespace. Holds ONE persistent upstream session (keeps backends warm — no per-client cold-spawn, no process leak) and caches tools/list, so ephemeral MCP clients (e.g. per-task Hermes agents that wait ~0.75s for discovery) get instant tool discovery and native tool calls. MetaMCP stays the source of truth for the catalog; add an MCP in the admin and it appears here on the next cache refresh. Stateless — no database or volumes. Reachable on network_public as <stack-key>_pooler:9100.",
+  "depends_on": ["metamcp"],
+  "env": [
+    { "name": "MCP_POOLER_UPSTREAM_URL", "default": "https://${METAMCP_HOST}/metamcp/<namespace>/mcp", "prompt": "MetaMCP namespace endpoint to pool (.../metamcp/<namespace>/mcp)" },
+    { "name": "MCP_POOLER_UPSTREAM_KEY", "prompt": "MetaMCP API key (bearer) for that namespace", "hide": true, "default": "" },
+    { "name": "MCP_POOLER_REFRESH_SEC", "default": "45", "prompt": "tools/list cache refresh seconds" }
+  ],
+  "post_deploy_url": ""
+}
