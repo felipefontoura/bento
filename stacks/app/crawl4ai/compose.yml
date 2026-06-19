@@ -21,10 +21,12 @@ services:
     # NOT set `command:`, so the image's CMD is inherited verbatim; if upstream
     # changes its start command, we hand off to the new one instead of breaking
     # on a hardcoded copy. Image ENTRYPOINT is null and WORKDIR is /app.
+    # `$$@` is escaped on purpose: Compose interpolates `$`, so `$$` passes a
+    # literal `$` to the shell — the container sees `exec "$@"`.
     entrypoint:
       - /bin/sh
       - -c
-      - 'cp /bootstrap/config.yml /app/config.yml 2>/dev/null || echo "[bento] crawl4ai-config not seeded yet — using image default config"; exec "$@"'
+      - 'cp /bootstrap/config.yml /app/config.yml 2>/dev/null || echo "[bento] crawl4ai-config not seeded yet — using image default config"; exec "$$@"'
       - sh
     volumes:
       # Chromium shared memory. The default 64M container /dev/shm makes
