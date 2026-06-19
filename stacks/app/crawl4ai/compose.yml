@@ -1,6 +1,11 @@
 services:
   crawl4ai:
-    image: unclecode/crawl4ai:latest
+    # Pinned by digest (= crawl4ai 0.8.9), NOT :latest. The :latest tag moved
+    # under us and started requiring a REDIS_PASSWORD env its supervisord.conf
+    # could not expand (`%(ENV_REDIS_PASSWORD)s`), crash-looping the container.
+    # Pin to a known-good build; bump the digest deliberately and re-sync
+    # config.yml when you upgrade.
+    image: unclecode/crawl4ai@sha256:b243f684ad20f71ee108ab3fc3f31f3349eb5b31a9947b9e563d868417141aad
     networks:
       - network_public
     # Queue mode. crawl4ai reads /app/config.yml from a hardcoded path and has
@@ -9,24 +14,26 @@ services:
     # stock config ships max_pages=40 — 40 concurrent headless Chromium pages
     # OOM-kill a small VPS. So we ship a queue-tuned config.yml (max_pages=2,
     # memory_threshold=70, idle_ttl=60) in the persistent crawl4ai-config volume
-    # (seeded by install.sh) and copy it onto /app/config.yml at boot, then hand
-    # off to the image's own CMD (supervisord). Image ENTRYPOINT is null and
-    # WORKDIR is /app, so `supervisord -c supervisord.conf` resolves as upstream.
-    command:
+    # (seeded by install.sh) and copy it onto /app/config.yml at boot.
+    #
+    # Decorator entrypoint: do the copy, then `exec "$@"` — which runs whatever
+    # the IMAGE declares as CMD (today `supervisord -c supervisord.conf`). We do
+    # NOT set `command:`, so the image's CMD is inherited verbatim; if upstream
+    # changes its start command, we hand off to the new one instead of breaking
+    # on a hardcoded copy. Image ENTRYPOINT is null and WORKDIR is /app.
+    entrypoint:
       - /bin/sh
       - -c
-      - |
-        cp /bootstrap/config.yml /app/config.yml 2>/dev/null \
-          || echo "[bento] crawl4ai-config not seeded yet — using image default config"
-        exec supervisord -c supervisord.conf
+      - 'cp /bootstrap/config.yml /app/config.yml 2>/dev/null || echo "[bento] crawl4ai-config not seeded yet — using image default config"; exec "$@"'
+      - sh
     volumes:
       # Chromium shared memory. The default 64M container /dev/shm makes
       # headless Chrome crash on large pages — bind the host's (RAM-backed)
       # /dev/shm so the browser has room. This is the upstream pattern.
       - /dev/shm:/dev/shm
       # Persistent queue-tuned config.yml, seeded by install.sh and copied onto
-      # /app/config.yml by the command above. Read-only mount — edits go through
-      # the repo's config.yml + redeploy, or directly into the volume + restart.
+      # /app/config.yml by the entrypoint above. Read-only mount — edits go
+      # through the repo's config.yml + redeploy, or into the volume + restart.
       - crawl4ai-config:/bootstrap:ro
     logging:
       driver: json-file
