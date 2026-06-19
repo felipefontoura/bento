@@ -16,25 +16,27 @@ services:
     # memory_threshold=70, idle_ttl=60) in the persistent crawl4ai-config volume
     # (seeded by install.sh) and copy it onto /app/config.yml at boot.
     #
-    # Decorator entrypoint: do the copy, then `exec "$@"` — which runs whatever
-    # the IMAGE declares as CMD (today `supervisord -c supervisord.conf`). We do
-    # NOT set `command:`, so the image's CMD is inherited verbatim; if upstream
-    # changes its start command, we hand off to the new one instead of breaking
-    # on a hardcoded copy. Image ENTRYPOINT is null and WORKDIR is /app.
-    # `$$@` is escaped on purpose: Compose interpolates `$`, so `$$` passes a
-    # literal `$` to the shell — the container sees `exec "$@"`.
-    entrypoint:
+    # Override the command to copy the config, then run the image's start command
+    # (supervisord). A decorator entrypoint (`exec "$@"`) is NOT usable here:
+    # Compose CLEARS the image CMD when `entrypoint:` is set, so `$@` would be
+    # empty and the container exits. Hardcoding `supervisord -c supervisord.conf`
+    # is safe because the image is pinned by digest above — the CMD only changes
+    # when we deliberately bump the pin, and we re-check it then. Image
+    # ENTRYPOINT is null and WORKDIR is /app.
+    command:
       - /bin/sh
       - -c
-      - 'cp /bootstrap/config.yml /app/config.yml 2>/dev/null || echo "[bento] crawl4ai-config not seeded yet — using image default config"; exec "$$@"'
-      - sh
+      - |
+        cp /bootstrap/config.yml /app/config.yml 2>/dev/null \
+          || echo "[bento] crawl4ai-config not seeded yet — using image default config"
+        exec supervisord -c supervisord.conf
     volumes:
       # Chromium shared memory. The default 64M container /dev/shm makes
       # headless Chrome crash on large pages — bind the host's (RAM-backed)
       # /dev/shm so the browser has room. This is the upstream pattern.
       - /dev/shm:/dev/shm
       # Persistent queue-tuned config.yml, seeded by install.sh and copied onto
-      # /app/config.yml by the entrypoint above. Read-only mount — edits go
+      # /app/config.yml by the command above. Read-only mount — edits go
       # through the repo's config.yml + redeploy, or into the volume + restart.
       - crawl4ai-config:/bootstrap:ro
     logging:
