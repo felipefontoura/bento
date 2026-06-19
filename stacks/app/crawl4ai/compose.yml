@@ -3,11 +3,31 @@ services:
     image: unclecode/crawl4ai:latest
     networks:
       - network_public
+    # Queue mode. crawl4ai reads /app/config.yml from a hardcoded path and has
+    # NO env override for the pool/memory knobs (verified in 0.8.9: server.py
+    # reads config["crawler"]["pool"]["max_pages"] straight from the file). The
+    # stock config ships max_pages=40 — 40 concurrent headless Chromium pages
+    # OOM-kill a small VPS. So we ship a queue-tuned config.yml (max_pages=2,
+    # memory_threshold=70, idle_ttl=60) in the persistent crawl4ai-config volume
+    # (seeded by install.sh) and copy it onto /app/config.yml at boot, then hand
+    # off to the image's own CMD (supervisord). Image ENTRYPOINT is null and
+    # WORKDIR is /app, so `supervisord -c supervisord.conf` resolves as upstream.
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cp /bootstrap/config.yml /app/config.yml 2>/dev/null \
+          || echo "[bento] crawl4ai-config not seeded yet — using image default config"
+        exec supervisord -c supervisord.conf
     volumes:
       # Chromium shared memory. The default 64M container /dev/shm makes
       # headless Chrome crash on large pages — bind the host's (RAM-backed)
       # /dev/shm so the browser has room. This is the upstream pattern.
       - /dev/shm:/dev/shm
+      # Persistent queue-tuned config.yml, seeded by install.sh and copied onto
+      # /app/config.yml by the command above. Read-only mount — edits go through
+      # the repo's config.yml + redeploy, or directly into the volume + restart.
+      - crawl4ai-config:/bootstrap:ro
     logging:
       driver: json-file
       options:
@@ -62,7 +82,8 @@ services:
       resources:
         # Heavy (headless Chromium). Capped at 1.5G; the host now has 4G swap
         # as a backstop for crawl spikes. Reservations dropped on purpose so a
-        # tight VPS can still schedule it.
+        # tight VPS can still schedule it. Queue mode (max_pages=2) keeps the
+        # real footprint well under this cap.
         limits:
           cpus: "1.5"
           memory: 1536M
@@ -75,3 +96,7 @@ networks:
   network_public:
     name: network_public
     external: true
+
+volumes:
+  crawl4ai-config:
+    driver: local
