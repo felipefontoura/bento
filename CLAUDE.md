@@ -100,7 +100,7 @@ install.sh
 Bootstrap (one-time): asks BASE_DOMAIN + ADMIN_EMAIL + ADVERTISE_ADDR, persists to state
     │
     ▼
-Main menu loop: Step 1 → Step 2 → Step 3, with Settings / Status / Update
+Main menu loop: Step 1 → Step 2 → Step 3, with Auth / Backup / Settings / Status / Update
 ```
 
 - **State**: `~/.config/bento/state.json` (`chmod 600`, schema versioned, migrate-on-read).
@@ -181,6 +181,7 @@ bento/
     │   ├── postgres/{compose.yml, manifest.json}
     │   └── redis/{compose.yml, manifest.json}
     └── app/
+        ├── backup/{Dockerfile, compose.yml, manifest.json, install.sh, scripts/}
         ├── chatwoot/{compose.yml, manifest.json, install.sh}
         ├── hermes/{compose.yml, manifest.json}
         ├── n8n/{compose.yml, manifest.json, install.sh}

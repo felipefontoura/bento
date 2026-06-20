@@ -443,6 +443,187 @@ auth_run() {
     ui_pause
 }
 
+# -----------------------------------------------------------------------------
+# Backup
+# -----------------------------------------------------------------------------
+# Thin menu over the backup container — operator never has to remember
+# `docker exec backup_backup …`. Runs the same backup.sh + restic invocations
+# the cron does, but driven from the menu.
+#
+# Skipped under BENTO_UNATTENDED: the submenu is interactive and the backup
+# stack ships with its own internal cron. Unattended runs hit the cron on
+# schedule without any menu involvement.
+_backup_find_container() {
+    # Quietly return the running backup container's ID or empty string.
+    # Helper kept local so install.sh doesn't have to source install-helpers.sh.
+    sudo docker ps --filter name=backup_backup --format '{{.ID}}' 2>/dev/null | head -1
+}
+
+backup_run() {
+    if [[ "${BENTO_UNATTENDED:-0}" == "1" ]]; then
+        ui_info "Skipping backup menu — backup stack has its own cron once deployed."
+        return 0
+    fi
+
+    local cid
+    cid=$(_backup_find_container)
+    if [[ -z "$cid" ]]; then
+        ui_error "Backup container is not running."
+        ui_warn  "Deploy the backup stack from Step 3 (provide your Backblaze B2 credentials when prompted)."
+        ui_pause
+        return 0
+    fi
+
+    ui_section "Backup"
+    local choice
+    choice="$(ui_choose \
+        "Run backup now" \
+        "List snapshots" \
+        "Show backup status" \
+        "Restore (show command)" \
+        "Test B2 connectivity" \
+        "Back")"
+    case "$choice" in
+        "Run backup now")
+            ui_info "Running backup.sh inside the backup container — output below."
+            echo
+            sudo docker exec "$cid" /usr/local/bin/backup.sh
+            local rc=$?
+            echo
+            if (( rc == 0 )); then
+                ui_success "Backup finished."
+            else
+                ui_error "Backup exited $rc — see output above + 'sudo docker service logs backup_backup'."
+            fi
+            ;;
+        "List snapshots")
+            ui_section "Snapshots in $(sudo docker exec "$cid" sh -c 'printf %s "$RESTIC_REPOSITORY"')"
+            # Format short_id / time / paths / tags via jq. Plain printf
+            # instead of `gum table` because the path column can wrap and
+            # gum's table renderer truncates aggressively.
+            sudo docker exec "$cid" restic snapshots --json 2>/dev/null \
+                | jq -r '.[] | [.short_id, .time, (.paths // [] | join(",")), (.tags // [] | join(","))] | @tsv' \
+                | awk 'BEGIN { printf "%-12s  %-25s  %-50s  %s\n", "SHORT_ID", "TIME", "PATHS", "TAGS" }
+                       { printf "%-12s  %-25s  %-50s  %s\n", $1, $2, $3, $4 }'
+            ;;
+        "Show backup status")
+            ui_section "Backup status"
+            local last
+            last=$(sudo docker exec "$cid" sh -c 'cat /backup-state/last-success-iso 2>/dev/null' || true)
+            if [[ -n "$last" ]]; then
+                ui_info "Last successful backup: $last"
+            else
+                ui_warn "No successful backup recorded yet (no /backup-state/last-success-iso marker)."
+            fi
+            local count
+            count=$(sudo docker exec "$cid" sh -c 'restic snapshots --json 2>/dev/null | jq length' || echo "?")
+            ui_info "Snapshot count: $count"
+            ui_info "Repository size (raw):"
+            sudo docker exec "$cid" restic stats --mode raw-data 2>/dev/null \
+                | grep -E "Total Size|Total Blob Count|Total File Count" \
+                || ui_warn "  restic stats failed — repo may be unreachable."
+            ;;
+        "Restore (show command)")
+            ui_warn "Restore is DESTRUCTIVE. This menu only prints the commands — it never executes them for you."
+            if ! ui_confirm "Continue to the snapshot picker?"; then
+                return 0
+            fi
+            # Build a label per snapshot: '<short_id>  <time>  <tags>'
+            mapfile -t labels < <(
+                sudo docker exec "$cid" restic snapshots --json 2>/dev/null \
+                    | jq -r '.[] | "\(.short_id)  \(.time)  \(.tags // [] | join(","))"'
+            )
+            if (( ${#labels[@]} == 0 )); then
+                ui_warn "No snapshots in the repository."
+                ui_pause
+                return 0
+            fi
+            local picked
+            picked="$(printf '%s\n' "${labels[@]}" | ui_choose)"
+            [[ -z "$picked" ]] && return 0
+            local short_id="${picked%% *}"
+            cat <<MSG
+
+To restore snapshot ${short_id}, run these commands ON THE HOST
+(NOT inside this menu). Restore is destructive — review each step
+before hitting enter. STOP each app stack ('docker stack rm <name>')
+BEFORE running step 4 — restoring on top of a running container
+corrupts whatever is in flight.
+
+  # 1. Restore the staging dir (postgres dumps + bento state) into the
+  #    backup container's filesystem at /backup-state/restore.
+  sudo docker exec ${cid} restic restore ${short_id} \\
+      --target /backup-state/restore --include /var/lib/restic/staging
+
+  # 2. (postgres) Pipe each dump into the postgres container. Order
+  #    matters: globals first (roles, tablespaces), then per-DB.
+  pg=\$(sudo docker ps -q -f name=postgres_postgres)
+  sudo docker exec -i "\$pg" psql -U postgres \\
+      < /backup-state/restore/var/lib/restic/staging/postgres/globals.sql
+  for db in chatwoot paperclip n8n typebot plunk evolution-api; do
+      sql=/backup-state/restore/var/lib/restic/staging/postgres/\${db}.sql
+      [ -f "\$sql" ] || continue
+      sudo docker exec -i "\$pg" psql -U postgres -d "\$db" < "\$sql"
+  done
+
+  # 3. (bento state) Copy back into ~/.config/bento/. Make sure no
+  #    bento menu is running while you do this.
+  sudo cp -aL /backup-state/restore/var/lib/restic/staging/bento/. \\
+      ~/.config/bento/
+
+  # 4. (app volumes) Each pair is "swarm-volume-name:backup-readable-name".
+  #    The loop restores each volume from B2 into a fresh Docker volume.
+  #    Comment out any line you don't want to restore. Lines for stacks
+  #    you never deployed will fail to copy (no source dir) and be
+  #    skipped — safe to leave them in.
+  for pair in \\
+      paperclip_paperclip-data:paperclip-data \\
+      n8n_n8n-data:n8n-data \\
+      chatwoot_chatwoot_data:chatwoot-data \\
+      evolution-api_evolution_instances:evolution-instances \\
+      evolution-api_evolution_store:evolution-store \\
+      openclaw_openclaw-config:openclaw-config \\
+      openclaw_openclaw-workspace:openclaw-workspace \\
+      openclaw_openclaw-oauth:openclaw-oauth \\
+      rabbitmq_rabbitmq-data:rabbitmq-data \\
+      n8n-mcp_n8n-mcp-data:n8n-mcp-data \\
+  ; do
+      swarm="\${pair%%:*}"
+      readable="\${pair##*:}"
+      sudo docker exec ${cid} restic restore ${short_id} \\
+          --target /backup-state/restore --include /backup/volumes/"\$readable"
+      src=/var/lib/docker/volumes/backup_backup-state/_data/restore/backup/volumes/"\$readable"
+      [ -d "\$src" ] || { echo "skip \$swarm (no source)"; continue; }
+      sudo docker volume create "\$swarm" >/dev/null
+      sudo docker run --rm \\
+          -v "\$swarm":/dst \\
+          -v "\$src":/src:ro \\
+          alpine sh -c 'cp -a /src/. /dst/'
+  done
+
+  # 5. Re-deploy the bento stacks against the restored state + volumes.
+  bash ~/.local/share/bento/install.sh
+  #    -> Step 3 -> pick the apps you want -> they come up against the
+  #       restored DBs and volumes.
+
+  # Full procedure + sanity-check drill: docs/reference/backup.md
+
+MSG
+            ;;
+        "Test B2 connectivity")
+            if sudo docker exec "$cid" restic snapshots --no-cache --limit 1 >/dev/null 2>&1; then
+                ui_success "B2 reachable; credentials valid."
+            else
+                ui_error "B2 unreachable. Re-check B2_ACCOUNT_ID / B2_ACCOUNT_KEY / B2_BUCKET via Portainer env editor."
+            fi
+            ;;
+        "Back"|*)
+            return 0
+            ;;
+    esac
+    ui_pause
+}
+
 update_run() {
     ui_section "Updates"
     local choice
@@ -611,6 +792,7 @@ main_menu() {
             "Step 2 — Install infrastructure" \
             "Step 3 — Install applications" \
             "Authenticate AI providers" \
+            "Backup" \
             "Settings" \
             "Status" \
             "Report — handoff HTML" \
@@ -622,6 +804,7 @@ main_menu() {
             "Step 2"*)              step2_run ;;
             "Step 3"*)              step3_run ;;
             "Authenticate AI"*)     auth_run ;;
+            "Backup")               backup_run ;;
             "Settings")             settings_run ;;
             "Status")               status_run ;;
             "Report"*)              report_run "manual" ;;

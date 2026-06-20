@@ -173,6 +173,7 @@ Each stack is a directory at `stacks/<category>/<key>/` with `compose.yml`, `man
 | infra | [Portainer](stacks/infra/portainer) | Stack manager UI |
 | db | [PostgreSQL](stacks/db/postgres) | Each app creates its own database in `install.sh` |
 | db | [Redis](stacks/db/redis) | In-memory cache |
+| app | [Backup](stacks/app/backup) | Scheduled restic backups (postgres dumps + state + app volumes) to Backblaze B2 |
 | app | [Chatwoot](stacks/app/chatwoot) | Customer support platform |
 | app | [CLI Proxy API](stacks/app/cli-proxy-api) | OpenAI-compatible proxy in front of CLI providers |
 | app | [Crawl4AI](stacks/app/crawl4ai) | Headless web crawler/extractor (internal-only). Optional outbound proxy to dodge datacenter-IP anti-bot blocks — see [docs/reference/crawl4ai-proxy.md](docs/reference/crawl4ai-proxy.md) |
@@ -269,6 +270,17 @@ scp user@vps:~/.local/share/bento/reports/handoff-*.html .
 ```
 
 > The report carries live credentials. Treat it like a password vault: deliver over an encrypted channel (1Password, Bitwarden Send, encrypted email), rotate if it ever leaks.
+
+### Backups
+
+If you deployed the [`backup` stack](stacks/app/backup), restic snapshots run nightly to Backblaze B2 (default `0 3 * * *`). The handoff HTML surfaces:
+
+- The Backblaze repository URL
+- The schedule
+- The last successful backup timestamp (refreshed on every `Report` run)
+- `RESTIC_PASSWORD` — **save this in your password manager immediately**. Restic encrypts client-side; lose this password and every snapshot is unrecoverable.
+
+Day-to-day ops live under `Backup` in the main menu (`bash ~/.local/share/bento/install.sh` → `Backup`): run on demand, list snapshots, check status, print the exact restore command, test B2 connectivity. Full restore procedure: [`docs/reference/backup.md`](docs/reference/backup.md).
 
 ### Ownership: bento vs Portainer
 

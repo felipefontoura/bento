@@ -228,6 +228,41 @@ HTML
 HTML
     fi
 
+    # Backup stack — operator-critical surfacing of RESTIC_PASSWORD plus
+    # a freshness summary so the handoff HTML doubles as a backup
+    # status page. Pulls the last-success timestamp directly out of the
+    # running container (cheap: single `docker exec cat`). Best-effort:
+    # if the container isn't up we just skip the freshness line and
+    # still show the credentials.
+    if [[ "$stack_key" == "backup" ]]; then
+        local last_success cron repo bucket
+        last_success=""
+        cron=$(jq -r ".envs.backup.BACKUP_CRON // empty"        "$BENTO_STATE_FILE")
+        bucket=$(jq -r ".envs.backup.B2_BUCKET // empty"        "$BENTO_STATE_FILE")
+        repo="b2:${bucket}:/bento"
+        if sudo docker ps --filter name=backup_backup --format '{{.ID}}' 2>/dev/null | head -1 | grep -q .; then
+            last_success=$(sudo docker exec \
+                "$(sudo docker ps --filter name=backup_backup --format '{{.ID}}' | head -1)" \
+                sh -c 'cat /backup-state/last-success-iso 2>/dev/null' || true)
+        fi
+        local esc_last esc_cron esc_repo
+        esc_last=$(_html_escape "${last_success:-—}")
+        esc_cron=$(_html_escape "${cron:-—}")
+        esc_repo=$(_html_escape "$repo")
+        cat <<HTML
+  <div class="post-deploy-note">
+    <p class="post-deploy-note-title">CRITICAL — save <code>RESTIC_PASSWORD</code> offsite</p>
+    <p>The password below encrypts every backup. <strong>If you lose it, the backups in <code>${esc_repo}</code> become unrecoverable.</strong> Bento generated it once and stored it in <code>~/.config/bento/state.json</code>; copy it into your password manager now.</p>
+    <ul>
+      <li>Repository: <code>${esc_repo}</code></li>
+      <li>Schedule:   <code>${esc_cron}</code> (container-local cron)</li>
+      <li>Last successful backup: <code>${esc_last}</code></li>
+    </ul>
+    <p>Restore procedure: <code>docs/reference/backup.md</code> in the bento clone, or the "Backup → Restore (show command)" path in the bento menu.</p>
+  </div>
+HTML
+    fi
+
     # Iterate envs.
     local rows
     rows=$(jq -c ".envs[\"$stack_key\"] // {} | to_entries[]?" "$BENTO_STATE_FILE")

@@ -1,0 +1,17 @@
+{
+  "name": "backup",
+  "category": "app",
+  "description": "Scheduled restic backups of bento state, postgres dumps, and app volumes to Backblaze B2",
+  "depends_on": ["postgres"],
+  "env": [
+    { "name": "B2_ACCOUNT_ID",        "prompt": "Backblaze B2 application key ID",                         "required": true },
+    { "name": "B2_ACCOUNT_KEY",       "prompt": "Backblaze B2 application key secret",        "hide": true, "required": true },
+    { "name": "B2_BUCKET",            "prompt": "Backblaze B2 bucket name",                                "default": "bento-${BASE_DOMAIN}" },
+    { "name": "RESTIC_PASSWORD",      "generate": "openssl rand -hex 32",                     "hide": true },
+    { "name": "BACKUP_CRON",          "default": "0 3 * * *" },
+    { "name": "RESTIC_KEEP_DAILY",    "default": "7" },
+    { "name": "RESTIC_KEEP_WEEKLY",   "default": "4" },
+    { "name": "RESTIC_KEEP_MONTHLY",  "default": "6" },
+    { "name": "POSTGRES_PASSWORD",    "from_state": "POSTGRES_PASSWORD" }
+  ]
+}
