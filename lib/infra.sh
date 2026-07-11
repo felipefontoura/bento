@@ -105,6 +105,28 @@ infra_deploy_traefik_and_portainer() {
 }
 
 # Wait for Portainer to be reachable, then initialize the admin user.
+# Portainer CE >= 2.28 prints a one-time setup token at startup
+# ("setup_token=<hex>") and demands it in the X-Setup-Token header for admin
+# init. Read it from the running Portainer container's own logs — not
+# `docker service logs`, which can surface a stale token from a previous task.
+# Empty output means an older Portainer (no token requirement); init then
+# proceeds without the header.
+infra_portainer_setup_token() {
+    local cid
+    cid=$(sudo docker ps -q -f "name=${BENTO_INFRA_STACK_NAME}_portainer" | head -1)
+    [[ -z "$cid" ]] && return 0
+    # Portainer logs through zerolog's console writer, which wraps the field
+    # key in ANSI colour codes: $'\e[36msetup_token=\e[0m<hex>'. The reset code
+    # lands *between* "setup_token=" and the value, so a naive grep matches
+    # nothing and we would send an empty (rejected) X-Setup-Token. Strip the
+    # escape sequences first, then extract.
+    sudo docker logs "$cid" 2>&1 \
+        | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' \
+        | grep -oE 'setup_token=[0-9a-f]+' \
+        | tail -1 \
+        | cut -d '=' -f2
+}
+
 infra_init_portainer_admin() {
     # `gum spin -- <cmd>` *execs* its argument list — it cannot resolve
     # shell functions inherited from the parent process, only binaries on
@@ -143,9 +165,37 @@ infra_init_portainer_admin() {
     # account is a tiny, free reduction in noise + a meaningful one in
     # auto-pwn risk when password rotation slips.
     local portainer_user="deployer"
-    if ! portainer_init_admin "$portainer_user" "$password"; then
-        ui_error "Portainer admin init failed."
-        return 1
+
+    # Portainer CE >= 2.28 requires the startup setup token in the
+    # X-Setup-Token header for admin init (hijack guard). Read it from the
+    # running container's logs and hand it to portainer_init_admin; it is
+    # empty on older Portainer, which ignores the header.
+    local setup_token
+    setup_token="$(infra_portainer_setup_token)"
+
+    if ! portainer_init_admin "$portainer_user" "$password" "$setup_token"; then
+        # Portainer also refuses admin init once the first few minutes after
+        # startup elapse ("Administrator initialization timeout"), which bites
+        # any re-run of Step 2 against an already-running Portainer. Force a
+        # fresh task so we land inside the window again, re-read the token from
+        # the new container, and retry once.
+        #
+        # --detach=false is load-bearing: `service update` is async by default,
+        # so without it we would read the token and POST before the new task
+        # has taken over :9000 — sending the old container's token to the new
+        # one (a 403). Blocking until the rolling update converges guarantees
+        # the token we read next belongs to the container now serving :9000.
+        ui_warn "Admin init failed — forcing a fresh Portainer task and retrying once…"
+        sudo docker service update --detach=false --force "${BENTO_INFRA_STACK_NAME}_portainer" >/dev/null 2>&1 || true
+        if ! portainer_wait_ready "" 240; then
+            ui_error "Portainer did not become ready after the restart."
+            return 1
+        fi
+        setup_token="$(infra_portainer_setup_token)"
+        if ! portainer_init_admin "$portainer_user" "$password" "$setup_token"; then
+            ui_error "Portainer admin init failed."
+            return 1
+        fi
     fi
 
     state_set '.bootstrap.portainer_admin_user' "$portainer_user"
