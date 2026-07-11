@@ -51,10 +51,18 @@ portainer_wait_ready() {
 }
 
 # Initialize the very first admin. Body: { Username, Password }.
+#
+# Portainer CE >= 2.28 refuses admin init unless the caller echoes back the
+# one-time setup token the server prints to its logs at startup, via the
+# X-Setup-Token header — a guard against instance hijack in the window before
+# an admin exists. Pass it as $3 when available; older Portainer ignores the
+# header, so the argument is optional and backward-compatible.
+#
 # Returns 0 on success (admin created or already exists).
 portainer_init_admin() {
     local username="$1"
     local password="$2"
+    local setup_token="${3:-}"
     local base
     base="$(portainer_local_url)"
 
@@ -62,9 +70,15 @@ portainer_init_admin() {
     body=$(jq -n --arg u "$username" --arg p "$password" \
         '{Username: $u, Password: $p}')
 
+    # Only attach the header when we actually have a token — Portainer
+    # rejects an empty X-Setup-Token the same way it rejects a missing one.
+    local token_header=()
+    [[ -n "$setup_token" ]] && token_header=(-H "X-Setup-Token: ${setup_token}")
+
     http_code=$(portainer_curl -o /tmp/bento-portainer-init.json -w '%{http_code}' \
         -X POST "${base}/api/users/admin/init" \
         -H 'Content-Type: application/json' \
+        "${token_header[@]}" \
         -d "$body")
 
     case "$http_code" in
@@ -75,6 +89,15 @@ portainer_init_admin() {
             # Admin already exists — that's fine if we already have creds.
             [[ -f "$BENTO_PORTAINER_CREDS" ]]
             return $? ;;
+        403)
+            # Almost always the missing/stale X-Setup-Token (Portainer >= 2.28).
+            # Surface the actionable cause instead of a bare 403.
+            echo "Portainer admin init failed (HTTP 403):" >&2
+            cat /tmp/bento-portainer-init.json >&2 || true
+            echo "Hint: Portainer >= 2.28 requires the startup setup token in the" >&2
+            echo "      X-Setup-Token header. Confirm infra_portainer_setup_token" >&2
+            echo "      read it from the same container that is now serving :9000." >&2
+            return 1 ;;
         *)
             echo "Portainer admin init failed (HTTP $http_code):" >&2
             cat /tmp/bento-portainer-init.json >&2 || true
