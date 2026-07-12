@@ -6,7 +6,13 @@
   "env": [
     { "name": "CHATWOOT_HOST",            "default": "chatwoot.${BASE_DOMAIN}", "prompt": "Chatwoot hostname" },
     { "name": "CHATWOOT_SECRET_KEY_BASE", "generate": "openssl rand -hex 64", "hide": true },
-    { "name": "POSTGRES_PASSWORD",        "from_state": "POSTGRES_PASSWORD" }
+    { "name": "POSTGRES_PASSWORD",        "from_state": "POSTGRES_PASSWORD" },
+    { "name": "CHATWOOT_CPU_LIMIT", "default": "1" },
+    { "name": "CHATWOOT_MEM_LIMIT", "default": "1024M" },
+    { "name": "CHATWOOT_WEB_CPU_LIMIT", "default": "0.5" },
+    { "name": "CHATWOOT_WEB_MEM_LIMIT", "default": "768M" },
+    { "name": "CHATWOOT_SIDEKIQ_CPU_LIMIT", "default": "0.5" },
+    { "name": "CHATWOOT_SIDEKIQ_MEM_LIMIT", "default": "768M" }
   ],
   "post_deploy_url": "https://${CHATWOOT_HOST}"
 }

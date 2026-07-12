@@ -64,8 +64,8 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "0.5"
-          memory: 256M
+          cpus: "${SEARXNG_CPU_LIMIT:-0.5}"
+          memory: ${SEARXNG_MEM_LIMIT:-256M}
       labels:
         - BENTO_MANAGED=true
         - BENTO_STACK_KEY=searxng

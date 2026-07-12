@@ -39,8 +39,8 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "0.5"
-          memory: 128M
+          cpus: "${REDIS_CPU_LIMIT:-0.5}"
+          memory: ${REDIS_MEM_LIMIT:-128M}
       labels:
         - BENTO_MANAGED=true
         - BENTO_STACK_KEY=redis

@@ -105,8 +105,8 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "0.5"
-          memory: 512M
+          cpus: "${N8N_MCP_CPU_LIMIT:-0.5}"
+          memory: ${N8N_MCP_MEM_LIMIT:-512M}
       labels:
         - traefik.enable=true
         - traefik.http.routers.n8n_mcp.rule=Host(`${N8N_MCP_HOST}`)

@@ -18,7 +18,9 @@
       "name": "N8N_MCP_N8N_API_KEY",
       "prompt": "n8n API key (create in n8n → Settings → n8n API)",
       "hide": true
-    }
+    },
+    { "name": "N8N_MCP_CPU_LIMIT", "default": "0.5" },
+    { "name": "N8N_MCP_MEM_LIMIT", "default": "512M" }
   ],
   "post_deploy_url": "https://${N8N_MCP_HOST}"
 }

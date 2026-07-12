@@ -27,7 +27,9 @@
       "name": "RABBITMQ_ERLANG_COOKIE",
       "generate": "openssl rand -hex 24",
       "hide": true
-    }
+    },
+    { "name": "RABBITMQ_CPU_LIMIT", "default": "1" },
+    { "name": "RABBITMQ_MEM_LIMIT", "default": "256M" }
   ],
   "post_deploy_url": "https://${RABBITMQ_HOST}"
 }

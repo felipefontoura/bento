@@ -271,8 +271,8 @@ services:
       <<: *n8n-deploy
       resources:
         limits:
-          cpus: "1"
-          memory: 768M
+          cpus: "${N8N_EDITOR_CPU_LIMIT:-1}"
+          memory: ${N8N_EDITOR_MEM_LIMIT:-768M}
       labels:
         - traefik.enable=true
         - traefik.http.routers.n8n_editor.rule=Host(`${N8N_HOST}`)
@@ -295,8 +295,8 @@ services:
       <<: *n8n-deploy
       resources:
         limits:
-          cpus: "0.5"
-          memory: 512M
+          cpus: "${N8N_WEBHOOK_CPU_LIMIT:-0.5}"
+          memory: ${N8N_WEBHOOK_MEM_LIMIT:-512M}
       labels:
         - traefik.enable=true
         - traefik.http.routers.n8n_webhook.rule=Host(`${N8N_WEBHOOK_HOST}`)
@@ -322,8 +322,8 @@ services:
       <<: *n8n-deploy
       resources:
         limits:
-          cpus: "1"
-          memory: 768M
+          cpus: "${N8N_WORKER_CPU_LIMIT:-1}"
+          memory: ${N8N_WORKER_MEM_LIMIT:-768M}
 
 networks:
   network_public:

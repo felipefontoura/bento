@@ -3,5 +3,8 @@
   "category": "db",
   "description": "Redis 7 with appendonly persistence",
   "depends_on": [],
-  "env": []
+  "env": [
+    { "name": "REDIS_CPU_LIMIT", "default": "0.5" },
+    { "name": "REDIS_MEM_LIMIT", "default": "128M" }
+  ]
 }

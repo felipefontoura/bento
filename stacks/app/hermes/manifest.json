@@ -10,7 +10,9 @@
     { "name": "HERMES_API_KEY",            "generate": "openssl rand -hex 24", "hide": true },
     { "name": "HERMES_MODEL_NAME",         "default": "hermes-agent" },
     { "name": "HERMES_DASHBOARD_PASSWORD", "generate": "openssl rand -base64 24", "hide": true },
-    { "name": "HERMES_DASHBOARD_HTPASSWD", "generate": "htpasswd -nbB admin \"$(jq -r '.envs.hermes.HERMES_DASHBOARD_PASSWORD' \"$HOME/.config/bento/state.json\")\"", "hide": true }
+    { "name": "HERMES_DASHBOARD_HTPASSWD", "generate": "htpasswd -nbB admin \"$(jq -r '.envs.hermes.HERMES_DASHBOARD_PASSWORD' \"$HOME/.config/bento/state.json\")\"", "hide": true },
+    { "name": "HERMES_CPU_LIMIT", "default": "1" },
+    { "name": "HERMES_MEM_LIMIT", "default": "1024M" }
   ],
   "post_deploy_url": "https://${HERMES_HOST}"
 }

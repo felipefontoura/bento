@@ -7,7 +7,9 @@
     { "name": "OPENCLAW_IMAGE_TAG", "default": "latest" },
     { "name": "OPENCLAW_HOST", "default": "openclaw.${BASE_DOMAIN}", "prompt": "Openclaw Control UI hostname" },
     { "name": "OPENCLAW_GATEWAY_TOKEN", "generate": "openssl rand -hex 32", "hide": true },
-    { "name": "TELEGRAM_BOT_TOKEN", "prompt": "Optional: Telegram bot token from @BotFather (leave blank to connect later in the Control UI)", "hide": true, "default": "" }
+    { "name": "TELEGRAM_BOT_TOKEN", "prompt": "Optional: Telegram bot token from @BotFather (leave blank to connect later in the Control UI)", "hide": true, "default": "" },
+    { "name": "OPENCLAW_CPU_LIMIT", "default": "1.0" },
+    { "name": "OPENCLAW_MEM_LIMIT", "default": "1024M" }
   ],
   "post_deploy_url": "https://${OPENCLAW_HOST}/#token=${OPENCLAW_GATEWAY_TOKEN}"
 }

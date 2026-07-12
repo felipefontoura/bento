@@ -96,8 +96,8 @@ services:
         # tight VPS can still schedule it. Queue mode (max_pages=2) keeps the
         # real footprint well under this cap.
         limits:
-          cpus: "1.5"
-          memory: 1536M
+          cpus: "${CRAWL4AI_CPU_LIMIT:-1.5}"
+          memory: ${CRAWL4AI_MEM_LIMIT:-1536M}
       labels:
         - BENTO_MANAGED=true
         - BENTO_STACK_KEY=crawl4ai

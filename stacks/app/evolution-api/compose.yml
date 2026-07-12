@@ -164,8 +164,8 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "0.5"
-          memory: 256M
+          cpus: "${EVOLUTION_API_CPU_LIMIT:-0.5}"
+          memory: ${EVOLUTION_API_MEM_LIMIT:-256M}
       labels:
         - traefik.enable=true
         - traefik.http.routers.evolution.rule=Host(`${EVOLUTION_HOST}`)

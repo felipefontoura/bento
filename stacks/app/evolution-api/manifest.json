@@ -20,7 +20,9 @@
     {
       "name": "POSTGRES_PASSWORD",
       "from_state": "POSTGRES_PASSWORD"
-    }
+    },
+    { "name": "EVOLUTION_API_CPU_LIMIT", "default": "0.5" },
+    { "name": "EVOLUTION_API_MEM_LIMIT", "default": "256M" }
   ],
   "post_deploy_url": "https://${EVOLUTION_HOST}"
 }

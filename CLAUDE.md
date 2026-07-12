@@ -296,7 +296,7 @@ benchmark. Concretely:
 | Deploy block | `replicas`, `placement`, `update_config`, `restart_policy` (start-first stateless / stop-first stateful) | Same + `resources.limits` |
 | BENTO labels | **Mandatory.** `deploy.labels` includes `BENTO_MANAGED=true`, `BENTO_STACK_KEY=<key>`, `BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}`. Enforced by the `BENTO_MANAGED labels` CI job. | Same |
 | Logging | `json-file` + `max-size: 10m` + `max-file: 3` | Same |
-| Resources | None acceptable only for genuinely tiny services. **Avoid `reservations` — Swarm guarantees them at placement time and they bin-pack worse than limits-only on small VPS.** | `limits` only for CPU and memory; calibrate from `docker stats` of a warm instance |
+| Resources | None acceptable only for genuinely tiny services. **Avoid `reservations` — Swarm guarantees them at placement time and they bin-pack worse than limits-only on small VPS.** | `limits` only for CPU and memory, **parametrized per host** — `cpus: "${<KEY>_CPU_LIMIT:-<x>}"` and `memory: ${<KEY>_MEM_LIMIT:-<y>}`, with matching silent-default manifest entries so operators tune from `state.envs.<key>` without editing the compose. Multi-service stacks use per-service vars (`N8N_EDITOR_MEM_LIMIT`, `CHATWOOT_SIDEKIQ_MEM_LIMIT`, …). Calibrate the defaults from `docker stats` of a warm instance |
 | Network | `network_public` only | Same — apps connect via service name |
 | Volumes | `driver: local` for anything app-private | Same; no `external: true` outside `network_public` |
 | Secrets | Generated via manifest, never literal `secret` | Same |

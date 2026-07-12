@@ -6,7 +6,9 @@
   "env": [
     { "name": "METAMCP_HOST",               "default": "metamcp.${BASE_DOMAIN}", "prompt": "MetaMCP hostname" },
     { "name": "METAMCP_BETTER_AUTH_SECRET", "generate": "openssl rand -hex 32",  "hide": true },
-    { "name": "POSTGRES_PASSWORD",          "from_state": "POSTGRES_PASSWORD", "prompt": "Postgres password", "hide": true, "default": "" }
+    { "name": "POSTGRES_PASSWORD",          "from_state": "POSTGRES_PASSWORD", "prompt": "Postgres password", "hide": true, "default": "" },
+    { "name": "METAMCP_CPU_LIMIT",          "default": "1" },
+    { "name": "METAMCP_MEM_LIMIT",          "default": "1700M" }
   ],
   "post_deploy_url": "https://${METAMCP_HOST}"
 }

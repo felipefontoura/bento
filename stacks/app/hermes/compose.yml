@@ -79,10 +79,10 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "1"
+          cpus: "${HERMES_CPU_LIMIT:-1}"
           # Headroom for gateway HTTP server + dashboard (first boot may
           # build the web UI) + Telegram polling concurrently.
-          memory: 1024M
+          memory: ${HERMES_MEM_LIMIT:-1024M}
       labels:
         - traefik.enable=true
         # --- Dashboard route (Basic Auth via htpasswd) ---

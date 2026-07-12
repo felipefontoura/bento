@@ -24,7 +24,11 @@
     {
       "name": "POSTGRES_PASSWORD",
       "from_state": "POSTGRES_PASSWORD"
-    }
+    },
+    { "name": "TYPEBOT_BUILDER_CPU_LIMIT", "default": "1" },
+    { "name": "TYPEBOT_BUILDER_MEM_LIMIT", "default": "1024M" },
+    { "name": "TYPEBOT_VIEWER_CPU_LIMIT", "default": "1" },
+    { "name": "TYPEBOT_VIEWER_MEM_LIMIT", "default": "1024M" }
   ],
   "post_deploy_url": "https://${TYPEBOT_BUILDER_HOST}"
 }

@@ -113,10 +113,14 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "1"
-          # Headroom for the persistent package cache plus the several concurrent
-          # stdio MCP subprocesses (python/node) MetaMCP spawns and keeps warm.
-          memory: 1700M
+          # CPU + memory are tunable per host via state.envs.metamcp
+          # (METAMCP_CPU_LIMIT / METAMCP_MEM_LIMIT). Defaults suit a small VPS;
+          # a bigger host raises them from state without editing this file.
+          # MetaMCP is memory-hungry: base app + one warm stdio subprocess per
+          # server (python/node) + the package cache — it grows with the number
+          # of MCP servers, so give it room on hosts that run many.
+          cpus: "${METAMCP_CPU_LIMIT:-1}"
+          memory: ${METAMCP_MEM_LIMIT:-1700M}
       # Swarm healthcheck intentionally omitted (bento convention) — Next.js SSR
       # boot on a small VPS trips wget/start_period probes and SIGKILLs healthy
       # containers. Traefik's backend health check covers user-facing readiness.

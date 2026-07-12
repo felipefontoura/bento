@@ -49,8 +49,8 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "0.5"
-          memory: 256M
+          cpus: "${CLI_PROXY_API_CPU_LIMIT:-0.5}"
+          memory: ${CLI_PROXY_API_MEM_LIMIT:-256M}
       labels:
         - BENTO_MANAGED=true
         - BENTO_STACK_KEY=cli-proxy-api
