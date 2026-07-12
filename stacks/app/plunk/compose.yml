@@ -85,8 +85,8 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "1"
-          memory: 512M
+          cpus: "${PLUNK_CPU_LIMIT:-1}"
+          memory: ${PLUNK_MEM_LIMIT:-512M}
       labels:
         - traefik.enable=true
         - traefik.http.routers.plunk.rule=Host(`${PLUNK_HOST}`)

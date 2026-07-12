@@ -9,7 +9,9 @@
     { "name": "POSTGRES_PASSWORD",  "from_state": "POSTGRES_PASSWORD", "prompt": "Postgres password", "hide": true, "default": "" },
     { "name": "OPENAI_API_KEY",     "from_state": "OPENAI_API_KEY",     "prompt": "OpenAI API key (optional)",     "hide": true, "default": "" },
     { "name": "ANTHROPIC_API_KEY",  "from_state": "ANTHROPIC_API_KEY",  "prompt": "Anthropic API key (optional)",  "hide": true, "default": "" },
-    { "name": "OPENROUTER_API_KEY", "from_state": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (optional)", "hide": true, "default": "" }
+    { "name": "OPENROUTER_API_KEY", "from_state": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key (optional)", "hide": true, "default": "" },
+    { "name": "PAPERCLIP_CPU_LIMIT", "default": "1" },
+    { "name": "PAPERCLIP_MEM_LIMIT", "default": "2048M" }
   ],
   "post_deploy_url": "https://${PAPERCLIP_HOST}"
 }

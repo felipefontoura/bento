@@ -4,6 +4,8 @@
   "description": "SearXNG — self-hosted privacy metasearch (aggregates Google/Bing/DuckDuckGo/Brave/etc. with no upstream API keys). Internal-only: no Traefik route, reached over the overlay at http://searxng:8080 by the n8n search MCP. JSON output, secret_key, and a disabled bot-limiter are seeded into settings.yml by install.sh. No Redis — limiter off for low-volume internal use.",
   "depends_on": [],
   "env": [
-    { "name": "SEARXNG_SECRET", "generate": "openssl rand -hex 32", "hide": true }
+    { "name": "SEARXNG_SECRET", "generate": "openssl rand -hex 32", "hide": true },
+    { "name": "SEARXNG_CPU_LIMIT", "default": "0.5" },
+    { "name": "SEARXNG_MEM_LIMIT", "default": "256M" }
   ]
 }

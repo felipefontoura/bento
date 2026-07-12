@@ -3,5 +3,8 @@
   "category": "app",
   "description": "OpenAI-compatible proxy in front of CLI-based AI providers",
   "depends_on": [],
-  "env": []
+  "env": [
+    { "name": "CLI_PROXY_API_CPU_LIMIT", "default": "0.5" },
+    { "name": "CLI_PROXY_API_MEM_LIMIT", "default": "256M" }
+  ]
 }

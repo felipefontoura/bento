@@ -189,14 +189,14 @@ services:
       <<: *paperclip-deploy
       resources:
         limits:
-          cpus: "1"
+          cpus: "${PAPERCLIP_CPU_LIMIT:-1}"
           # 2 GB headroom — covers concurrent local-CLI subprocesses
           # (codex, claude, opencode) plus Hermes when the hermes_local
           # plugin spawns `hermes chat` (the binary lives on the cross-
           # stack mount from hermes_hermes-bin, but its Python interp +
           # model SDK still load into RSS in the paperclip container).
           # Stays well clear of OOM-killing node on a CX22 (4 GB total).
-          memory: 2048M
+          memory: ${PAPERCLIP_MEM_LIMIT:-2048M}
       labels:
         - traefik.enable=true
         - traefik.http.routers.paperclip.rule=Host(`${PAPERCLIP_HOST}`)

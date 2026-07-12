@@ -62,8 +62,8 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "1"
-          memory: 256M
+          cpus: "${RABBITMQ_CPU_LIMIT:-1}"
+          memory: ${RABBITMQ_MEM_LIMIT:-256M}
       labels:
         - traefik.enable=true
         - traefik.http.routers.rabbitmq.rule=Host(`${RABBITMQ_HOST}`)

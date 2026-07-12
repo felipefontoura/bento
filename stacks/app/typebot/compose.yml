@@ -119,8 +119,8 @@ services:
       <<: *typebot-deploy
       resources:
         limits:
-          cpus: "1"
-          memory: 1024M
+          cpus: "${TYPEBOT_BUILDER_CPU_LIMIT:-1}"
+          memory: ${TYPEBOT_BUILDER_MEM_LIMIT:-1024M}
       labels:
         - traefik.enable=true
         - traefik.http.routers.typebot_builder.rule=Host(`${TYPEBOT_BUILDER_HOST}`)
@@ -150,8 +150,8 @@ services:
       <<: *typebot-deploy
       resources:
         limits:
-          cpus: "1"
-          memory: 1024M
+          cpus: "${TYPEBOT_VIEWER_CPU_LIMIT:-1}"
+          memory: ${TYPEBOT_VIEWER_MEM_LIMIT:-1024M}
       labels:
         - traefik.enable=true
         - traefik.http.routers.typebot_viewer.rule=Host(`${TYPEBOT_VIEWER_HOST}`)

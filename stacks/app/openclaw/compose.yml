@@ -145,8 +145,8 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "1.0"
-          memory: 1024M
+          cpus: "${OPENCLAW_CPU_LIMIT:-1.0}"
+          memory: ${OPENCLAW_MEM_LIMIT:-1024M}
       labels:
         - traefik.enable=true
         - traefik.http.routers.openclaw.rule=Host(`${OPENCLAW_HOST}`)

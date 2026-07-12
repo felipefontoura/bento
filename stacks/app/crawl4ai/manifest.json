@@ -9,6 +9,8 @@
       "default": "",
       "hide": true,
       "prompt": "Optional: outbound proxy URL for the crawler (http://user:pass@host:port) — leave blank for direct egress"
-    }
+    },
+    { "name": "CRAWL4AI_CPU_LIMIT", "default": "1.5" },
+    { "name": "CRAWL4AI_MEM_LIMIT", "default": "1536M" }
   ]
 }

@@ -38,7 +38,9 @@
     {
       "name": "AWS_SES_CONFIGURATION_SET",
       "prompt": "AWS SES configuration set name"
-    }
+    },
+    { "name": "PLUNK_CPU_LIMIT", "default": "1" },
+    { "name": "PLUNK_MEM_LIMIT", "default": "512M" }
   ],
   "post_deploy_url": "https://${PLUNK_HOST}"
 }
