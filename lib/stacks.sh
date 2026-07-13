@@ -379,6 +379,49 @@ stacks_memory_budget_check() {
 # -----------------------------------------------------------------------------
 # Deploy
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Run a stack's optional post-deploy install.sh hook with the standard env
+# (BENTO_REPO_ROOT / BENTO_STACK_KEY / BENTO_STATE_FILE / POSTGRES_PASSWORD +
+# every ambient state.providers entry and per-stack state.envs value). Install
+# scripts MUST be idempotent (see stacks/*/install.sh), so this is safe to call
+# after ANY (re)deploy — that's the point: cross-stack grafts (e.g. paperclip
+# mounting hermes_hermes-bin) and other post-deploy wiring live here, and a
+# plain compose redeploy silently drops them unless the hook re-runs.
+# Args: <stack_key> <manifest_path>. No-op when the stack has no install.sh.
+# -----------------------------------------------------------------------------
+stacks_run_install_hook() {
+    local stack_key="$1"
+    local manifest_path="$2"
+    local install_script
+    install_script="$(stacks_install_script_for_manifest "$manifest_path")"
+    [[ -n "$install_script" && -x "${BENTO_REPO_ROOT}/${install_script}" ]] || return 0
+
+    ui_info "Running post-deploy script: $install_script"
+    local pg_pass
+    pg_pass="$(state_get '.envs["postgres"]["POSTGRES_PASSWORD"]')"
+
+    # Export every env resolved for THIS stack so install.sh can read
+    # CHATWOOT_HOST, *_SECRET_KEY_BASE, etc. without cracking open state.json.
+    # Order: ambient state.providers first, then stack-specific envs, so a
+    # per-stack override in state.envs[stack_key] beats the ambient default —
+    # matches the precedence in stacks_build_env_payload.
+    local stack_env_assigns=() kv
+    while IFS= read -r kv; do
+        [[ -n "$kv" ]] && stack_env_assigns+=("$kv")
+    done < <(jq -r '.providers // {} | to_entries[] | "\(.key)=\(.value)"' "$BENTO_STATE_FILE")
+    while IFS= read -r kv; do
+        [[ -n "$kv" ]] && stack_env_assigns+=("$kv")
+    done < <(jq -r ".envs[\"$stack_key\"] // {} | to_entries[] | \"\(.key)=\(.value)\"" "$BENTO_STATE_FILE")
+
+    env \
+        BENTO_REPO_ROOT="$BENTO_REPO_ROOT" \
+        BENTO_STACK_KEY="$stack_key" \
+        BENTO_STATE_FILE="$BENTO_STATE_FILE" \
+        POSTGRES_PASSWORD="$pg_pass" \
+        "${stack_env_assigns[@]}" \
+        "${BENTO_REPO_ROOT}/${install_script}"
+}
+
 stacks_deploy() {
     local manifest_path="$1"
     local stack_key compose_path stack_name
@@ -447,40 +490,10 @@ stacks_deploy() {
 
     ui_success "$stack_key deployed (Portainer stack #$stack_id)."
 
-    # Run optional post-deploy hook. Install scripts get a known set of env
-    # vars so they can call helpers from lib/install-helpers.sh.
-    local install_script
-    install_script="$(stacks_install_script_for_manifest "$manifest_path")"
-    if [[ -n "$install_script" && -x "${BENTO_REPO_ROOT}/${install_script}" ]]; then
-        ui_info "Running post-deploy script: $install_script"
-        local pg_pass
-        pg_pass="$(state_get '.envs["postgres"]["POSTGRES_PASSWORD"]')"
-
-        # Export every env resolved for THIS stack so install.sh can read
-        # CHATWOOT_HOST, *_SECRET_KEY_BASE, etc. without cracking open
-        # state.json itself. POSTGRES_PASSWORD is always available.
-        #
-        # Order: ambient state.providers first, then stack-specific envs.
-        # When both sets define the same key, the later one wins, so a
-        # per-stack override in state.envs[stack_key] beats the ambient
-        # default in state.providers — matches the precedence used when
-        # we build the Portainer env payload (stacks_build_env_payload).
-        local stack_env_assigns=()
-        while IFS= read -r kv; do
-            [[ -n "$kv" ]] && stack_env_assigns+=("$kv")
-        done < <(jq -r '.providers // {} | to_entries[] | "\(.key)=\(.value)"' "$BENTO_STATE_FILE")
-        while IFS= read -r kv; do
-            [[ -n "$kv" ]] && stack_env_assigns+=("$kv")
-        done < <(jq -r ".envs[\"$stack_key\"] // {} | to_entries[] | \"\(.key)=\(.value)\"" "$BENTO_STATE_FILE")
-
-        env \
-            BENTO_REPO_ROOT="$BENTO_REPO_ROOT" \
-            BENTO_STACK_KEY="$stack_key" \
-            BENTO_STATE_FILE="$BENTO_STATE_FILE" \
-            POSTGRES_PASSWORD="$pg_pass" \
-            "${stack_env_assigns[@]}" \
-            "${BENTO_REPO_ROOT}/${install_script}"
-    fi
+    # Run optional post-deploy hook (cross-stack grafts, DB init, migrations).
+    # Extracted so redeploy paths can re-run it — a compose redeploy resets the
+    # service spec and drops post-deploy grafts (e.g. paperclip↔hermes mounts).
+    stacks_run_install_hook "$stack_key" "$manifest_path"
 
     # Print URL if manifest declares post_deploy_url.
     local url_tpl resolved_url
