@@ -65,6 +65,22 @@ services:
       #                      RO mount (default 0700 blocks it).
       - HERMES_GID=1000
       - HERMES_HOME_MODE=0755
+
+      # =============================================================================
+      # AI provider keys (ambient — injected from state.envs / state.providers)
+      # =============================================================================
+      # config.yaml's default model + fallback_providers resolve against whichever
+      # provider keys are present in the container env. bento propagates keys
+      # registered via `bento-auth` into state.providers and adds them to the
+      # deploy env payload; referencing them HERE lands them in the container on
+      # EVERY deploy. Without these refs the keys only arrive via a runtime
+      # `docker service update --env-add` (bento-auth propagation), which is lost
+      # the next time the stack is redeployed — leaving the agent with
+      # "No LLM provider configured". `:-` keeps `docker compose config` quiet
+      # when a given key isn't registered on this host.
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       # Dashboard + gateway state (config, sessions, messaging registrations).
       - hermes-data:/opt/data
