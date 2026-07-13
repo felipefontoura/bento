@@ -31,11 +31,22 @@ services:
       # =============================================================================
       # Operator credentials: user "admin" + auto-generated
       # HERMES_DASHBOARD_PASSWORD. Read it from state.json (envs.hermes) or
-      # the bento report. `HERMES_DASHBOARD_INSECURE=1` permits 0.0.0.0 bind;
-      # Traefik's basicauth middleware below is the public-side gate.
+      # the bento report.
+      #
+      # Current hermes images REFUSE to bind the dashboard to a non-loopback
+      # address without an auth provider configured — the old
+      # `HERMES_DASHBOARD_INSECURE=1` escape hatch was removed and now the
+      # dashboard crash-loops ("Refusing to bind dashboard to 0.0.0.0 — the auth
+      # gate engages on non-loopback binds, but no auth providers are
+      # registered"). Register the image-native HTTP Basic gate here with the
+      # SAME admin/password as the htpasswd below, so one browser Authorization
+      # header satisfies BOTH hermes' internal gate AND Traefik's basicauth
+      # middleware (single prompt). The WS route below keeps its SPA `?token=`
+      # path and is unaffected.
       - HERMES_DASHBOARD=1
       - HERMES_DASHBOARD_PORT=9119
-      - HERMES_DASHBOARD_INSECURE=1
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_PASSWORD}
 
       # =============================================================================
       # Cross-stack readable home — UID/GID alignment with paperclip
