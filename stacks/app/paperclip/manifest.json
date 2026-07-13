@@ -5,6 +5,7 @@
   "depends_on": ["postgres"],
   "env": [
     { "name": "PAPERCLIP_HOST",     "default": "paperclip.${BASE_DOMAIN}", "prompt": "Paperclip hostname" },
+    { "name": "PAPERCLIP_AUTH_DISABLE_SIGN_UP", "default": "false" },
     { "name": "BETTER_AUTH_SECRET", "generate": "openssl rand -hex 32",    "hide": true },
     { "name": "POSTGRES_PASSWORD",  "from_state": "POSTGRES_PASSWORD", "prompt": "Postgres password", "hide": true, "default": "" },
     { "name": "OPENAI_API_KEY",     "from_state": "OPENAI_API_KEY",     "prompt": "OpenAI API key (optional)",     "hide": true, "default": "" },
