@@ -133,12 +133,14 @@ jobs:
             exit 0
           fi
           # `docker compose config` chokes on undefined ${VARS}; export a
-          # superset of placeholders extracted from every compose at once.
+          # placeholder for every var that has no compose default
+          # (`${VAR}`, `${VAR:?…}`). Vars written `${VAR:-x}` keep their
+          # default: a placeholder there breaks typed fields such as
+          # deploy.resources.limits.cpus ("placeholder" isn't a number).
           # We don't care about real values — just that the YAML parses
-          # with substitutions applied. Anything still missing falls
-          # back to the literal var name so the parser is happy.
-          mapfile -t vars < <(grep -rhoE '\$\{[A-Z_][A-Z0-9_]*' stacks 2>/dev/null \
-                              | tr -d '${' | sort -u)
+          # with substitutions applied.
+          mapfile -t vars < <(grep -rhoE '\$\{[A-Z_][A-Z0-9_]*(\}|:\?)' stacks 2>/dev/null \
+                              | sed -E 's/^\$\{//; s/(\}|:\?)$//' | sort -u)
           for v in "${vars[@]}"; do
             : "${!v:=placeholder}"
             export "$v"
