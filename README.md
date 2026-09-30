@@ -133,6 +133,7 @@ never hardcodes your instance.
 | `/bento:chatwoot` | Chatwoot support desk — conversations, replies, contacts, inboxes. | *"reply to a customer / list open chats"* |
 | `/bento:typebot` | Typebot chatbots — start/continue chats, publish, read results (builder vs viewer). | *"start a bot chat / get results"* |
 | `/bento:plunk` | Plunk transactional email — send, track events, manage contacts (AWS SES behind it). | *"send an email / track an event"* |
+| `/bento:sgtm` | Server-side Google Tag Manager — health, logs, Preview, proxy or direct mode, key rotation, BigQuery credentials. | *"why does /g/collect 404 / rotate the sGTM key"* |
 | `/bento:metamcp` | MetaMCP gateway — group MCP servers into namespaces + endpoints, mint keys. | *"add an MCP server / get my tools endpoint"* |
 
 Example: *"`/bento:install` on root@198.51.100.42, domain example.com, apps n8n
@@ -185,7 +186,7 @@ Each stack is a directory at `stacks/<category>/<key>/` with `compose.yml`, `man
 | app | [Paperclip](stacks/app/paperclip) | AI agent orchestration (Claude Code, Codex, OpenCode, Hermes via hermes-bin volume) |
 | app | [Plunk](stacks/app/plunk) | Open-source email platform |
 | app | [RabbitMQ](stacks/app/rabbitmq) | Message broker |
-| app | [Server GTM](stacks/app/sgtm) | Server-side Google Tag Manager (tagging + preview), locked to a same-origin proxy — see [docs/reference/sgtm.md](docs/reference/sgtm.md) |
+| app | [Server GTM](stacks/app/sgtm) | Server-side Google Tag Manager (tagging + preview). Behind a same-origin proxy (recommended) or reached directly — quickstart, proxy recipes and operations in [docs/reference/sgtm.md](docs/reference/sgtm.md) |
 | app | [Typebot](stacks/app/typebot) | Chatbot builder |
 
 ---
