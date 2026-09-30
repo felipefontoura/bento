@@ -69,23 +69,37 @@ services:
           memory: ${SGTM_TAGGING_MEM_LIMIT:-512M}
       labels:
         - traefik.enable=true
-        # Only requests carrying the proxy key match. Anything else — scanners,
-        # direct hits that could forge Forwarded/X-Forwarded-For — gets
-        # Traefik's 404 and never reaches the container.
-        - traefik.http.routers.sgtm_tagging.rule=Host(`${SGTM_HOST}`) && Headers(`X-Sgtm-Key`, `${SGTM_PROXY_KEY}`)
-        - traefik.http.routers.sgtm_tagging.entrypoints=websecure
-        - traefik.http.routers.sgtm_tagging.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.sgtm_tagging.priority=2
-        - traefik.http.routers.sgtm_tagging.service=sgtm_tagging
-        - traefik.http.routers.sgtm_tagging.middlewares=sgtm_strip_key
-        # Drop the key before the container sees it: the preview UI shows
-        # every incoming request header. Also drop the X-Forwarded-* that
-        # Traefik rewrote to the proxy's address, so the proxy's Forwarded
-        # header is the only source for the visitor IP and cookie domain.
-        - traefik.http.middlewares.sgtm_strip_key.headers.customrequestheaders.X-Sgtm-Key=
-        - traefik.http.middlewares.sgtm_strip_key.headers.customrequestheaders.X-Forwarded-For=
-        - traefik.http.middlewares.sgtm_strip_key.headers.customrequestheaders.X-Forwarded-Host=
-        - traefik.http.middlewares.sgtm_strip_key.headers.customrequestheaders.X-Real-Ip=
+        # Proxy mode (always on): only requests carrying the proxy key match.
+        # Anything else — scanners, direct hits that could forge Forwarded —
+        # gets Traefik's 404 and never reaches the container.
+        - traefik.http.routers.sgtm_proxy.rule=Host(`${SGTM_HOST}`) && Headers(`X-Sgtm-Key`, `${SGTM_PROXY_KEY}`)
+        - traefik.http.routers.sgtm_proxy.entrypoints=websecure
+        - traefik.http.routers.sgtm_proxy.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.sgtm_proxy.priority=3
+        - traefik.http.routers.sgtm_proxy.service=sgtm_tagging
+        - traefik.http.routers.sgtm_proxy.middlewares=sgtm_proxy
+        # Drop the key before the container sees it (the preview UI shows
+        # every request header) and the X-Forwarded-* Traefik rewrote to the
+        # proxy's address: the proxy's Forwarded is the only source for the
+        # visitor IP and cookie domain.
+        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Sgtm-Key=
+        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Forwarded-For=
+        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Forwarded-Host=
+        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Real-Ip=
+        # Direct mode (opt-in): browsers hit SGTM_HOST themselves, no proxy.
+        # Off unless SGTM_DIRECT_MATCH is set — the default matcher can never
+        # match (`.^`: a character before the start). A recommended value keeps scanners out:
+        #   (Path(`/g/collect`) || PathPrefix(`/gtm/`))
+        - traefik.http.routers.sgtm_direct.rule=Host(`${SGTM_HOST}`) && ${SGTM_DIRECT_MATCH:-HeadersRegexp(`X-Sgtm-Key`, `.^`)}
+        - traefik.http.routers.sgtm_direct.entrypoints=websecure
+        - traefik.http.routers.sgtm_direct.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.sgtm_direct.priority=2
+        - traefik.http.routers.sgtm_direct.service=sgtm_tagging
+        - traefik.http.routers.sgtm_direct.middlewares=sgtm_direct
+        # Here the browser is the client: Traefik's own X-Forwarded-For holds
+        # its IP. Drop any Forwarded it sent, or it could claim any IP.
+        - traefik.http.middlewares.sgtm_direct.headers.customrequestheaders.Forwarded=
+        - traefik.http.middlewares.sgtm_direct.headers.customrequestheaders.X-Sgtm-Key=
         - traefik.http.services.sgtm_tagging.loadbalancer.server.port=8080
         - traefik.http.services.sgtm_tagging.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
