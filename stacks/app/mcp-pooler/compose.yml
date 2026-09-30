@@ -30,6 +30,10 @@ services:
         delay: 5s
       update_config:
         order: start-first
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=mcp-pooler
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:
   network_public:
