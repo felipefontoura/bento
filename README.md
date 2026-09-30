@@ -185,6 +185,7 @@ Each stack is a directory at `stacks/<category>/<key>/` with `compose.yml`, `man
 | app | [Paperclip](stacks/app/paperclip) | AI agent orchestration (Claude Code, Codex, OpenCode, Hermes via hermes-bin volume) |
 | app | [Plunk](stacks/app/plunk) | Open-source email platform |
 | app | [RabbitMQ](stacks/app/rabbitmq) | Message broker |
+| app | [Server GTM](stacks/app/sgtm) | Server-side Google Tag Manager (tagging + preview), locked to a same-origin proxy — see [docs/reference/sgtm.md](docs/reference/sgtm.md) |
 | app | [Typebot](stacks/app/typebot) | Chatbot builder |
 
 ---

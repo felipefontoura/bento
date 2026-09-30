@@ -1,0 +1,18 @@
+{
+  "name": "sgtm",
+  "category": "app",
+  "description": "Server-side Google Tag Manager (tagging + preview), meant to sit behind a same-origin proxy",
+  "depends_on": [],
+  "env": [
+    { "name": "SGTM_HOST",             "default": "sgtm.${BASE_DOMAIN}",         "prompt": "Tagging server hostname (your proxy's upstream)" },
+    { "name": "SGTM_PREVIEW_HOST",     "default": "sgtm-preview.${BASE_DOMAIN}", "prompt": "Preview server hostname" },
+    { "name": "SGTM_CONTAINER_CONFIG", "prompt": "Container config string (GTM server container → Admin → Container settings)", "required": true, "hide": true },
+    { "name": "SGTM_PROXY_KEY",        "generate": "openssl rand -hex 32", "hide": true },
+    { "name": "SGTM_GCP_SA_JSON_B64",  "prompt": "Optional: Google service account JSON key, base64 (BigQuery/Firestore from tags)", "hide": true },
+    { "name": "SGTM_TAGGING_CPU_LIMIT", "default": "1" },
+    { "name": "SGTM_TAGGING_MEM_LIMIT", "default": "512M" },
+    { "name": "SGTM_PREVIEW_CPU_LIMIT", "default": "0.5" },
+    { "name": "SGTM_PREVIEW_MEM_LIMIT", "default": "256M" }
+  ],
+  "post_deploy_url": "https://${SGTM_PREVIEW_HOST}/healthy"
+}
