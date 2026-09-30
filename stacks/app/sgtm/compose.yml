@@ -1,0 +1,138 @@
+x-sgtm-common: &sgtm-common
+  # Google publishes only this moving tag and retires old builds on its own
+  # schedule, so a pinned version would eventually stop being supported.
+  # amd64 only.
+  image: gcr.io/cloud-tagging-10302018/gtm-cloud-image:stable
+  networks:
+    - network_public
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  # The image ships its own HEALTHCHECK (node health_checker_bin.js, no
+  # wget/sh dependency — the image is distroless), so Swarm uses it as is.
+  deploy: &sgtm-deploy
+    mode: replicated
+    replicas: 1
+    placement:
+      constraints:
+        - node.role == manager
+    update_config:
+      parallelism: 1
+      delay: 10s
+      order: start-first
+      failure_action: rollback
+    restart_policy:
+      condition: any
+      delay: 10s
+      max_attempts: 5
+      window: 120s
+
+services:
+  sgtm_tagging:
+    <<: *sgtm-common
+    # Distroless image: no shell to write the service account file, so a
+    # data: URL preload does it before server_bin.js starts, and only when
+    # SGTM_GCP_SA_JSON_B64 is set. Without it the container runs normally;
+    # only BigQuery/Firestore APIs in tags fail.
+    command:
+      - --import
+      - 'data:text/javascript,import{writeFileSync}from"node:fs";const b=process.env.SGTM_GCP_SA_JSON_B64;if(b){const p="/tmp/gcp-sa.json";writeFileSync(p,Buffer.from(b,"base64"),{mode:0o600});process.env.GOOGLE_APPLICATION_CREDENTIALS=p}'
+      - server_bin.js
+    environment:
+      # =========================================================================
+      # Container
+      # =========================================================================
+
+      # Config string from GTM → server container → Admin → Container
+      # settings → "Manually provision tagging server". Same string for both
+      # services.
+      - CONTAINER_CONFIG=${SGTM_CONTAINER_CONFIG}
+
+      # Tag Assistant debug sessions are forwarded here. Must be HTTPS.
+      - PREVIEW_SERVER_URL=https://${SGTM_PREVIEW_HOST}
+
+      # =========================================================================
+      # Google Cloud (optional — BigQuery / Firestore from tags)
+      # =========================================================================
+
+      # Base64 of a service account JSON key. Written to /tmp at boot by the
+      # preload above; empty means no Google credentials.
+      - SGTM_GCP_SA_JSON_B64=${SGTM_GCP_SA_JSON_B64:-}
+    deploy:
+      <<: *sgtm-deploy
+      resources:
+        limits:
+          # Google: "at most 1 vCPU. Additional vCPUs are not utilized".
+          cpus: "${SGTM_TAGGING_CPU_LIMIT:-1}"
+          memory: ${SGTM_TAGGING_MEM_LIMIT:-512M}
+      labels:
+        - traefik.enable=true
+        # Proxy mode (always on): only requests carrying the proxy key match.
+        # Anything else — scanners, direct hits that could forge Forwarded —
+        # gets Traefik's 404 and never reaches the container.
+        - traefik.http.routers.sgtm_proxy.rule=Host(`${SGTM_HOST}`) && Headers(`X-Sgtm-Key`, `${SGTM_PROXY_KEY}`)
+        - traefik.http.routers.sgtm_proxy.entrypoints=websecure
+        - traefik.http.routers.sgtm_proxy.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.sgtm_proxy.priority=3
+        - traefik.http.routers.sgtm_proxy.service=sgtm_tagging
+        - traefik.http.routers.sgtm_proxy.middlewares=sgtm_proxy
+        # Drop the key before the container sees it (the preview UI shows
+        # every request header) and the X-Forwarded-* Traefik rewrote to the
+        # proxy's address: the proxy's Forwarded is the only source for the
+        # visitor IP and cookie domain.
+        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Sgtm-Key=
+        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Forwarded-For=
+        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Forwarded-Host=
+        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Real-Ip=
+        # Direct mode (opt-in): browsers hit SGTM_HOST themselves, no proxy.
+        # Off unless SGTM_DIRECT_MATCH is set — the default matcher can never
+        # match (`.^`: a character before the start). A recommended value keeps scanners out:
+        #   (Path(`/g/collect`) || PathPrefix(`/gtm/`))
+        - traefik.http.routers.sgtm_direct.rule=Host(`${SGTM_HOST}`) && ${SGTM_DIRECT_MATCH:-HeadersRegexp(`X-Sgtm-Key`, `.^`)}
+        - traefik.http.routers.sgtm_direct.entrypoints=websecure
+        - traefik.http.routers.sgtm_direct.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.sgtm_direct.priority=2
+        - traefik.http.routers.sgtm_direct.service=sgtm_tagging
+        - traefik.http.routers.sgtm_direct.middlewares=sgtm_direct
+        # Here the browser is the client: Traefik's own X-Forwarded-For holds
+        # its IP. Drop any Forwarded it sent, or it could claim any IP.
+        - traefik.http.middlewares.sgtm_direct.headers.customrequestheaders.Forwarded=
+        - traefik.http.middlewares.sgtm_direct.headers.customrequestheaders.X-Sgtm-Key=
+        - traefik.http.services.sgtm_tagging.loadbalancer.server.port=8080
+        - traefik.http.services.sgtm_tagging.loadbalancer.passHostHeader=true
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=sgtm
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
+
+  sgtm_preview:
+    <<: *sgtm-common
+    environment:
+      - CONTAINER_CONFIG=${SGTM_CONTAINER_CONFIG}
+      - RUN_AS_PREVIEW_SERVER=true
+    deploy:
+      <<: *sgtm-deploy
+      resources:
+        limits:
+          cpus: "${SGTM_PREVIEW_CPU_LIMIT:-0.5}"
+          memory: ${SGTM_PREVIEW_MEM_LIMIT:-256M}
+      labels:
+        - traefik.enable=true
+        # Public on purpose: the tagging server reaches it over HTTPS, and a
+        # debug session needs GTM's auth token anyway.
+        - traefik.http.routers.sgtm_preview.rule=Host(`${SGTM_PREVIEW_HOST}`)
+        - traefik.http.routers.sgtm_preview.entrypoints=websecure
+        - traefik.http.routers.sgtm_preview.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.sgtm_preview.priority=2
+        - traefik.http.routers.sgtm_preview.service=sgtm_preview
+        - traefik.http.services.sgtm_preview.loadbalancer.server.port=8080
+        - traefik.http.services.sgtm_preview.loadbalancer.passHostHeader=true
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=sgtm
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
+
+networks:
+  network_public:
+    name: network_public
+    external: true
