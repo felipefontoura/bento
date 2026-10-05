@@ -9,7 +9,7 @@
       "generate": "openssl rand -hex 16",
       "hide": true
     },
-    { "name": "POSTGRES_CPU_LIMIT", "default": "0.5" },
-    { "name": "POSTGRES_MEM_LIMIT", "default": "256M" }
+    { "name": "POSTGRES_CPU_LIMIT", "default": "1" },
+    { "name": "POSTGRES_MEM_LIMIT", "default": "1024M" }
   ]
 }

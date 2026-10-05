@@ -54,8 +54,8 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "${POSTGRES_CPU_LIMIT:-0.5}"
-          memory: ${POSTGRES_MEM_LIMIT:-256M}
+          cpus: "${POSTGRES_CPU_LIMIT:-1}"
+          memory: ${POSTGRES_MEM_LIMIT:-1024M}
       labels:
         - BENTO_MANAGED=true
         - BENTO_STACK_KEY=postgres
