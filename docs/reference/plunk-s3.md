@@ -73,12 +73,21 @@ semantic-naming convention) with an inline policy scoped to this one bucket:
 Create an access key for this user and fill the manifest prompts:
 `S3_ACCESS_KEY_ID`, `S3_ACCESS_KEY_SECRET` (hidden), `S3_BUCKET`.
 
-## What bento derives automatically
+## Other S3-compatible providers
 
-`stacks/app/plunk/compose.yml` builds the rest from `AWS_SES_REGION` and
-`S3_BUCKET` — no separate endpoint/public-URL prompts:
+`S3_ENDPOINT`, `S3_PUBLIC_URL`, and `S3_FORCE_PATH_STYLE` are independent
+manifest prompts, not concatenated from `AWS_SES_REGION`/`S3_BUCKET` — so any
+S3-compatible provider works, not just AWS:
 
-- `S3_ENDPOINT=https://s3.${AWS_SES_REGION}.amazonaws.com`
-- `S3_PUBLIC_URL=https://${S3_BUCKET}.s3.${AWS_SES_REGION}.amazonaws.com`
-- `S3_FORCE_PATH_STYLE=false` (virtual-hosted-style addressing — the
-  path-style flag upstream sets for MinIO doesn't apply to real S3)
+| Provider | `S3_ENDPOINT` | `S3_FORCE_PATH_STYLE` |
+|---|---|---|
+| AWS S3 | `https://s3.<region>.amazonaws.com` | `false` |
+| Backblaze B2 | `https://s3.<region>.backblazeb2.com` | `false` |
+| Cloudflare R2 | `https://<account_id>.r2.cloudflarestorage.com` | `true` |
+| MinIO (self-hosted) | `http://minio:9000` (internal) | `true` |
+
+`S3_PUBLIC_URL` is whatever URL actually serves the bucket's objects
+publicly — for R2 that's a configured custom domain or the `r2.dev`
+subdomain, for B2 the friendly bucket URL, for a fronting CDN its own
+hostname. Steps 1-3 above are AWS-specific; a non-AWS provider's own console
+has the equivalent bucket-creation, public-read, and access-key steps.
