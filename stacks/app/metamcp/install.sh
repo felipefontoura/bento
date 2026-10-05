@@ -12,7 +12,7 @@
 set -euo pipefail
 source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 
-ensure_database metamcp
+ensure_database "$BENTO_STACK_KEY"
 
 # MetaMCP runs as a non-root user (uid 1001) and spawns stdio MCP servers that
 # write a persistent package cache (uvx/npx) and, for OAuth-based servers,

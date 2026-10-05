@@ -100,7 +100,7 @@ services:
           memory: ${CRAWL4AI_MEM_LIMIT:-1536M}
       labels:
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=crawl4ai
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:

@@ -76,9 +76,10 @@ x-paperclip-common: &paperclip-common
 
     # Bento's shared postgres stack. Without DATABASE_URL set, paperclip
     # falls back to an embedded postgres on port 54329 inside the container
-    # — fine for dev, wasteful in production. The 'paperclip' database is
-    # created by this stack's install.sh (ensure_database paperclip).
-    - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/paperclip
+    # — fine for dev, wasteful in production. The database (named after
+    # this instance's stack key) is created by this stack's install.sh
+    # (ensure_database "$BENTO_STACK_KEY").
+    - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${BENTO_STACK_KEY}
 
     # =============================================================================
     # Timezone
@@ -201,22 +202,22 @@ services:
           memory: ${PAPERCLIP_MEM_LIMIT:-2048M}
       labels:
         - traefik.enable=true
-        - traefik.http.routers.paperclip.rule=Host(`${PAPERCLIP_HOST}`)
-        - traefik.http.routers.paperclip.entrypoints=websecure
-        - traefik.http.routers.paperclip.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.paperclip.priority=2
-        - traefik.http.routers.paperclip.service=paperclip
-        - traefik.http.services.paperclip.loadbalancer.server.port=3100
-        - traefik.http.services.paperclip.loadbalancer.passHostHeader=true
-        - traefik.http.routers.paperclip.middlewares=paperclip-headers
-        - traefik.http.middlewares.paperclip-headers.headers.stsSeconds=31536000
-        - traefik.http.middlewares.paperclip-headers.headers.stsIncludeSubdomains=true
-        - traefik.http.middlewares.paperclip-headers.headers.stsPreload=true
-        - traefik.http.middlewares.paperclip-headers.headers.contentTypeNosniff=true
-        - traefik.http.middlewares.paperclip-headers.headers.browserXssFilter=true
-        - traefik.http.middlewares.paperclip-headers.headers.referrerPolicy=no-referrer-when-downgrade
+        - traefik.http.routers.${BENTO_STACK_KEY}.rule=Host(`${PAPERCLIP_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}.service=${BENTO_STACK_KEY}
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.server.port=3100
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.passHostHeader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}.middlewares=${BENTO_STACK_KEY}-headers
+        - traefik.http.middlewares.${BENTO_STACK_KEY}-headers.headers.stsSeconds=31536000
+        - traefik.http.middlewares.${BENTO_STACK_KEY}-headers.headers.stsIncludeSubdomains=true
+        - traefik.http.middlewares.${BENTO_STACK_KEY}-headers.headers.stsPreload=true
+        - traefik.http.middlewares.${BENTO_STACK_KEY}-headers.headers.contentTypeNosniff=true
+        - traefik.http.middlewares.${BENTO_STACK_KEY}-headers.headers.browserXssFilter=true
+        - traefik.http.middlewares.${BENTO_STACK_KEY}-headers.headers.referrerPolicy=no-referrer-when-downgrade
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=paperclip
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:

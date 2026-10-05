@@ -11,13 +11,13 @@
 set -euo pipefail
 source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 
-ensure_database chatwoot
+ensure_database "$BENTO_STACK_KEY"
 
 # Pull the same env we passed to the stack from bento's state. The stacks
 # library exports these to the install script when present in state.envs.
 chatwoot_secret="${CHATWOOT_SECRET_KEY_BASE:-}"
 if [[ -z "$chatwoot_secret" ]]; then
-    chatwoot_secret=$(jq -r '.envs.chatwoot.CHATWOOT_SECRET_KEY_BASE // empty' \
+    chatwoot_secret=$(jq -r --arg k "$BENTO_STACK_KEY" '.envs[$k].CHATWOOT_SECRET_KEY_BASE // empty' \
         "${BENTO_STATE_FILE}")
 fi
 
@@ -34,10 +34,10 @@ sudo docker run --rm \
     -e NODE_ENV=production \
     -e INSTALLATION_ENV=docker \
     -e POSTGRES_HOST=postgres \
-    -e POSTGRES_DATABASE=chatwoot \
+    -e POSTGRES_DATABASE="${BENTO_STACK_KEY}" \
     -e POSTGRES_USERNAME=postgres \
     -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
-    -e REDIS_URL=redis://redis:6379/3 \
+    -e REDIS_URL="redis://redis:6379/${CHATWOOT_REDIS_DB}" \
     -e SECRET_KEY_BASE="${chatwoot_secret}" \
     -e FRONTEND_URL="https://${CHATWOOT_HOST:-chatwoot.local}" \
     chatwoot/chatwoot:latest \

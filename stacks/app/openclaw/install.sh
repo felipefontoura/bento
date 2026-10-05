@@ -25,9 +25,8 @@
 set -euo pipefail
 source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 
-# Swarm prefixes volume names with the stack name. The compose declares
-# `openclaw-config:` and the stack is `openclaw`, so the actual volume is:
-volume_name="openclaw_openclaw-config"
+# Swarm prefixes volume names with the stack name (this instance's key).
+volume_name="${BENTO_STACK_KEY}_openclaw-config"
 
 # Telegram has no in-UI login button — the bot token comes from the
 # TELEGRAM_BOT_TOKEN env (default-account fallback), but the channel must also
@@ -90,7 +89,7 @@ chown -R 1000:1000 /cfg'
 # Recreate the running task so the gateway picks up the new config.
 # `--force` re-runs the service-update lifecycle even when nothing in the
 # spec changed (the file we just wrote is on a volume, not in the spec).
-sudo docker service update --force openclaw_openclaw >/dev/null
+sudo docker service update --force "${BENTO_STACK_KEY}_openclaw" >/dev/null
 
 echo "Openclaw Control UI live at https://${OPENCLAW_HOST} (token login link is in the bento report)"
-echo "Openclaw OpenAI-compatible endpoint enabled at http://openclaw:18789/v1/chat/completions"
+echo "Openclaw OpenAI-compatible endpoint enabled at http://${BENTO_STACK_KEY}_openclaw:18789/v1/chat/completions"

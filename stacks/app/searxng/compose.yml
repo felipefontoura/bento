@@ -68,7 +68,7 @@ services:
           memory: ${SEARXNG_MEM_LIMIT:-256M}
       labels:
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=searxng
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:

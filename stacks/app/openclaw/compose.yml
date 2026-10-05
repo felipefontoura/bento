@@ -149,15 +149,15 @@ services:
           memory: ${OPENCLAW_MEM_LIMIT:-1024M}
       labels:
         - traefik.enable=true
-        - traefik.http.routers.openclaw.rule=Host(`${OPENCLAW_HOST}`)
-        - traefik.http.routers.openclaw.entrypoints=websecure
-        - traefik.http.routers.openclaw.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.openclaw.priority=2
-        - traefik.http.routers.openclaw.service=openclaw
-        - traefik.http.services.openclaw.loadbalancer.server.port=18789
-        - traefik.http.services.openclaw.loadbalancer.passHostHeader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}.rule=Host(`${OPENCLAW_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}.service=${BENTO_STACK_KEY}
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.server.port=18789
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=openclaw
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 volumes:

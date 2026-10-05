@@ -79,7 +79,7 @@ x-chatwoot-common: &chatwoot-common
     - POSTGRES_HOST=postgres
 
     # Database name.
-    - POSTGRES_DATABASE=chatwoot
+    - POSTGRES_DATABASE=${BENTO_STACK_KEY}
 
     # Database user.
     - POSTGRES_USERNAME=postgres
@@ -91,8 +91,11 @@ x-chatwoot-common: &chatwoot-common
     # Cache / Queue (Redis)
     # =============================================================================
 
-    # Redis connection URL (DB index 3).
-    - REDIS_URL=redis://redis:6379/3
+    # Redis connection URL. Base instance stays on DB 3 (unchanged); extra
+    # instances get a hashed DB in the 5-15 shared pool — see manifest.json's
+    # CHATWOOT_REDIS_DB generate snippet and stacks/app/evolution-api/compose.yml
+    # for the full per-stack allocation registry.
+    - REDIS_URL=redis://redis:6379/${CHATWOOT_REDIS_DB}
 
     # =============================================================================
     # Storage (AWS S3)
@@ -212,18 +215,18 @@ services:
       labels:
         # Traefik Configuration
         - traefik.enable=true
-        - traefik.http.routers.chatwoot_web.rule=Host(`${CHATWOOT_HOST}`)
-        - traefik.http.routers.chatwoot_web.entrypoints=websecure
-        - traefik.http.routers.chatwoot_web.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.chatwoot_web.priority=2
-        - traefik.http.routers.chatwoot_web.service=chatwoot_web
-        - traefik.http.services.chatwoot_web.loadbalancer.server.port=3000
-        - traefik.http.services.chatwoot_web.loadbalancer.passhostheader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}_web.rule=Host(`${CHATWOOT_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}_web.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}_web.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}_web.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}_web.service=${BENTO_STACK_KEY}_web
+        - traefik.http.services.${BENTO_STACK_KEY}_web.loadbalancer.server.port=3000
+        - traefik.http.services.${BENTO_STACK_KEY}_web.loadbalancer.passhostheader=true
         # SSL Headers Middleware
-        - traefik.http.middlewares.chatwoot-sslheader.headers.customrequestheaders.X-Forwarded-Proto=https
-        - traefik.http.routers.chatwoot_web.middlewares=chatwoot-sslheader@docker
+        - traefik.http.middlewares.${BENTO_STACK_KEY}-sslheader.headers.customrequestheaders.X-Forwarded-Proto=https
+        - traefik.http.routers.${BENTO_STACK_KEY}_web.middlewares=${BENTO_STACK_KEY}-sslheader@docker
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=chatwoot
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
   # Background Job Processor
@@ -232,7 +235,12 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - |
-        until wget -qO- http://chatwoot_web:3000 2>/dev/null; do sleep 3; done
+        # Fully-qualified hostname (<stack>_<service>), not the bare
+        # "chatwoot_web" — that short DNS alias is network-wide on the
+        # shared network_public and would be ambiguous once a second
+        # chatwoot instance registers the identical compose-file service
+        # name. The fully-qualified form is always unique per instance.
+        until wget -qO- http://${BENTO_STACK_KEY}_chatwoot_web:3000 2>/dev/null; do sleep 3; done
         exec docker/entrypoints/rails.sh bundle exec sidekiq -C config/sidekiq.yml
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f sidekiq >/dev/null 2>&1 || exit 1"]

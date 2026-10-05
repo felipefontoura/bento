@@ -12,13 +12,13 @@
 set -euo pipefail
 source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 
-wait_for_service crawl4ai_crawl4ai 120 || true
+wait_for_service "${BENTO_STACK_KEY}_crawl4ai" 120 || true
 
 SRC="${BENTO_REPO_ROOT}/stacks/app/crawl4ai/config.yml"
 
 docker run --rm \
-  -v crawl4ai_crawl4ai-config:/dst \
+  -v "${BENTO_STACK_KEY}_crawl4ai-config:/dst" \
   -v "${SRC}:/src.yml:ro" \
   busybox sh -c "cp /src.yml /dst/config.yml && chmod 0644 /dst/config.yml"
 
-docker service update --force crawl4ai_crawl4ai >/dev/null 2>&1 || true
+docker service update --force "${BENTO_STACK_KEY}_crawl4ai" >/dev/null 2>&1 || true

@@ -40,10 +40,10 @@ services:
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=metamcp
+      - POSTGRES_DB=${BENTO_STACK_KEY}
 
       # Connection string composed from the values above.
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/metamcp
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${BENTO_STACK_KEY}
 
       # =============================================================================
       # Security / Authentication
@@ -126,16 +126,16 @@ services:
       # containers. Traefik's backend health check covers user-facing readiness.
       labels:
         - traefik.enable=true
-        - traefik.http.routers.metamcp.rule=Host(`${METAMCP_HOST}`)
-        - traefik.http.routers.metamcp.entrypoints=websecure
-        - traefik.http.routers.metamcp.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.metamcp.service=metamcp
-        - traefik.http.services.metamcp.loadbalancer.server.port=12008
-        - traefik.http.services.metamcp.loadbalancer.passHostHeader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}.rule=Host(`${METAMCP_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}.service=${BENTO_STACK_KEY}
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.server.port=12008
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.passHostHeader=true
         # Bento management labels — let introspection tooling find this service
         # via `docker service ls --filter label=BENTO_MANAGED=true`.
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=metamcp
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 volumes:

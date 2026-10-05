@@ -113,14 +113,14 @@ services:
       labels:
         - traefik.enable=true
         # --- Dashboard route (Basic Auth via htpasswd) ---
-        - traefik.http.routers.hermes-dashboard.rule=Host(`${HERMES_HOST}`)
-        - traefik.http.routers.hermes-dashboard.entrypoints=websecure
-        - traefik.http.routers.hermes-dashboard.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.hermes-dashboard.priority=2
-        - traefik.http.routers.hermes-dashboard.service=hermes-dashboard
-        - traefik.http.routers.hermes-dashboard.middlewares=hermes-auth
-        - traefik.http.services.hermes-dashboard.loadbalancer.server.port=9119
-        - traefik.http.services.hermes-dashboard.loadbalancer.passHostHeader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}-dashboard.rule=Host(`${HERMES_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}-dashboard.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}-dashboard.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}-dashboard.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}-dashboard.service=${BENTO_STACK_KEY}-dashboard
+        - traefik.http.routers.${BENTO_STACK_KEY}-dashboard.middlewares=${BENTO_STACK_KEY}-auth
+        - traefik.http.services.${BENTO_STACK_KEY}-dashboard.loadbalancer.server.port=9119
+        - traefik.http.services.${BENTO_STACK_KEY}-dashboard.loadbalancer.passHostHeader=true
         # --- Dashboard WebSocket route (NO basicauth; SPA-token in `?token=`) ---
         # Chrome does NOT forward cached basic-auth credentials on a WebSocket
         # upgrade, so a single basicauth-gated router 401s every WS the SPA
@@ -132,23 +132,23 @@ services:
         # outsiders from ever discovering the token, the token enforces auth on
         # the WS upgrade. Higher priority so it wins the longest-prefix race
         # against hermes-dashboard.
-        - traefik.http.routers.hermes-ws.rule=Host(`${HERMES_HOST}`) && (PathPrefix(`/api/ws`) || PathPrefix(`/api/events`) || PathPrefix(`/api/pty`) || PathPrefix(`/api/pub`))
-        - traefik.http.routers.hermes-ws.entrypoints=websecure
-        - traefik.http.routers.hermes-ws.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.hermes-ws.priority=10
-        - traefik.http.routers.hermes-ws.service=hermes-dashboard
+        - traefik.http.routers.${BENTO_STACK_KEY}-ws.rule=Host(`${HERMES_HOST}`) && (PathPrefix(`/api/ws`) || PathPrefix(`/api/events`) || PathPrefix(`/api/pty`) || PathPrefix(`/api/pub`))
+        - traefik.http.routers.${BENTO_STACK_KEY}-ws.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}-ws.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}-ws.priority=10
+        - traefik.http.routers.${BENTO_STACK_KEY}-ws.service=${BENTO_STACK_KEY}-dashboard
         # --- API gateway route (Bearer auth via API_SERVER_KEY, native) ---
-        - traefik.http.routers.hermes-api.rule=Host(`${HERMES_API_HOST}`)
-        - traefik.http.routers.hermes-api.entrypoints=websecure
-        - traefik.http.routers.hermes-api.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.hermes-api.priority=2
-        - traefik.http.routers.hermes-api.service=hermes-api
-        - traefik.http.services.hermes-api.loadbalancer.server.port=8642
-        - traefik.http.services.hermes-api.loadbalancer.passHostHeader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}-api.rule=Host(`${HERMES_API_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}-api.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}-api.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}-api.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}-api.service=${BENTO_STACK_KEY}-api
+        - traefik.http.services.${BENTO_STACK_KEY}-api.loadbalancer.server.port=8642
+        - traefik.http.services.${BENTO_STACK_KEY}-api.loadbalancer.passHostHeader=true
         # --- Basic Auth middleware (dashboard only) ---
-        - traefik.http.middlewares.hermes-auth.basicauth.users=${HERMES_DASHBOARD_HTPASSWD}
+        - traefik.http.middlewares.${BENTO_STACK_KEY}-auth.basicauth.users=${HERMES_DASHBOARD_HTPASSWD}
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=hermes
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:

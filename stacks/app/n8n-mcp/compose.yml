@@ -109,15 +109,15 @@ services:
           memory: ${N8N_MCP_MEM_LIMIT:-512M}
       labels:
         - traefik.enable=true
-        - traefik.http.routers.n8n_mcp.rule=Host(`${N8N_MCP_HOST}`)
-        - traefik.http.routers.n8n_mcp.entrypoints=websecure
-        - traefik.http.routers.n8n_mcp.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.n8n_mcp.priority=2
-        - traefik.http.routers.n8n_mcp.service=n8n_mcp
-        - traefik.http.services.n8n_mcp.loadbalancer.server.port=3000
-        - traefik.http.services.n8n_mcp.loadbalancer.passHostHeader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}.rule=Host(`${N8N_MCP_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}.service=${BENTO_STACK_KEY}
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.server.port=3000
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=n8n-mcp
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 volumes:
