@@ -8,7 +8,7 @@
 set -euo pipefail
 source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 
-wait_for_service hermes_hermes 180 || true
+wait_for_service "${BENTO_STACK_KEY}_hermes" 180 || true
 
 # Cross-stack push: mirror of the pull in paperclip/install.sh. The pull
 # silently skips when hermes deploys after paperclip (the unattended order
@@ -16,7 +16,14 @@ wait_for_service hermes_hermes 180 || true
 # before hermes_hermes-{bin,data} exist, so nothing mounts). Pushing from
 # this side covers that race: hermes runs last, so both paperclip_paperclip
 # and the hermes volumes exist now.
-graft_external_volumes_to_service \
-    paperclip_paperclip \
-    hermes_hermes-bin:/opt/hermes:readonly \
-    hermes_hermes-data:/opt/hermes-shared:readonly
+#
+# Only the BASE hermes instance grafts into paperclip — an extra instance
+# ("hermes-<hex8>") has no defined pairing with any particular paperclip
+# instance, so it skips the graft rather than guessing. Pairing specific
+# instances together is a follow-up, not solved generically here.
+if [[ "$BENTO_STACK_KEY" == "hermes" ]]; then
+    graft_external_volumes_to_service \
+        paperclip_paperclip \
+        hermes_hermes-bin:/opt/hermes:readonly \
+        hermes_hermes-data:/opt/hermes-shared:readonly
+fi

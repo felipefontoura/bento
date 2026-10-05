@@ -11,8 +11,12 @@ services:
         max-size: "10m"
         max-file: "3"
     # AMQP port (5672) is overlay-only — apps connect as host `rabbitmq`.
-    # The management UI (15672) is reached over HTTPS via Traefik.
-    hostname: rabbitmq
+    # The management UI (15672) is reached over HTTPS via Traefik. Like
+    # postgres/redis, this short DNS alias is network-wide, so only the
+    # base instance is reachable as bare "rabbitmq"; extra instances are
+    # isolated stacks but any consumer that hardcodes the bare hostname
+    # will always reach the base one (accepted v1 limitation).
+    hostname: ${BENTO_STACK_KEY}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq/
     environment:
@@ -66,15 +70,15 @@ services:
           memory: ${RABBITMQ_MEM_LIMIT:-256M}
       labels:
         - traefik.enable=true
-        - traefik.http.routers.rabbitmq.rule=Host(`${RABBITMQ_HOST}`)
-        - traefik.http.routers.rabbitmq.entrypoints=websecure
-        - traefik.http.routers.rabbitmq.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.rabbitmq.priority=2
-        - traefik.http.routers.rabbitmq.service=rabbitmq
-        - traefik.http.services.rabbitmq.loadbalancer.server.port=15672
-        - traefik.http.services.rabbitmq.loadbalancer.passHostHeader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}.rule=Host(`${RABBITMQ_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}.service=${BENTO_STACK_KEY}
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.server.port=15672
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=rabbitmq
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 networks:
   network_public:

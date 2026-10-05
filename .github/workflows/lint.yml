@@ -92,6 +92,18 @@ jobs:
           # Without these labels the filter returns empty and the live-update
           # paths silently no-op even when bento stacks are running. See
           # GH-23 for the discovery trail.
+          #
+          # stacks/app/* support multiple instances on one host
+          # ("<key>-<hex8>"); for those, BENTO_STACK_KEY must be the
+          # *interpolated* form (`BENTO_STACK_KEY=${BENTO_STACK_KEY}`), not a
+          # literal app name — that's how the runtime stack key (already
+          # injected as an env var by stacks_build_env_payload) reaches the
+          # Swarm service label future reconciliation tooling reads. A
+          # literal value would make every instance report the base key.
+          #
+          # stacks/db/* and stacks/infra/* are singleton by design (shared
+          # Postgres/Redis/Traefik/Portainer) and keep the literal
+          # BENTO_STACK_KEY=<key> form.
           set -e
           mapfile -t files < <(find stacks -name compose.yml)
           if [[ ${#files[@]} -eq 0 ]]; then
@@ -103,7 +115,11 @@ jobs:
             key=$(basename "$(dirname "$f")")
             missing=()
             grep -q "BENTO_MANAGED=true"  "$f" || missing+=("BENTO_MANAGED=true")
-            grep -q "BENTO_STACK_KEY=${key}" "$f" || missing+=("BENTO_STACK_KEY=${key}")
+            if [[ "$f" == stacks/app/* ]]; then
+              grep -qF 'BENTO_STACK_KEY=${BENTO_STACK_KEY}' "$f" || missing+=('BENTO_STACK_KEY=${BENTO_STACK_KEY}')
+            else
+              grep -q "BENTO_STACK_KEY=${key}" "$f" || missing+=("BENTO_STACK_KEY=${key}")
+            fi
             grep -q "BENTO_DEPLOYED_REF="  "$f" || missing+=("BENTO_DEPLOYED_REF=\${BENTO_DEPLOYED_REF…}")
             if [[ ${#missing[@]} -gt 0 ]]; then
               echo "::error file=$f::missing required deploy.labels: ${missing[*]}"

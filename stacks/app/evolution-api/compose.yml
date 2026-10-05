@@ -118,7 +118,7 @@ services:
       - DATABASE_PROVIDER=postgresql
 
       # Full database connection URI.
-      - DATABASE_CONNECTION_URI=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/evolution?schema=public
+      - DATABASE_CONNECTION_URI=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${BENTO_STACK_KEY}?schema=public
 
       # Persist instance metadata to the database.
       - DATABASE_SAVE_DATA_INSTANCE=true
@@ -142,9 +142,13 @@ services:
       # Enable Redis caching.
       - CACHE_REDIS_ENABLED=true
 
-      # Redis DB index. Per-stack allocation:
-      #   /0 free  /1 n8n  /2 plunk  /3 chatwoot  /4 evolution-api  /5+ free
-      - CACHE_REDIS_URI=redis://redis:6379/4
+      # Redis DB index. Base instance stays on DB 4 (unchanged); extra
+      # instances get a hashed DB in the 5-15 shared pool. Per-stack
+      # allocation: 0 free / 1 n8n / 2 plunk / 3 chatwoot / 4 evolution-api
+      # / 5-15 shared pool for extra instances of any of those four
+      # (hash-based, collisions possible with enough concurrent instances
+      # — acceptable v1 limitation, not a global allocator).
+      - CACHE_REDIS_URI=redis://redis:6379/${EVOLUTION_REDIS_DB}
     # Swarm healthcheck omitted — Traefik backend probe handles readiness.
     deploy:
       mode: replicated
@@ -168,15 +172,15 @@ services:
           memory: ${EVOLUTION_API_MEM_LIMIT:-256M}
       labels:
         - traefik.enable=true
-        - traefik.http.routers.evolution.rule=Host(`${EVOLUTION_HOST}`)
-        - traefik.http.routers.evolution.entrypoints=websecure
-        - traefik.http.routers.evolution.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.evolution.priority=2
-        - traefik.http.routers.evolution.service=evolution
-        - traefik.http.services.evolution.loadbalancer.server.port=8080
-        - traefik.http.services.evolution.loadbalancer.passHostHeader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}.rule=Host(`${EVOLUTION_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}.service=${BENTO_STACK_KEY}
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.server.port=8080
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=evolution-api
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 volumes:
   evolution_instances:

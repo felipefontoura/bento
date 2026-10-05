@@ -53,7 +53,7 @@ services:
           memory: ${CLI_PROXY_API_MEM_LIMIT:-256M}
       labels:
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=cli-proxy-api
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 volumes:
   cli_proxy_api_config:

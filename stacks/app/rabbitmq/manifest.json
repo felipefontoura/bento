@@ -6,7 +6,7 @@
   "env": [
     {
       "name": "RABBITMQ_HOST",
-      "default": "rabbitmq.${BASE_DOMAIN}",
+      "default": "${BENTO_STACK_KEY}.${BASE_DOMAIN}",
       "prompt": "RabbitMQ management hostname"
     },
     {

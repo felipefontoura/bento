@@ -72,38 +72,38 @@ services:
         # Proxy mode (always on): only requests carrying the proxy key match.
         # Anything else — scanners, direct hits that could forge Forwarded —
         # gets Traefik's 404 and never reaches the container.
-        - traefik.http.routers.sgtm_proxy.rule=Host(`${SGTM_HOST}`) && Headers(`X-Sgtm-Key`, `${SGTM_PROXY_KEY}`)
-        - traefik.http.routers.sgtm_proxy.entrypoints=websecure
-        - traefik.http.routers.sgtm_proxy.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.sgtm_proxy.priority=3
-        - traefik.http.routers.sgtm_proxy.service=sgtm_tagging
-        - traefik.http.routers.sgtm_proxy.middlewares=sgtm_proxy
+        - traefik.http.routers.${BENTO_STACK_KEY}_proxy.rule=Host(`${SGTM_HOST}`) && Headers(`X-Sgtm-Key`, `${SGTM_PROXY_KEY}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}_proxy.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}_proxy.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}_proxy.priority=3
+        - traefik.http.routers.${BENTO_STACK_KEY}_proxy.service=${BENTO_STACK_KEY}_tagging
+        - traefik.http.routers.${BENTO_STACK_KEY}_proxy.middlewares=${BENTO_STACK_KEY}_proxy
         # Drop the key before the container sees it (the preview UI shows
         # every request header) and the X-Forwarded-* Traefik rewrote to the
         # proxy's address: the proxy's Forwarded is the only source for the
         # visitor IP and cookie domain.
-        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Sgtm-Key=
-        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Forwarded-For=
-        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Forwarded-Host=
-        - traefik.http.middlewares.sgtm_proxy.headers.customrequestheaders.X-Real-Ip=
+        - traefik.http.middlewares.${BENTO_STACK_KEY}_proxy.headers.customrequestheaders.X-Sgtm-Key=
+        - traefik.http.middlewares.${BENTO_STACK_KEY}_proxy.headers.customrequestheaders.X-Forwarded-For=
+        - traefik.http.middlewares.${BENTO_STACK_KEY}_proxy.headers.customrequestheaders.X-Forwarded-Host=
+        - traefik.http.middlewares.${BENTO_STACK_KEY}_proxy.headers.customrequestheaders.X-Real-Ip=
         # Direct mode (opt-in): browsers hit SGTM_HOST themselves, no proxy.
         # Off unless SGTM_DIRECT_MATCH is set — the default matcher can never
         # match (`.^`: a character before the start). A recommended value keeps scanners out:
         #   (Path(`/g/collect`) || PathPrefix(`/gtm/`))
-        - traefik.http.routers.sgtm_direct.rule=Host(`${SGTM_HOST}`) && ${SGTM_DIRECT_MATCH:-HeadersRegexp(`X-Sgtm-Key`, `.^`)}
-        - traefik.http.routers.sgtm_direct.entrypoints=websecure
-        - traefik.http.routers.sgtm_direct.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.sgtm_direct.priority=2
-        - traefik.http.routers.sgtm_direct.service=sgtm_tagging
-        - traefik.http.routers.sgtm_direct.middlewares=sgtm_direct
+        - traefik.http.routers.${BENTO_STACK_KEY}_direct.rule=Host(`${SGTM_HOST}`) && ${SGTM_DIRECT_MATCH:-HeadersRegexp(`X-Sgtm-Key`, `.^`)}
+        - traefik.http.routers.${BENTO_STACK_KEY}_direct.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}_direct.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}_direct.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}_direct.service=${BENTO_STACK_KEY}_tagging
+        - traefik.http.routers.${BENTO_STACK_KEY}_direct.middlewares=${BENTO_STACK_KEY}_direct
         # Here the browser is the client: Traefik's own X-Forwarded-For holds
         # its IP. Drop any Forwarded it sent, or it could claim any IP.
-        - traefik.http.middlewares.sgtm_direct.headers.customrequestheaders.Forwarded=
-        - traefik.http.middlewares.sgtm_direct.headers.customrequestheaders.X-Sgtm-Key=
-        - traefik.http.services.sgtm_tagging.loadbalancer.server.port=8080
-        - traefik.http.services.sgtm_tagging.loadbalancer.passHostHeader=true
+        - traefik.http.middlewares.${BENTO_STACK_KEY}_direct.headers.customrequestheaders.Forwarded=
+        - traefik.http.middlewares.${BENTO_STACK_KEY}_direct.headers.customrequestheaders.X-Sgtm-Key=
+        - traefik.http.services.${BENTO_STACK_KEY}_tagging.loadbalancer.server.port=8080
+        - traefik.http.services.${BENTO_STACK_KEY}_tagging.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=sgtm
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
   sgtm_preview:
@@ -121,15 +121,15 @@ services:
         - traefik.enable=true
         # Public on purpose: the tagging server reaches it over HTTPS, and a
         # debug session needs GTM's auth token anyway.
-        - traefik.http.routers.sgtm_preview.rule=Host(`${SGTM_PREVIEW_HOST}`)
-        - traefik.http.routers.sgtm_preview.entrypoints=websecure
-        - traefik.http.routers.sgtm_preview.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.sgtm_preview.priority=2
-        - traefik.http.routers.sgtm_preview.service=sgtm_preview
-        - traefik.http.services.sgtm_preview.loadbalancer.server.port=8080
-        - traefik.http.services.sgtm_preview.loadbalancer.passHostHeader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}_preview.rule=Host(`${SGTM_PREVIEW_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}_preview.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}_preview.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}_preview.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}_preview.service=${BENTO_STACK_KEY}_preview
+        - traefik.http.services.${BENTO_STACK_KEY}_preview.loadbalancer.server.port=8080
+        - traefik.http.services.${BENTO_STACK_KEY}_preview.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=sgtm
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:

@@ -32,7 +32,7 @@ services:
         order: start-first
       labels:
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=mcp-pooler
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:

@@ -4,10 +4,11 @@
   "description": "Workflow automation (editor + worker + webhook)",
   "depends_on": ["postgres", "redis"],
   "env": [
-    { "name": "N8N_HOST",          "default": "editor-n8n.${BASE_DOMAIN}",  "prompt": "n8n editor hostname" },
-    { "name": "N8N_WEBHOOK_HOST",  "default": "webhook-n8n.${BASE_DOMAIN}", "prompt": "n8n webhook hostname" },
+    { "name": "N8N_HOST",          "default": "editor-${BENTO_STACK_KEY}.${BASE_DOMAIN}",  "prompt": "n8n editor hostname" },
+    { "name": "N8N_WEBHOOK_HOST",  "default": "webhook-${BENTO_STACK_KEY}.${BASE_DOMAIN}", "prompt": "n8n webhook hostname" },
     { "name": "N8N_ENCRYPTION_KEY","generate": "openssl rand -hex 32",  "hide": true },
     { "name": "POSTGRES_PASSWORD", "from_state": "POSTGRES_PASSWORD" },
+    { "name": "QUEUE_BULL_REDIS_DB", "generate": "case \"$BENTO_STACK_KEY\" in *-????????) echo $(( 5 + 0x$(printf %s \"$BENTO_STACK_KEY\" | md5sum | cut -c1-4) % 11 ));; *) echo 1;; esac" },
     { "name": "N8N_EDITOR_CPU_LIMIT", "default": "1" },
     { "name": "N8N_EDITOR_MEM_LIMIT", "default": "768M" },
     { "name": "N8N_WEBHOOK_CPU_LIMIT", "default": "0.5" },

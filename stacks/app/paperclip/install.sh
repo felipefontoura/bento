@@ -3,15 +3,15 @@
 set -euo pipefail
 source "${BENTO_REPO_ROOT}/lib/install-helpers.sh"
 
-ensure_database paperclip
+ensure_database "$BENTO_STACK_KEY"
 
-wait_for_service paperclip_paperclip 240 || exit 0
+wait_for_service "${BENTO_STACK_KEY}_paperclip" 240 || exit 0
 
 # `_find_container` is re-called at every fresh use throughout this script.
 # Anything that touches `docker service update --force` recreates the task
 # and the previously-captured cid goes stale. Lookups stay cheap so we just
 # resolve right before each docker exec.
-cid=$(_find_container 'paperclip_paperclip')
+cid=$(_find_container "${BENTO_STACK_KEY}_paperclip")
 paperclip_host="${PAPERCLIP_HOST:-paperclip.localhost}"
 config_path="/paperclip/instances/production/config.json"
 
@@ -23,7 +23,7 @@ sudo docker exec -i -u root "$cid" sh -c "
 " <<EOF
 {
   "\$meta": { "version": 1, "updatedAt": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)", "source": "onboard" },
-  "database": { "mode": "postgres", "connectionString": "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/paperclip" },
+  "database": { "mode": "postgres", "connectionString": "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${BENTO_STACK_KEY}" },
   "logging":  { "mode": "file", "logDir": "/paperclip/instances/production/logs" },
   "server":   { "deploymentMode": "authenticated", "exposure": "public", "host": "0.0.0.0", "port": 3100, "allowedHostnames": ["${paperclip_host}"], "serveUi": true },
   "auth":     { "baseUrlMode": "explicit", "publicBaseUrl": "https://${paperclip_host}", "disableSignUp": false }
@@ -34,7 +34,7 @@ EOF
 # row is already in postgres (saves ~180s on re-deploy).
 pg_cid=$(postgres_container 2>/dev/null || true)
 admin_exists=$([[ -n "$pg_cid" ]] && sudo docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$pg_cid" \
-    psql -U postgres -d paperclip -tA \
+    psql -U postgres -d "$BENTO_STACK_KEY" -tA \
     -c "SELECT 1 FROM instance_user_roles WHERE role='instance_admin' LIMIT 1" 2>/dev/null \
     | tr -d '[:space:]' || true)
 
@@ -43,7 +43,7 @@ if [[ "$admin_exists" == "1" ]]; then
     echo "Paperclip already has an instance_admin — skipping bootstrap-ceo."
 else
     echo "Waiting for paperclip migrations…"
-    cid=$(_find_container 'paperclip_paperclip')
+    cid=$(_find_container "${BENTO_STACK_KEY}_paperclip")
     for _ in $(seq 60); do
         invite_output=$(sudo docker exec "$cid" sh -c "
             cd /app && node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts \
@@ -58,7 +58,7 @@ invite_url=$(sed 's/\x1b\[[0-9;]*m//g' <<< "$invite_output" \
     | grep -oE 'https?://[^[:space:]]+/invite/pcp_bootstrap_[A-Za-z0-9]+' \
     | head -1 || true)
 
-marker="$(dirname "$BENTO_STATE_FILE")/paperclip-invite-url.txt"
+marker="$(dirname "$BENTO_STATE_FILE")/${BENTO_STACK_KEY}-invite-url.txt"
 if [[ -n "$invite_url" ]]; then
     printf '%s\n' "$invite_url" > "$marker"
     chmod 600 "$marker"
@@ -80,17 +80,24 @@ fi
 # plugin install is "soft" — paperclip's built-in hermes_local kicks
 # in if our override fails — but `/opt/hermes` and `/opt/hermes-shared`
 # being absent breaks every wake regardless of which adapter loads.
-graft_external_volumes_to_service \
-    paperclip_paperclip \
-    hermes_hermes-bin:/opt/hermes:readonly \
-    hermes_hermes-data:/opt/hermes-shared:readonly
+# Only the BASE paperclip instance pulls from hermes — an extra
+# instance ("paperclip-<hex8>") has no defined pairing with any
+# particular hermes instance, so it skips the graft rather than
+# guessing. Pairing specific instances together is a follow-up, not
+# solved generically here.
+if [[ "$BENTO_STACK_KEY" == "paperclip" ]]; then
+    graft_external_volumes_to_service \
+        "${BENTO_STACK_KEY}_paperclip" \
+        hermes_hermes-bin:/opt/hermes:readonly \
+        hermes_hermes-data:/opt/hermes-shared:readonly
+fi
 
 # Symlink ~/.hermes/{config.yaml,auth.json} to the cross-stack mount so
 # the subprocess hermes (HOME=/paperclip) resolves them from there.
 # `ln -sfn` replaces existing symlinks atomically; if /opt/hermes-shared
 # isn't grafted, the dangling symlinks stay quiet until hermes lands.
-wait_for_service paperclip_paperclip 120 || true
-cid=$(_find_container 'paperclip_paperclip')
+wait_for_service "${BENTO_STACK_KEY}_paperclip" 120 || true
+cid=$(_find_container "${BENTO_STACK_KEY}_paperclip")
 sudo docker exec -u node "$cid" sh -c '
     mkdir -p /paperclip/.hermes
     ln -sfn /opt/hermes-shared/config.yaml /paperclip/.hermes/config.yaml
@@ -121,7 +128,7 @@ install_ok=0
 install_log=$(mktemp)
 trap 'rm -f "$install_log"' EXIT
 for attempt in 1 2 3; do
-    cid=$(_find_container 'paperclip_paperclip')
+    cid=$(_find_container "${BENTO_STACK_KEY}_paperclip")
     # SC2024 false positive on the `… >"$install_log"` redirect in the elif
     # below: $install_log is a user-owned mktemp, so the shell (not root)
     # performing the redirect is exactly what we want — the log must stay
@@ -152,7 +159,7 @@ if (( install_ok )); then
     # stack duplicates. Paperclip's plugin loader gives the JSON entry
     # precedence over the built-in hermes_local, so a single entry is
     # the override.
-    cid=$(_find_container 'paperclip_paperclip')
+    cid=$(_find_container "${BENTO_STACK_KEY}_paperclip")
     current=$(sudo docker exec "$cid" cat /paperclip/adapter-plugins.json 2>/dev/null || true)
     [[ -z "$current" ]] && current='[]'
     updated=$(jq --arg dir "$dir" \

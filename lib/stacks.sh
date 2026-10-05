@@ -41,8 +41,14 @@ stacks_list_app_manifests() {
 
 stacks_manifest_for_key() {
     local key="$1"
-    local hit
+    local hit base_key
     hit=$(find "${BENTO_REPO_ROOT}/stacks" -mindepth 3 -maxdepth 3 -type f -name 'manifest.json' -path "*/${key}/manifest.json" | head -1)
+    # Multi-instance keys (<key>-<hex8>, see stacks_step3_menu / BENTO_NEW_INSTANCE_APPS)
+    # have no directory of their own — fall back to the base stack's manifest.
+    if [[ -z "$hit" && "$key" =~ ^(.+)-[0-9a-f]{8}$ ]]; then
+        base_key="${BASH_REMATCH[1]}"
+        hit=$(find "${BENTO_REPO_ROOT}/stacks" -mindepth 3 -maxdepth 3 -type f -name 'manifest.json' -path "*/${base_key}/manifest.json" | head -1)
+    fi
     [[ -n "$hit" ]] && printf '%s' "$hit"
 }
 
@@ -83,12 +89,14 @@ stacks_install_script_for_manifest() {
 # -----------------------------------------------------------------------------
 stacks_substitute_template() {
     local template="$1"
+    local stack_key="${2:-}"
     local base_domain admin_email
     base_domain="$(state_get '.bootstrap.base_domain')"
     admin_email="$(state_get '.bootstrap.admin_email')"
 
     BASE_DOMAIN="$base_domain" \
     ADMIN_EMAIL="$admin_email" \
+    BENTO_STACK_KEY="$stack_key" \
         envsubst <<< "$template"
 }
 
@@ -225,7 +233,10 @@ stacks_resolve_env() {
     # 3. generate — run the shell snippet once, persist the output.
     if [[ -n "$generate_cmd" ]]; then
         local generated rc=0
-        generated=$(bash -c "$generate_cmd") || rc=$?
+        # Export BENTO_STACK_KEY so a generate snippet can derive a value
+        # from the instance key (e.g. a per-instance Redis DB index) —
+        # see stacks/app/n8n/manifest.json's N8N_QUEUE_BULL_REDIS_DB.
+        generated=$(BENTO_STACK_KEY="$stack_key" bash -c "$generate_cmd") || rc=$?
         # Bail loudly: a silently empty secret (failed openssl, missing
         # /dev/urandom, typo in the manifest snippet) used to be persisted
         # as "" and Portainer would accept the resulting JWT_SECRET=''.
@@ -240,7 +251,7 @@ stacks_resolve_env() {
 
     # 4. Compute the default (template-substituted) for use by prompts.
     local default_value=""
-    [[ -n "$default_tpl" ]] && default_value="$(stacks_substitute_template "$default_tpl")"
+    [[ -n "$default_tpl" ]] && default_value="$(stacks_substitute_template "$default_tpl" "$stack_key")"
 
     # 5/6. Prompt the user (env-driven in unattended mode).
     if [[ -n "$prompt" ]]; then
@@ -424,8 +435,15 @@ stacks_run_install_hook() {
 
 stacks_deploy() {
     local manifest_path="$1"
+    local instance_key="${2:-}"
     local stack_key compose_path stack_name
     stack_key=$(jq -r '.name' "$manifest_path")
+    # Multi-instance support: callers that want a second/third instance of
+    # this stack (e.g. "n8n-a1b2c3d4") pass the full instance key here. The
+    # manifest's own .name always stays the base key — only this runtime
+    # stack_key varies, and it's what flows into state, Portainer's stack
+    # name, and every ${BENTO_STACK_KEY} substitution below.
+    [[ -n "$instance_key" ]] && stack_key="$instance_key"
     compose_path="$(stacks_compose_path_for_manifest "$manifest_path")"
     stack_name="$stack_key"
 
@@ -638,20 +656,27 @@ stacks_step3_menu() {
     done < <(jq -r '.stacks // {} | to_entries[] | select(.value.stack_id) | .key' \
         "$BENTO_STATE_FILE" 2>/dev/null)
 
-    # Build "name — description [installed]" labels for gum choose.
+    # Build "name — description [installed]" labels for gum choose. Once a
+    # stack's base instance exists, add a second selectable row that spins
+    # up an additional instance ("<key>-<hex8>") instead of redeploying the
+    # first one — see the pick-handling loop below for the suffix generation.
     local labels=() name desc tag
     for m in "${manifests[@]}"; do
         name=$(jq -r '.name' "$m")
         desc=$(jq -r '.description // ""' "$m")
         tag=""
-        local k
+        local k is_installed=0
         for k in "${installed_keys[@]}"; do
             if [[ "$k" == "$name" ]]; then
                 tag="  [installed]"
+                is_installed=1
                 break
             fi
         done
         labels+=("${name} — ${desc}${tag}")
+        if (( is_installed )); then
+            labels+=("${name} — ${desc}  [+ new instance]")
+        fi
     done
 
     local picks
@@ -687,7 +712,14 @@ stacks_step3_menu() {
         # picking just `n8n` from the checklist still pulls postgres +
         # redis in first — without their deploys, n8n's from_state
         # POSTGRES_PASSWORD resolves empty and Portainer rejects it.
-        _deploy_with_deps seen failures "$picked_name"
+        if [[ "$picked" == *"[+ new instance]" ]]; then
+            local suffix
+            suffix=$(openssl rand -hex 4)
+            ui_info "Creating new instance: ${picked_name}-${suffix}"
+            _deploy_with_deps seen failures "${picked_name}-${suffix}"
+        else
+            _deploy_with_deps seen failures "$picked_name"
+        fi
     done <<< "$picks"
 
     if (( ${#failures[@]} > 0 )); then

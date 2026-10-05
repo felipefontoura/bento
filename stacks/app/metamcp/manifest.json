@@ -4,7 +4,7 @@
   "description": "MetaMCP — self-hosted MCP aggregator, orchestrator & gateway. Groups MCP servers (stdio + Streamable HTTP / SSE) into namespaces and exposes them as unified public endpoints with API-key auth, plus a web admin UI and an MCP Inspector. Reuses the shared postgres (database `metamcp`); the first admin user is registered through the web UI on first visit.",
   "depends_on": ["postgres"],
   "env": [
-    { "name": "METAMCP_HOST",               "default": "metamcp.${BASE_DOMAIN}", "prompt": "MetaMCP hostname" },
+    { "name": "METAMCP_HOST",               "default": "${BENTO_STACK_KEY}.${BASE_DOMAIN}", "prompt": "MetaMCP hostname" },
     { "name": "METAMCP_BETTER_AUTH_SECRET", "generate": "openssl rand -hex 32",  "hide": true },
     { "name": "POSTGRES_PASSWORD",          "from_state": "POSTGRES_PASSWORD", "prompt": "Postgres password", "hide": true, "default": "" },
     { "name": "METAMCP_CPU_LIMIT",          "default": "1" },

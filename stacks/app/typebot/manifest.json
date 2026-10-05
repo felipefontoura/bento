@@ -8,12 +8,12 @@
   "env": [
     {
       "name": "TYPEBOT_BUILDER_HOST",
-      "default": "builder-typebot.${BASE_DOMAIN}",
+      "default": "builder-${BENTO_STACK_KEY}.${BASE_DOMAIN}",
       "prompt": "Typebot builder hostname"
     },
     {
       "name": "TYPEBOT_VIEWER_HOST",
-      "default": "viewer-typebot.${BASE_DOMAIN}",
+      "default": "viewer-${BENTO_STACK_KEY}.${BASE_DOMAIN}",
       "prompt": "Typebot viewer hostname"
     },
     {

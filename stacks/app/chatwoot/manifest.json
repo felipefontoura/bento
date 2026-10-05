@@ -4,9 +4,10 @@
   "description": "Customer support platform (Rails + Sidekiq)",
   "depends_on": ["postgres", "redis"],
   "env": [
-    { "name": "CHATWOOT_HOST",            "default": "chatwoot.${BASE_DOMAIN}", "prompt": "Chatwoot hostname" },
+    { "name": "CHATWOOT_HOST",            "default": "${BENTO_STACK_KEY}.${BASE_DOMAIN}", "prompt": "Chatwoot hostname" },
     { "name": "CHATWOOT_SECRET_KEY_BASE", "generate": "openssl rand -hex 64", "hide": true },
     { "name": "POSTGRES_PASSWORD",        "from_state": "POSTGRES_PASSWORD" },
+    { "name": "CHATWOOT_REDIS_DB", "generate": "case \"$BENTO_STACK_KEY\" in *-????????) echo $(( 5 + 0x$(printf %s \"$BENTO_STACK_KEY\" | md5sum | cut -c1-4) % 11 ));; *) echo 3;; esac" },
     { "name": "CHATWOOT_CPU_LIMIT", "default": "1" },
     { "name": "CHATWOOT_MEM_LIMIT", "default": "1024M" },
     { "name": "CHATWOOT_WEB_CPU_LIMIT", "default": "0.5" },

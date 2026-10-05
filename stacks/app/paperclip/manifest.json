@@ -4,7 +4,7 @@
   "description": "AI agent orchestration (Claude Code / Codex / OpenCode + Hermes). Installs the hermes_local adapter (@felipefontoura/paperclip-adapter-hermes-local-plus) at deploy time and mounts the hermes-bin volume cross-stack so the plugin can spawn `hermes chat` as a subprocess. Provider API keys are operator-supplied via Portainer at day-2.",
   "depends_on": ["postgres"],
   "env": [
-    { "name": "PAPERCLIP_HOST",     "default": "paperclip.${BASE_DOMAIN}", "prompt": "Paperclip hostname" },
+    { "name": "PAPERCLIP_HOST",     "default": "${BENTO_STACK_KEY}.${BASE_DOMAIN}", "prompt": "Paperclip hostname" },
     { "name": "PAPERCLIP_AUTH_DISABLE_SIGN_UP", "default": "true" },
     { "name": "BETTER_AUTH_SECRET", "generate": "openssl rand -hex 32",    "hide": true },
     { "name": "POSTGRES_PASSWORD",  "from_state": "POSTGRES_PASSWORD", "prompt": "Postgres password", "hide": true, "default": "" },

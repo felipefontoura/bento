@@ -28,14 +28,19 @@ services:
       # =============================================================================
 
       # Full database connection URL.
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/plunk
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${BENTO_STACK_KEY}
 
       # =============================================================================
       # Cache / Queue (Redis)
       # =============================================================================
 
-      # Redis connection URL (DB index 2).
-      - REDIS_URL=redis://redis:6379/2
+      # Redis connection URL. Base instance stays on DB 2 (unchanged); extra
+      # instances get a hashed DB in the 5-15 shared pool. Per-stack
+      # allocation: 0 free / 1 n8n / 2 plunk / 3 chatwoot / 4 evolution-api
+      # / 5-15 shared pool for extra instances of any of those four
+      # (hash-based, collisions possible with enough concurrent instances
+      # — acceptable v1 limitation, not a global allocator).
+      - REDIS_URL=redis://redis:6379/${PLUNK_REDIS_DB}
 
       # =============================================================================
       # Security
@@ -89,15 +94,15 @@ services:
           memory: ${PLUNK_MEM_LIMIT:-512M}
       labels:
         - traefik.enable=true
-        - traefik.http.routers.plunk.rule=Host(`${PLUNK_HOST}`)
-        - traefik.http.routers.plunk.entrypoints=websecure
-        - traefik.http.routers.plunk.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.plunk.priority=2
-        - traefik.http.routers.plunk.service=plunk
-        - traefik.http.services.plunk.loadbalancer.server.port=3000
-        - traefik.http.services.plunk.loadbalancer.passHostHeader=true
+        - traefik.http.routers.${BENTO_STACK_KEY}.rule=Host(`${PLUNK_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}.service=${BENTO_STACK_KEY}
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.server.port=3000
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
-        - BENTO_STACK_KEY=plunk
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 networks:
   network_public:
