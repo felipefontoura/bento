@@ -32,15 +32,18 @@
     },
     {
       "name": "AWS_ACCESS_KEY_ID",
-      "prompt": "AWS SES access key (skip if not using email)"
+      "default": "disabled",
+      "prompt": "AWS SES access key (leave default if not using email yet — Plunk's API crashes on boot if this is blank, see packages/api/src/app/constants.ts upstream)"
     },
     {
       "name": "AWS_SECRET_ACCESS_KEY",
+      "default": "disabled",
       "prompt": "AWS SES secret key",
       "hide": true
     },
     {
       "name": "AWS_SES_CONFIGURATION_SET",
+      "default": "disabled",
       "prompt": "AWS SES configuration set name"
     },
     { "name": "PLUNK_CPU_LIMIT", "default": "1" },
