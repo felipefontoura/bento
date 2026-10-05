@@ -290,6 +290,9 @@ services:
         - traefik.http.routers.${BENTO_STACK_KEY}_editor.service=${BENTO_STACK_KEY}_editor
         - traefik.http.services.${BENTO_STACK_KEY}_editor.loadbalancer.server.port=5678
         - traefik.http.services.${BENTO_STACK_KEY}_editor.loadbalancer.passHostHeader=true
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
   n8n_webhook:
     <<: *n8n-common
@@ -336,6 +339,10 @@ services:
         limits:
           cpus: "${N8N_WORKER_CPU_LIMIT:-1}"
           memory: ${N8N_WORKER_MEM_LIMIT:-768M}
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 networks:
   network_public:
