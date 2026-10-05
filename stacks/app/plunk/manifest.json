@@ -18,16 +18,6 @@
       "prompt": "Plunk API hostname"
     },
     {
-      "name": "PLUNK_LANDING_HOST",
-      "default": "www-${BENTO_STACK_KEY}.${BASE_DOMAIN}",
-      "prompt": "Plunk landing page hostname"
-    },
-    {
-      "name": "PLUNK_WIKI_HOST",
-      "default": "docs-${BENTO_STACK_KEY}.${BASE_DOMAIN}",
-      "prompt": "Plunk docs/wiki hostname"
-    },
-    {
       "name": "PLUNK_JWT_SECRET",
       "generate": "openssl rand -base64 32",
       "hide": true
