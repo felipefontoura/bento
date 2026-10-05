@@ -71,8 +71,17 @@ services:
       - NGINX_PORT=80
       - API_DOMAIN=${PLUNK_API_HOST}
       - DASHBOARD_DOMAIN=${PLUNK_HOST}
-      - LANDING_DOMAIN=${PLUNK_LANDING_HOST}
-      - WIKI_DOMAIN=${PLUNK_WIKI_HOST}
+
+      # landing (marketing site) and wiki (docs) are generic, unbranded
+      # upstream content — not configured per-project — so they're not
+      # routed publicly on our own hostname (one less TLS cert, one less
+      # public attack surface for pages nobody would ever visit on a
+      # signups-disabled private instance). The two processes still run
+      # internally (SERVICE=all starts them regardless), so these just
+      # point the dashboard's own "Documentation" link at the real public
+      # site instead of an unreachable one.
+      - LANDING_DOMAIN=www.useplunk.com
+      - WIKI_DOMAIN=docs.useplunk.com
 
       # Traefik terminates TLS; the app only needs to know to build https:// URLs.
       - USE_HTTPS=true
@@ -190,16 +199,6 @@ services:
         - traefik.http.routers.${BENTO_STACK_KEY}_api.tls.certresolver=letsencryptresolver
         - traefik.http.routers.${BENTO_STACK_KEY}_api.priority=2
         - traefik.http.routers.${BENTO_STACK_KEY}_api.service=${BENTO_STACK_KEY}
-        - traefik.http.routers.${BENTO_STACK_KEY}_landing.rule=Host(`${PLUNK_LANDING_HOST}`)
-        - traefik.http.routers.${BENTO_STACK_KEY}_landing.entrypoints=websecure
-        - traefik.http.routers.${BENTO_STACK_KEY}_landing.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.${BENTO_STACK_KEY}_landing.priority=2
-        - traefik.http.routers.${BENTO_STACK_KEY}_landing.service=${BENTO_STACK_KEY}
-        - traefik.http.routers.${BENTO_STACK_KEY}_wiki.rule=Host(`${PLUNK_WIKI_HOST}`)
-        - traefik.http.routers.${BENTO_STACK_KEY}_wiki.entrypoints=websecure
-        - traefik.http.routers.${BENTO_STACK_KEY}_wiki.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.${BENTO_STACK_KEY}_wiki.priority=2
-        - traefik.http.routers.${BENTO_STACK_KEY}_wiki.service=${BENTO_STACK_KEY}
         - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.server.port=80
         - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
