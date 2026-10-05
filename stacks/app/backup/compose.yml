@@ -1,0 +1,108 @@
+# bento backup — restic → Backblaze B2, scheduled by supercronic inside the
+# container. Image is built locally by bento's build-first path in
+# lib/stacks.sh (the `build:` directive below is the trigger).
+#
+# Per-app data volumes are NOT declared here. stacks/app/backup/install.sh
+# grafts each app volume in at runtime via the cross-stack volume helper
+# (lib/install-helpers.sh:graft_external_volume_to_service). That keeps
+# this compose deployable standalone: backup comes up cleanly even if no
+# app stacks are present, and adding a new app to backup is a one-line
+# change in install.sh rather than a YAML edit here.
+
+services:
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bento/backup:local
+    networks:
+      - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    environment:
+      # ===================================================================
+      # Backblaze B2 credentials
+      # ===================================================================
+      #
+      # Create an application key at
+      #   https://secure.backblaze.com/b2_buckets.htm
+      # scoped to the bucket below. We use the native B2 backend (NOT the
+      # S3-compatible front) so the URL is `b2:<bucket>:/<path>`.
+      - B2_ACCOUNT_ID=${B2_ACCOUNT_ID}
+      - B2_ACCOUNT_KEY=${B2_ACCOUNT_KEY}
+      - RESTIC_REPOSITORY=b2:${B2_BUCKET}:/bento
+      # CRITICAL: lose this and the backups are unrecoverable. Bento
+      # generates it once and surfaces it in the handoff HTML. Save the
+      # handoff HTML offsite.
+      - RESTIC_PASSWORD=${RESTIC_PASSWORD}
+
+      # ===================================================================
+      # Schedule + retention
+      # ===================================================================
+      - BACKUP_CRON=${BACKUP_CRON:-0 3 * * *}
+      - RESTIC_KEEP_DAILY=${RESTIC_KEEP_DAILY:-7}
+      - RESTIC_KEEP_WEEKLY=${RESTIC_KEEP_WEEKLY:-4}
+      - RESTIC_KEEP_MONTHLY=${RESTIC_KEEP_MONTHLY:-6}
+
+      # ===================================================================
+      # Postgres connection (overlay-only; backup connects via Swarm DNS)
+      # ===================================================================
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+
+      # ===================================================================
+      # Paths inside the container (also referenced by backup.sh defaults).
+      # ===================================================================
+      - RESTIC_CACHE_DIR=/var/cache/restic
+      - STAGING_DIR=/var/lib/restic/staging
+      - BENTO_HOST_CONFIG=/host-bento-config
+
+    volumes:
+      # restic cache + freshness marker survive container restarts.
+      - backup-state:/backup-state
+      # ~/.config/bento on the host. Bento runs as root in the documented
+      # curl|bash install, so $HOME=/root. If you ever run bento as a
+      # non-root user, point this bind at that user's ~/.config/bento.
+      - /root/.config/bento:/host-bento-config:ro
+      # /backup/volumes/<app>-data is populated at runtime by
+      # graft_external_volume_to_service calls in install.sh.
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 30s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          # restic is fairly heavy during snapshot upload (compression +
+          # encryption + B2 multipart). 512 MB caps it without choking
+          # the host. Idle outside the cron window is < 30 MB.
+          cpus: "1"
+          memory: 512M
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=backup
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
+
+volumes:
+  backup-state:
+    driver: local
+
+networks:
+  network_public:
+    name: network_public
+    external: true
