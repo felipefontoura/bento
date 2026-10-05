@@ -10,11 +10,26 @@
     {
       "name": "PLUNK_HOST",
       "default": "${BENTO_STACK_KEY}.${BASE_DOMAIN}",
-      "prompt": "Plunk hostname"
+      "prompt": "Plunk dashboard hostname"
+    },
+    {
+      "name": "PLUNK_API_HOST",
+      "default": "api-${BENTO_STACK_KEY}.${BASE_DOMAIN}",
+      "prompt": "Plunk API hostname"
+    },
+    {
+      "name": "PLUNK_LANDING_HOST",
+      "default": "www-${BENTO_STACK_KEY}.${BASE_DOMAIN}",
+      "prompt": "Plunk landing page hostname"
+    },
+    {
+      "name": "PLUNK_WIKI_HOST",
+      "default": "docs-${BENTO_STACK_KEY}.${BASE_DOMAIN}",
+      "prompt": "Plunk docs/wiki hostname"
     },
     {
       "name": "PLUNK_JWT_SECRET",
-      "generate": "openssl rand -hex 32",
+      "generate": "openssl rand -base64 32",
       "hide": true
     },
     {
@@ -26,28 +41,72 @@
       "generate": "case \"$BENTO_STACK_KEY\" in *-????????) echo $(( 5 + 0x$(printf %s \"$BENTO_STACK_KEY\" | md5sum | cut -c1-4) % 11 ));; *) echo 2;; esac"
     },
     {
-      "name": "AWS_REGION",
+      "name": "AWS_SES_REGION",
       "default": "us-east-1",
       "prompt": "AWS SES region"
     },
     {
-      "name": "AWS_ACCESS_KEY_ID",
+      "name": "AWS_SES_ACCESS_KEY_ID",
       "default": "disabled",
-      "prompt": "AWS SES access key (leave default if not using email yet — Plunk's API crashes on boot if this is blank, see packages/api/src/app/constants.ts upstream)"
+      "prompt": "AWS SES access key (leave default if not using email yet — Plunk's API crashes on boot if this is blank)"
     },
     {
-      "name": "AWS_SECRET_ACCESS_KEY",
+      "name": "AWS_SES_SECRET_ACCESS_KEY",
       "default": "disabled",
       "prompt": "AWS SES secret key",
       "hide": true
     },
     {
-      "name": "AWS_SES_CONFIGURATION_SET",
+      "name": "SES_CONFIGURATION_SET",
       "default": "disabled",
       "prompt": "AWS SES configuration set name"
     },
-    { "name": "PLUNK_CPU_LIMIT", "default": "1" },
-    { "name": "PLUNK_MEM_LIMIT", "default": "512M" }
+    {
+      "name": "S3_ENDPOINT",
+      "default": "https://s3.us-east-1.amazonaws.com",
+      "prompt": "S3-compatible endpoint (AWS S3, Backblaze B2, Cloudflare R2, MinIO, etc. — see docs/reference/plunk-s3.md)"
+    },
+    {
+      "name": "S3_ACCESS_KEY_ID",
+      "default": "disabled",
+      "prompt": "S3 access key (leave default if not using uploads yet)"
+    },
+    {
+      "name": "S3_ACCESS_KEY_SECRET",
+      "default": "disabled",
+      "prompt": "S3 secret key",
+      "hide": true
+    },
+    {
+      "name": "S3_BUCKET",
+      "default": "${BENTO_STACK_KEY}-uploads",
+      "prompt": "S3 bucket name for uploads"
+    },
+    {
+      "name": "S3_PUBLIC_URL",
+      "default": "https://${BENTO_STACK_KEY}-uploads.s3.us-east-1.amazonaws.com",
+      "prompt": "Public URL that serves bucket objects (email recipients load images from here)"
+    },
+    {
+      "name": "S3_FORCE_PATH_STYLE",
+      "default": "false",
+      "prompt": "Force path-style S3 addressing (true for MinIO/most non-AWS providers, false for real AWS S3)"
+    },
+    {
+      "name": "DISABLE_SIGNUPS",
+      "default": "true",
+      "prompt": "Disable public signups (true/false)"
+    },
+    {
+      "name": "EMAIL_RATE_LIMIT_PER_SECOND",
+      "default": "1",
+      "prompt": "SES send-rate ceiling (msgs/sec) — check AWS Console > SES > Account dashboard > \"Sending statistics\" for your account's Maximum send rate, then set this to ~80% of that number. Our IAM policy doesn't grant ses:GetSendQuota, so leaving the default means the worker silently falls back to 14/sec"
+    },
+    { "name": "AUTO_PROJECT_DISABLE", "default": "false" },
+    { "name": "PLUNK_CPU_LIMIT", "default": "2" },
+    { "name": "PLUNK_MEM_LIMIT", "default": "2048M" },
+    { "name": "PLUNK_NTFY_CPU_LIMIT", "default": "0.25" },
+    { "name": "PLUNK_NTFY_MEM_LIMIT", "default": "128M" }
   ],
   "post_deploy_url": "https://${PLUNK_HOST}"
 }

@@ -1,7 +1,15 @@
 services:
   plunk:
-    image: driaug/plunk:latest
-    entrypoint: ["/app/entry.sh"]
+    # Pinned to a commit SHA, not a semver release, because upstream's
+    # :latest AND :v0.15.0 tags are broken: their image labels/digest claim
+    # the apps/api+apps/web rewrite (org.opencontainers.image.revision
+    # matches the v0.15.0 tag commit, whose Dockerfile is the new
+    # multi-stage one), but the actual running container is the old
+    # packages/api+packages/dashboard layout — a stale Docker layer cache
+    # in their GHA build-push-action pipeline, not a bento bug. Verified by
+    # pulling both and inspecting /app directly. Re-pin to a real release
+    # once upstream ships a build whose content matches its own tag.
+    image: ghcr.io/useplunk/plunk:sha-e2ab14c
     networks:
       - network_public
     logging:
@@ -9,37 +17,44 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # The image bakes in its own `HEALTHCHECK curl -f http://localhost:80/`.
+    # Disabled on purpose: boot runs `prisma migrate deploy` then starts 6
+    # PM2-managed processes (nginx, api, worker, smtp, web, landing, wiki)
+    # before anything answers on :80 — the same slow-start class of bug that
+    # SIGKILLed chatwoot/typebot earlier. Traefik's backend probe covers
+    # user-facing readiness externally.
+    healthcheck:
+      disable: true
     environment:
       # =============================================================================
-      # Public URLs / API
+      # Service mode
       # =============================================================================
 
-      # Base application URI.
-      - APP_URI=https://${PLUNK_HOST}
-
-      # API endpoint URI.
-      - API_URI=https://${PLUNK_HOST}/api
-
-      # Public-facing API URI exposed to the frontend.
-      - NEXT_PUBLIC_API_URI=https://${PLUNK_HOST}/api
+      # This image bundles API, worker, web, landing, wiki and SMTP relay
+      # behind an internal nginx, process-managed by PM2. "all" is the only
+      # mode this image's entrypoint supports.
+      - SERVICE=all
+      - NODE_ENV=production
 
       # =============================================================================
-      # Database (PostgreSQL)
+      # Database (PostgreSQL) — Prisma
       # =============================================================================
 
-      # Full database connection URL.
+      # DIRECT_DATABASE_URL bypasses any pooler for Prisma's migration runner;
+      # same value as DATABASE_URL since bento's shared postgres has no pooler.
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${BENTO_STACK_KEY}
+      - DIRECT_DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${BENTO_STACK_KEY}
 
       # =============================================================================
       # Cache / Queue (Redis)
       # =============================================================================
 
-      # Redis connection URL. Base instance stays on DB 2 (unchanged); extra
-      # instances get a hashed DB in the 5-15 shared pool. Per-stack
-      # allocation: 0 free / 1 n8n / 2 plunk / 3 chatwoot / 4 evolution-api
-      # / 5-15 shared pool for extra instances of any of those four
-      # (hash-based, collisions possible with enough concurrent instances
-      # — acceptable v1 limitation, not a global allocator).
+      # Base instance stays on DB 2 (unchanged). Extra instances get a value
+      # hashed from their instance key into DB 5-15 — see manifest.json's
+      # PLUNK_REDIS_DB generate snippet. Per-stack allocation: 0 free / 1 n8n
+      # / 2 plunk / 3 chatwoot / 4 evolution-api / 5-15 shared pool for extra
+      # instances of any of those four (hash-based, collisions possible with
+      # enough concurrent instances — acceptable v1 limitation).
       - REDIS_URL=redis://redis:6379/${PLUNK_REDIS_DB}
 
       # =============================================================================
@@ -50,28 +65,99 @@ services:
       - JWT_SECRET=${PLUNK_JWT_SECRET}
 
       # =============================================================================
+      # Public URLs (subdomain-based routing)
+      # =============================================================================
+
+      - NGINX_PORT=80
+      - API_DOMAIN=${PLUNK_API_HOST}
+      - DASHBOARD_DOMAIN=${PLUNK_HOST}
+      - LANDING_DOMAIN=${PLUNK_LANDING_HOST}
+      - WIKI_DOMAIN=${PLUNK_WIKI_HOST}
+
+      # Traefik terminates TLS; the app only needs to know to build https:// URLs.
+      - USE_HTTPS=true
+
+      # Auto-derived from the *_DOMAIN vars above + USE_HTTPS — leave blank.
+      - API_URI=
+      - DASHBOARD_URI=
+      - LANDING_URI=
+      - WIKI_URI=
+
+      # =============================================================================
       # Email (AWS SES)
       # =============================================================================
 
       # AWS region where SES is configured.
-      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_SES_REGION=${AWS_SES_REGION:-us-east-1}
 
-      # AWS access key for SES.
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      # AWS access key for SES. Defaults keep the boot from crash-looping when
+      # email isn't configured yet (apps/api reads these at import time).
+      - AWS_SES_ACCESS_KEY_ID=${AWS_SES_ACCESS_KEY_ID:-disabled}
+      - AWS_SES_SECRET_ACCESS_KEY=${AWS_SES_SECRET_ACCESS_KEY:-disabled}
 
-      # AWS secret key for SES.
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      # SES configuration set name (open/click tracking).
+      - SES_CONFIGURATION_SET=${SES_CONFIGURATION_SET:-disabled}
 
-      # AWS SES configuration set name.
-      - AWS_SES_CONFIGURATION_SET=${AWS_SES_CONFIGURATION_SET}
+      # Caps the email-worker's send rate (msgs/sec). When unset, the worker
+      # probes ses:GetSendQuota at startup; if that's denied (our IAM policy
+      # doesn't grant it) or transiently fails, it silently falls back to
+      # 14/sec, which can exceed sandbox limits and trigger SES throttling.
+      # Set explicitly to avoid the silent fallback.
+      - EMAIL_RATE_LIMIT_PER_SECOND=${EMAIL_RATE_LIMIT_PER_SECOND:-1}
+
+      # Custom MAIL FROM subdomain for bounce handling. Deliberately NOT the
+      # bare stack key: Plunk's own domain-verification flow puts a TXT(SPF)
+      # + MX record at <this>.<domain>, and that creates a DNS node which
+      # blocks the zone's wildcard A record from covering it (see the
+      # plunk-ses-production-setup memory for the incident this avoids).
+      # Using "mail-<key>" keeps it a brand-new name with no A record to shadow.
+      - MAIL_FROM_SUBDOMAIN=mail-${BENTO_STACK_KEY}
 
       # =============================================================================
-      # Account Management
+      # File Storage (AWS S3)
       # =============================================================================
 
-      # Disable public signups.
-      - DISABLE_SIGNUPS=true
-    # Swarm healthcheck omitted — Traefik backend probe handles readiness.
+      # Uploaded campaign images/attachments need a publicly reachable URL
+      # (recipients' mail clients load them), so this points at a real S3
+      # bucket, not an internal-only self-hosted MinIO.
+      # Endpoint/public URL are standalone prompts (not concatenated from
+      # AWS_SES_REGION/S3_BUCKET) so any S3-compatible provider works —
+      # Backblaze B2, Cloudflare R2, MinIO, etc. — not just AWS S3.
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-disabled}
+      - S3_ACCESS_KEY_SECRET=${S3_ACCESS_KEY_SECRET:-disabled}
+      - S3_BUCKET=${S3_BUCKET}
+      - S3_PUBLIC_URL=${S3_PUBLIC_URL}
+      - S3_FORCE_PATH_STYLE=${S3_FORCE_PATH_STYLE:-false}
+
+      # =============================================================================
+      # Notifications (ntfy) — internal sidecar, not publicly routed
+      # =============================================================================
+
+      - NTFY_URL=http://${BENTO_STACK_KEY}_ntfy/plunk-notifications
+
+      # =============================================================================
+      # Self-Hosting User Management
+      # =============================================================================
+
+      # Disable public signups — this is a private instance.
+      - DISABLE_SIGNUPS=${DISABLE_SIGNUPS:-true}
+
+      # Self-hosters manage project status manually instead of auto-disabling
+      # on bounce/complaint rate thresholds (upstream's own recommendation).
+      - AUTO_PROJECT_DISABLE=${AUTO_PROJECT_DISABLE:-false}
+
+      # =============================================================================
+      # Optional (left unset: OAuth login, Stripe billing, platform emails,
+      # SMTP relay, API rate limiting, idempotency TTL — defaults are fine
+      # for a single-operator private instance)
+      # =============================================================================
+
+    volumes:
+      - plunk-data:/app/data
+
+    # Swarm healthcheck disabled above — Traefik's backend probe handles
+    # user-facing readiness externally.
     deploy:
       mode: replicated
       replicas: 1
@@ -90,21 +176,87 @@ services:
         window: 120s
       resources:
         limits:
-          cpus: "${PLUNK_CPU_LIMIT:-1}"
-          memory: ${PLUNK_MEM_LIMIT:-512M}
+          cpus: "${PLUNK_CPU_LIMIT:-2}"
+          memory: ${PLUNK_MEM_LIMIT:-2048M}
       labels:
         - traefik.enable=true
-        - traefik.http.routers.${BENTO_STACK_KEY}.rule=Host(`${PLUNK_HOST}`)
-        - traefik.http.routers.${BENTO_STACK_KEY}.entrypoints=websecure
-        - traefik.http.routers.${BENTO_STACK_KEY}.tls.certresolver=letsencryptresolver
-        - traefik.http.routers.${BENTO_STACK_KEY}.priority=2
-        - traefik.http.routers.${BENTO_STACK_KEY}.service=${BENTO_STACK_KEY}
-        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.server.port=3000
+        - traefik.http.routers.${BENTO_STACK_KEY}_dashboard.rule=Host(`${PLUNK_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}_dashboard.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}_dashboard.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}_dashboard.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}_dashboard.service=${BENTO_STACK_KEY}
+        - traefik.http.routers.${BENTO_STACK_KEY}_api.rule=Host(`${PLUNK_API_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}_api.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}_api.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}_api.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}_api.service=${BENTO_STACK_KEY}
+        - traefik.http.routers.${BENTO_STACK_KEY}_landing.rule=Host(`${PLUNK_LANDING_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}_landing.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}_landing.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}_landing.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}_landing.service=${BENTO_STACK_KEY}
+        - traefik.http.routers.${BENTO_STACK_KEY}_wiki.rule=Host(`${PLUNK_WIKI_HOST}`)
+        - traefik.http.routers.${BENTO_STACK_KEY}_wiki.entrypoints=websecure
+        - traefik.http.routers.${BENTO_STACK_KEY}_wiki.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.${BENTO_STACK_KEY}_wiki.priority=2
+        - traefik.http.routers.${BENTO_STACK_KEY}_wiki.service=${BENTO_STACK_KEY}
+        - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.server.port=80
         - traefik.http.services.${BENTO_STACK_KEY}.loadbalancer.passHostHeader=true
         - BENTO_MANAGED=true
         - BENTO_STACK_KEY=${BENTO_STACK_KEY}
         - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
+
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    command: serve
+    networks:
+      - network_public
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      - TZ=America/Sao_Paulo
+    volumes:
+      - plunk-ntfy-cache:/var/cache/ntfy
+      - plunk-ntfy-etc:/etc/ntfy
+    # Internal-only dependency (system notifications for the plunk service) —
+    # not routed through Traefik, no public hostname.
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "${PLUNK_NTFY_CPU_LIMIT:-0.25}"
+          memory: ${PLUNK_NTFY_MEM_LIMIT:-128M}
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
+
 networks:
   network_public:
     name: network_public
     external: true
+
+volumes:
+  plunk-data:
+    driver: local
+  plunk-ntfy-cache:
+    driver: local
+  plunk-ntfy-etc:
+    driver: local
