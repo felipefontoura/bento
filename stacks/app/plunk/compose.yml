@@ -1,6 +1,15 @@
 services:
   plunk:
-    image: ghcr.io/useplunk/plunk:latest
+    # Pinned to a commit SHA, not a semver release, because upstream's
+    # :latest AND :v0.15.0 tags are broken: their image labels/digest claim
+    # the apps/api+apps/web rewrite (org.opencontainers.image.revision
+    # matches the v0.15.0 tag commit, whose Dockerfile is the new
+    # multi-stage one), but the actual running container is the old
+    # packages/api+packages/dashboard layout — a stale Docker layer cache
+    # in their GHA build-push-action pipeline, not a bento bug. Verified by
+    # pulling both and inspecting /app directly. Re-pin to a real release
+    # once upstream ships a build whose content matches its own tag.
+    image: ghcr.io/useplunk/plunk:sha-e2ab14c
     networks:
       - network_public
     logging:
