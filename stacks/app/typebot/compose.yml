@@ -130,6 +130,9 @@ services:
         - traefik.http.services.${BENTO_STACK_KEY}_builder.loadbalancer.server.port=3000
         - traefik.http.services.${BENTO_STACK_KEY}_builder.loadbalancer.passHostHeader=true
         - traefik.http.routers.${BENTO_STACK_KEY}_builder.service=${BENTO_STACK_KEY}_builder
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
   typebot_viewer:
     <<: *typebot-common

@@ -254,6 +254,10 @@ services:
         limits:
           cpus: "${CHATWOOT_SIDEKIQ_CPU_LIMIT:-0.5}"
           memory: ${CHATWOOT_SIDEKIQ_MEM_LIMIT:-768M}
+      labels:
+        - BENTO_MANAGED=true
+        - BENTO_STACK_KEY=${BENTO_STACK_KEY}
+        - BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}
 
 volumes:
   chatwoot_data:
