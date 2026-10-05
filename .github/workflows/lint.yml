@@ -81,17 +81,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Every stack compose declares BENTO_MANAGED labels
+      - name: Install PyYAML
+        run: pip install --quiet --disable-pip-version-check pyyaml
+      - name: Every service's deploy.labels declares BENTO_MANAGED labels
         run: |
-          # Each stacks/*/*/compose.yml must expose three labels under
-          # deploy.labels so introspection tooling (auth_propagate_state_providers
-          # in lib/auth-helpers.sh, scripts/bento-auth list, future
-          # reconciliation logic) can find bento-managed services via
+          # Every SERVICE in every stacks/*/*/compose.yml must expose three
+          # labels under deploy.labels so introspection tooling
+          # (auth_propagate_state_providers in lib/auth-helpers.sh,
+          # scripts/bento-auth list, future reconciliation logic) can find
+          # bento-managed services via
           # `docker service ls --filter label=BENTO_MANAGED=true`.
           #
           # Without these labels the filter returns empty and the live-update
           # paths silently no-op even when bento stacks are running. See
           # GH-23 for the discovery trail.
+          #
+          # This check is per-SERVICE, not per-file: a file-level `grep` lets
+          # one compliant service (e.g. a stack's webhook container) hide the
+          # fact that a sibling service (e.g. its worker) has none of the
+          # three labels at all — exactly how n8n_worker, chatwoot_sidekiq
+          # and typebot_builder went unnoticed. PyYAML resolves `<<:` merge
+          # keys, so an anchor shared across services is expanded before we
+          # check each one individually.
           #
           # stacks/app/* support multiple instances on one host
           # ("<key>-<hex8>"); for those, BENTO_STACK_KEY must be the
@@ -104,31 +115,42 @@ jobs:
           # stacks/db/* and stacks/infra/* are singleton by design (shared
           # Postgres/Redis/Traefik/Portainer) and keep the literal
           # BENTO_STACK_KEY=<key> form.
-          set -e
-          mapfile -t files < <(find stacks -name compose.yml)
-          if [[ ${#files[@]} -eq 0 ]]; then
-            echo "No compose files found."
-            exit 0
-          fi
-          rc=0
-          for f in "${files[@]}"; do
-            key=$(basename "$(dirname "$f")")
-            missing=()
-            grep -q "BENTO_MANAGED=true"  "$f" || missing+=("BENTO_MANAGED=true")
-            if [[ "$f" == stacks/app/* ]]; then
-              grep -qF 'BENTO_STACK_KEY=${BENTO_STACK_KEY}' "$f" || missing+=('BENTO_STACK_KEY=${BENTO_STACK_KEY}')
-            else
-              grep -q "BENTO_STACK_KEY=${key}" "$f" || missing+=("BENTO_STACK_KEY=${key}")
-            fi
-            grep -q "BENTO_DEPLOYED_REF="  "$f" || missing+=("BENTO_DEPLOYED_REF=\${BENTO_DEPLOYED_REF…}")
-            if [[ ${#missing[@]} -gt 0 ]]; then
-              echo "::error file=$f::missing required deploy.labels: ${missing[*]}"
-              rc=1
-            else
-              echo "ok  $f"
-            fi
-          done
-          exit "$rc"
+          python3 <<'PYEOF'
+          import glob, re, sys
+          import yaml
+
+          rc = 0
+          for path in sorted(glob.glob("stacks/*/*/compose.yml")):
+              key = path.split("/")[2]
+              is_app = path.startswith("stacks/app/")
+              expected_key_form = "${BENTO_STACK_KEY}" if is_app else key
+
+              with open(path) as f:
+                  data = yaml.safe_load(f)
+
+              for name, svc in (data.get("services") or {}).items():
+                  deploy = (svc or {}).get("deploy", {}) or {}
+                  labels = deploy.get("labels", []) or []
+                  if isinstance(labels, dict):
+                      labels = [f"{k}={v}" for k, v in labels.items()]
+                  joined = "\n".join(labels)
+
+                  missing = []
+                  if "BENTO_MANAGED=true" not in joined:
+                      missing.append("BENTO_MANAGED=true")
+                  if f"BENTO_STACK_KEY={expected_key_form}" not in joined:
+                      missing.append(f"BENTO_STACK_KEY={expected_key_form}")
+                  if not re.search(r"BENTO_DEPLOYED_REF=", joined):
+                      missing.append("BENTO_DEPLOYED_REF=${BENTO_DEPLOYED_REF:-unknown}")
+
+                  if missing:
+                      print(f"::error file={path}::service '{name}' missing required deploy.labels: {', '.join(missing)}")
+                      rc = 1
+                  else:
+                      print(f"ok  {path} :: {name}")
+
+          sys.exit(rc)
+          PYEOF
 
   compose:
     name: docker compose config
