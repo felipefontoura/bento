@@ -646,7 +646,7 @@ unattended_main() {
     fi
 
     local step3_rc=0
-    if [[ -n "${BENTO_APPS:-}" ]]; then
+    if [[ -n "${BENTO_APPS:-}" || -n "${BENTO_NEW_INSTANCE_APPS:-}" ]]; then
         unattended_step3 || step3_rc=$?
     else
         ui_warn "BENTO_APPS not set — skipping Step 3"
@@ -689,7 +689,12 @@ _deploy_with_deps() {
 
     # The section header lives inside stacks_deploy. Printing it here
     # too was the source of the doubled 'Deploying X' lines.
-    if stacks_deploy "$manifest_path"; then
+    #
+    # Pass $key as the instance-key override: for an ordinary deploy it's
+    # identical to the manifest's own .name (no-op), but for a multi-instance
+    # request (key == "<name>-<hex8>", synthesized by the caller) this is
+    # what makes state/Portainer/compose all resolve to the right instance.
+    if stacks_deploy "$manifest_path" "$key"; then
         _seen+=("$key")
     else
         ui_error "Deploy of $key failed; continuing"
@@ -698,9 +703,18 @@ _deploy_with_deps() {
 }
 
 unattended_step3() {
-    local apps_csv="${BENTO_APPS}"
-    stacks_memory_budget_check "$apps_csv"
-    IFS=',' read -ra apps <<< "$apps_csv"
+    local apps_csv="${BENTO_APPS:-}"
+    # BENTO_NEW_INSTANCE_APPS — CSV of base stack keys (e.g. "n8n") that each
+    # get a brand-new "<key>-<hex8>" instance, parallel to BENTO_APPS which
+    # only ensures/redeploys the base instance. Used by `/bento:deploy` for
+    # "add another n8n" requests.
+    local new_instance_csv="${BENTO_NEW_INSTANCE_APPS:-}"
+    local new_instance_apps=()
+    [[ -n "$new_instance_csv" ]] && IFS=',' read -ra new_instance_apps <<< "$new_instance_csv"
+
+    stacks_memory_budget_check "${apps_csv:+$apps_csv,}${new_instance_csv}"
+    local apps=()
+    [[ -n "$apps_csv" ]] && IFS=',' read -ra apps <<< "$apps_csv"
 
     # Same reconcile as the interactive path — unattended re-runs after
     # the operator has done Portainer-side cleanup would otherwise hit
@@ -733,6 +747,15 @@ unattended_step3() {
         _deploy_with_deps seen failed "$app"
     done
 
+    local base suffix
+    for base in "${new_instance_apps[@]}"; do
+        base="${base// /}"
+        [[ -z "$base" ]] && continue
+        suffix=$(openssl rand -hex 4)
+        ui_info "Creating new instance: ${base}-${suffix}"
+        _deploy_with_deps seen failed "${base}-${suffix}"
+    done
+
     # Surface failures upstream so unattended_main can fail loudly and
     # the handoff report carries the news.
     if (( ${#failed[@]} > 0 )); then
@@ -757,6 +780,7 @@ BENTO_BASE_DOMAIN=$(state_get '.bootstrap.base_domain')
 BENTO_ADMIN_EMAIL=$(state_get '.bootstrap.admin_email')
 BENTO_ADVERTISE_ADDR=$(state_get '.bootstrap.advertise_addr')
 BENTO_APPS=${BENTO_APPS:-}
+BENTO_NEW_INSTANCE_APPS=${BENTO_NEW_INSTANCE_APPS:-}
 HOME=${HOME}
 TERM=xterm-256color
 EOF
