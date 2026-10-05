@@ -4,8 +4,8 @@
   "description": "Server-side Google Tag Manager (tagging + preview), meant to sit behind a same-origin proxy",
   "depends_on": [],
   "env": [
-    { "name": "SGTM_HOST",             "default": "sgtm.${BASE_DOMAIN}",         "prompt": "Tagging server hostname (your proxy's upstream)" },
-    { "name": "SGTM_PREVIEW_HOST",     "default": "sgtm-preview.${BASE_DOMAIN}", "prompt": "Preview server hostname" },
+    { "name": "SGTM_HOST",             "default": "${BENTO_STACK_KEY}.${BASE_DOMAIN}",         "prompt": "Tagging server hostname (your proxy's upstream)" },
+    { "name": "SGTM_PREVIEW_HOST",     "default": "preview-${BENTO_STACK_KEY}.${BASE_DOMAIN}", "prompt": "Preview server hostname" },
     { "name": "SGTM_CONTAINER_CONFIG", "prompt": "Container config string (GTM server container → Admin → Container settings)", "required": true, "hide": true },
     { "name": "SGTM_PROXY_KEY",        "generate": "openssl rand -hex 32", "hide": true },
     { "name": "SGTM_DIRECT_MATCH",     "prompt": "Optional: direct browser access without a proxy, as a Traefik matcher (empty = proxy only; e.g. (Path(`/g/collect`) || PathPrefix(`/gtm/`)))" },
