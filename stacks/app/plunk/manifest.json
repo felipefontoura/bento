@@ -97,7 +97,11 @@
       "default": "true",
       "prompt": "Disable public signups (true/false)"
     },
-    { "name": "EMAIL_RATE_LIMIT_PER_SECOND", "default": "1" },
+    {
+      "name": "EMAIL_RATE_LIMIT_PER_SECOND",
+      "default": "1",
+      "prompt": "SES send-rate ceiling (msgs/sec) — check AWS Console > SES > Account dashboard > \"Sending statistics\" for your account's Maximum send rate, then set this to ~80% of that number. Our IAM policy doesn't grant ses:GetSendQuota, so leaving the default means the worker silently falls back to 14/sec"
+    },
     { "name": "AUTO_PROJECT_DISABLE", "default": "false" },
     { "name": "PLUNK_CPU_LIMIT", "default": "2" },
     { "name": "PLUNK_MEM_LIMIT", "default": "2048M" },
