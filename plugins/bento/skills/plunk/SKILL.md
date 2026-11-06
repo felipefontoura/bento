@@ -26,18 +26,19 @@ For *getting Plunk running* use `/bento:deploy`. For *AWS SES credentials* use
 # Discover the instance — don't hardcode
 
 ```bash
-ssh "$user@$host" "jq -r '.envs.plunk.PLUNK_HOST' \$HOME/.config/bento/state.json"
+ssh "$user@$host" "jq -r '.envs.plunk.PLUNK_API_HOST' \$HOME/.config/bento/state.json"
 ```
 
-Base URL: `https://<PLUNK_HOST>`. Traefik routes directly to the container's
-port 3000 — there is no nginx layer. Container name convention in the Swarm:
+Base URL for every API call: `https://<PLUNK_API_HOST>` (`api-<stack-key>.<domain>`).
+`PLUNK_HOST` is the dashboard; API paths there return 404. Traefik sends both
+hostnames to the container's port 80, where the image's internal nginx routes
+by Host header. Container name convention in the Swarm:
 
 ```bash
 plunk_container() { ssh "$user@$host" "docker ps --filter name=plunk_plunk -q | head -1"; }
 ```
 
-For loopback calls (inside the container): `http://127.0.0.1:3000`.
-From outside: always use `https://<PLUNK_HOST>`.
+From outside: always use `https://<PLUNK_API_HOST>`.
 
 # Auth — two key types, both Bearer
 
@@ -63,7 +64,7 @@ Four groups — look up exact paths and bodies in the docs:
 Minimal anchor — a transactional send:
 
 ```bash
-curl -s -X POST "https://$PLUNK_HOST/v1/send" \
+curl -s -X POST "https://$PLUNK_API_HOST/v1/send" \
   -H "Authorization: Bearer $PLUNK_SECRET_KEY" \
   -H "Content-Type: application/json" \
   -d '{"to":"user@example.com","subject":"Hi","body":"<p>Hello</p>","from":"noreply@yourdomain.com"}'
@@ -76,6 +77,16 @@ in sandbox — only verified recipients, low send limits. Request production acc
 in the AWS console and verify your sending domain in Plunk (Project → Domains)
 so DKIM/SPF are in place; Plunk enforces domain ownership before allowing a
 `from` address.
+
+**No opens, clicks or deliveries means the SNS feedback chain is broken.**
+Plunk only learns what happened to an email from SES events: configuration set
+(`SES_CONFIGURATION_SET`) → SNS topic → HTTPS subscription to
+`https://<PLUNK_API_HOST>/webhooks/sns`. If `/activity` shows `email.sent` but
+never `email.delivered`, check that subscription first: it must be *Confirmed*
+and on the API host. A subscription left on the old image's path
+(`https://<PLUNK_HOST>/api/webhooks/incoming/sns`) stays *Confirmed* while every
+event 404s. The same break hides bounces and complaints, so Plunk keeps mailing
+dead addresses. Setup and check: `docs/reference/plunk-ses.md`.
 
 **`EMAIL_RATE_LIMIT_PER_SECOND` has a silent fallback.** If `ses:GetSendQuota`
 is denied at worker startup, the worker silently falls back to 14 msg/s. In SES
@@ -100,7 +111,8 @@ fallbacks. System vars (`email`, `unsubscribeUrl`, `subscribeUrl`, `manageUrl`,
   (email + subscribed status), events tracked (event name + contact).
 - Read-back to confirm: for contacts, `GET /contacts/:id`; for emails, the
   `data.emails` array from the `/v1/send` response.
-- If delivery fails: check `/health` first, then SES sandbox / domain verification.
+- If delivery fails: check `/health` first, then the configuration set exists,
+  then SES sandbox / domain verification.
 
 **Docs (source of truth):** https://docs.useplunk.com — API reference for all
 paths, bodies, and response shapes. When this skill and the docs disagree, the
