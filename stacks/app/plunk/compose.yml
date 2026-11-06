@@ -104,7 +104,14 @@ services:
       - AWS_SES_ACCESS_KEY_ID=${AWS_SES_ACCESS_KEY_ID:-disabled}
       - AWS_SES_SECRET_ACCESS_KEY=${AWS_SES_SECRET_ACCESS_KEY:-disabled}
 
-      # SES configuration set name (open/click tracking).
+      # SES configuration set name. Plunk sends every email with it, so it
+      # must exist in AWS_SES_REGION (SES rejects sends naming a missing set);
+      # its SNS event destination, subscribed to
+      # https://${PLUNK_API_HOST}/webhooks/sns, is how Plunk learns about
+      # deliveries, opens, clicks, bounces and complaints. Setup:
+      # docs/reference/plunk-ses.md. Upstream's optional
+      # SES_CONFIGURATION_SET_NO_TRACKING (per-project tracking toggle) is
+      # left unset.
       - SES_CONFIGURATION_SET=${SES_CONFIGURATION_SET:-disabled}
 
       # Caps the email-worker's send rate (msgs/sec). When unset, the worker
