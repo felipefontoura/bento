@@ -49,7 +49,7 @@
     {
       "name": "SES_CONFIGURATION_SET",
       "default": "disabled",
-      "prompt": "AWS SES configuration set name"
+      "prompt": "AWS SES configuration set name — must already exist in AWS_SES_REGION with an SNS event destination subscribed to https://<PLUNK_API_HOST>/webhooks/sns, or sends fail and Plunk never sees deliveries, opens, clicks or bounces (see docs/reference/plunk-ses.md)"
     },
     {
       "name": "S3_ENDPOINT",
